@@ -26,7 +26,7 @@ A low-latency, C++-based simulation engine that ingests token streams from an LL
 └─────────────────┘    └──────────────┘    └───────────────────┘
 ```
 
-## 🛠️ Build Instructions
+## Build Instructions
 
 ### Prerequisites
 - C++20 compatible compiler (GCC 10+, Clang 12+)
@@ -65,7 +65,7 @@ make -j$(nproc)
 - **Memory**: Zero-copy streaming where possible
 - **Concurrency**: Thread-safe, lock-free queues
 
-## 📊 Token-to-Trade Mapping
+##  Token-to-Trade Mapping
 
 | Token Type | Example Tokens | Mapped Action |
 |------------|----------------|---------------|
