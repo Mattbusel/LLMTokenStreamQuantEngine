@@ -1,63 +1,89 @@
-#pragma once
-#include <atomic>
-#include <chrono>
-#include <functional>
-#include <string>
-#include <vector>
-#include <thread>
-#include <queue>
-#include <mutex>
+#include "TokenStreamSimulator.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
 namespace llmquant {
 
-struct Token {
-    std::string text;
-    std::chrono::high_resolution_clock::time_point timestamp;
-    uint64_t sequence_id;
+TokenStreamSimulator::TokenStreamSimulator(const Config& config) 
+    : config_(config) {
+    token_buffer_.reserve(config_.buffer_size);
+}
+
+TokenStreamSimulator::~TokenStreamSimulator() {
+    stop();
+}
+
+void TokenStreamSimulator::start() {
+    if (running_.load()) return;
     
-    Token(const std::string& t, uint64_t seq_id) 
-        : text(t), timestamp(std::chrono::high_resolution_clock::now()), sequence_id(seq_id) {}
-};
+    running_ = true;
+    worker_thread_ = std::thread(&TokenStreamSimulator::stream_worker, this);
+}
 
-using TokenCallback = std::function<void(const Token&)>;
+void TokenStreamSimulator::stop() {
+    running_ = false;
+    if (worker_thread_.joinable()) {
+        worker_thread_.join();
+    }
+}
 
-class TokenStreamSimulator {
-public:
-    struct Config {
-        std::chrono::microseconds token_interval{10000}; // 10ms
-        size_t buffer_size{1024};
-        bool use_memory_stream{true};
-        std::string data_file_path;
-    };
+void TokenStreamSimulator::set_token_callback(TokenCallback callback) {
+    callback_ = std::move(callback);
+}
 
-    explicit TokenStreamSimulator(const Config& config);
-    ~TokenStreamSimulator();
-
-    void start();
-    void stop();
-    void set_token_callback(TokenCallback callback);
-    void load_tokens_from_file(const std::string& filepath);
-    void load_tokens_from_memory(const std::vector<std::string>& tokens);
+void TokenStreamSimulator::load_tokens_from_file(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open token file: " + filepath);
+    }
     
-    struct Stats {
-        std::atomic<uint64_t> tokens_emitted{0};
-        std::atomic<uint64_t> avg_latency_us{0};
-        std::atomic<uint64_t> max_latency_us{0};
-    };
+    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    token_buffer_.clear();
     
-    const Stats& get_stats() const { return stats_; }
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        std::string token;
+        while (iss >> token) {
+            token_buffer_.push_back(token);
+        }
+    }
+}
 
-private:
-    void stream_worker();
-    
-    Config config_;
-    std::vector<std::string> token_buffer_;
-    TokenCallback callback_;
-    std::thread worker_thread_;
-    std::atomic<bool> running_{false};
-    std::atomic<uint64_t> current_sequence_{0};
-    Stats stats_;
-    mutable std::mutex buffer_mutex_;
-};
+void TokenStreamSimulator::load_tokens_from_memory(const std::vector<std::string>& tokens) {
+    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    token_buffer_ = tokens;
+}
+
+void TokenStreamSimulator::stream_worker() {
+    while (running_.load()) {
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        
+        if (token_buffer_.empty()) {
+            std::this_thread::sleep_for(config_.token_interval);
+            continue;
+        }
+        
+        // Emit token
+        size_t index = current_sequence_.load() % token_buffer_.size();
+        Token token(token_buffer_[index], current_sequence_.fetch_add(1));
+        
+        if (callback_) {
+            auto start = std::chrono::high_resolution_clock::now();
+            callback_(token);
+            auto end = std::chrono::high_resolution_clock::now();
+            
+            auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            stats_.avg_latency_us = latency.count();
+            stats_.max_latency_us = std::max(stats_.max_latency_us.load(), 
+                                           static_cast<uint64_t>(latency.count()));
+        }
+        
+        stats_.tokens_emitted++;
+        std::this_thread::sleep_for(config_.token_interval);
+    }
+}
 
 } // namespace llmquant
+
