@@ -1,58 +1,99 @@
-#pragma once
-#include <string>
-#include <yaml-cpp/yaml.h>
+#include "Config.h"
+#include <fstream>
+#include <iostream>
 
 namespace llmquant {
 
-struct SystemConfig {
-    // Token stream settings
-    struct {
-        std::string data_file_path{"data/mock_token_streams/sample.txt"};
-        int token_interval_ms{10};
-        size_t buffer_size{1024};
-        bool use_memory_stream{true};
-    } token_stream;
-    
-    // Trading engine settings
-    struct {
-        double bias_sensitivity{1.0};
-        double volatility_sensitivity{1.0};
-        double signal_decay_rate{0.95};
-        int signal_cooldown_us{1000};
-    } trading;
-    
-    // Latency settings
-    struct {
-        int target_latency_us{10};
-        size_t sample_window{1000};
-        bool enable_profiling{true};
-    } latency;
-    
-    // Logging settings
-    struct {
-        std::string log_file_path{"logs/metrics.log"};
-        std::string format{"CSV"};
-        bool enable_console{true};
-        int flush_interval_ms{100};
-    } logging;
-};
+bool Config::load_from_file(const std::string& filepath) {
+    try {
+        YAML::Node yaml = YAML::LoadFile(filepath);
+        return load_from_yaml_string(YAML::Dump(yaml));
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Failed to load config file " << filepath << ": " << e.what() << std::endl;
+        set_defaults();
+        return false;
+    }
+}
 
-class Config {
-public:
-    Config() = default;
-    ~Config() = default;
+bool Config::load_from_yaml_string(const std::string& yaml_content) {
+    try {
+        YAML::Node yaml = YAML::Load(yaml_content);
+        
+        // Token stream settings
+        if (yaml["token_stream"]) {
+            auto ts = yaml["token_stream"];
+            if (ts["data_file_path"]) config_.token_stream.data_file_path = ts["data_file_path"].as<std::string>();
+            if (ts["token_interval_ms"]) config_.token_stream.token_interval_ms = ts["token_interval_ms"].as<int>();
+            if (ts["buffer_size"]) config_.token_stream.buffer_size = ts["buffer_size"].as<size_t>();
+            if (ts["use_memory_stream"]) config_.token_stream.use_memory_stream = ts["use_memory_stream"].as<bool>();
+        }
+        
+        // Trading settings
+        if (yaml["trading"]) {
+            auto t = yaml["trading"];
+            if (t["bias_sensitivity"]) config_.trading.bias_sensitivity = t["bias_sensitivity"].as<double>();
+            if (t["volatility_sensitivity"]) config_.trading.volatility_sensitivity = t["volatility_sensitivity"].as<double>();
+            if (t["signal_decay_rate"]) config_.trading.signal_decay_rate = t["signal_decay_rate"].as<double>();
+            if (t["signal_cooldown_us"]) config_.trading.signal_cooldown_us = t["signal_cooldown_us"].as<int>();
+        }
+        
+        // Latency settings
+        if (yaml["latency"]) {
+            auto l = yaml["latency"];
+            if (l["target_latency_us"]) config_.latency.target_latency_us = l["target_latency_us"].as<int>();
+            if (l["sample_window"]) config_.latency.sample_window = l["sample_window"].as<size_t>();
+            if (l["enable_profiling"]) config_.latency.enable_profiling = l["enable_profiling"].as<bool>();
+        }
+        
+        // Logging settings
+        if (yaml["logging"]) {
+            auto log = yaml["logging"];
+            if (log["log_file_path"]) config_.logging.log_file_path = log["log_file_path"].as<std::string>();
+            if (log["format"]) config_.logging.format = log["format"].as<std::string>();
+            if (log["enable_console"]) config_.logging.enable_console = log["enable_console"].as<bool>();
+            if (log["flush_interval_ms"]) config_.logging.flush_interval_ms = log["flush_interval_ms"].as<int>();
+        }
+        
+        return true;
+    } catch (const YAML::Exception& e) {
+        std::cerr << "Failed to parse YAML config: " << e.what() << std::endl;
+        set_defaults();
+        return false;
+    }
+}
 
-    bool load_from_file(const std::string& filepath);
-    bool load_from_yaml_string(const std::string& yaml_content);
-    void save_to_file(const std::string& filepath) const;
+void Config::save_to_file(const std::string& filepath) const {
+    YAML::Node yaml;
     
-    const SystemConfig& get_config() const { return config_; }
-    SystemConfig& get_mutable_config() { return config_; }
+    // Token stream
+    yaml["token_stream"]["data_file_path"] = config_.token_stream.data_file_path;
+    yaml["token_stream"]["token_interval_ms"] = config_.token_stream.token_interval_ms;
+    yaml["token_stream"]["buffer_size"] = config_.token_stream.buffer_size;
+    yaml["token_stream"]["use_memory_stream"] = config_.token_stream.use_memory_stream;
+    
+    // Trading
+    yaml["trading"]["bias_sensitivity"] = config_.trading.bias_sensitivity;
+    yaml["trading"]["volatility_sensitivity"] = config_.trading.volatility_sensitivity;
+    yaml["trading"]["signal_decay_rate"] = config_.trading.signal_decay_rate;
+    yaml["trading"]["signal_cooldown_us"] = config_.trading.signal_cooldown_us;
+    
+    // Latency
+    yaml["latency"]["target_latency_us"] = config_.latency.target_latency_us;
+    yaml["latency"]["sample_window"] = config_.latency.sample_window;
+    yaml["latency"]["enable_profiling"] = config_.latency.enable_profiling;
+    
+    // Logging
+    yaml["logging"]["log_file_path"] = config_.logging.log_file_path;
+    yaml["logging"]["format"] = config_.logging.format;
+    yaml["logging"]["enable_console"] = config_.logging.enable_console;
+    yaml["logging"]["flush_interval_ms"] = config_.logging.flush_interval_ms;
+    
+    std::ofstream file(filepath);
+    file << yaml;
+}
 
-private:
-    void set_defaults();
-    
-    SystemConfig config_;
-};
+void Config::set_defaults() {
+    // Defaults are already set in SystemConfig struct initialization
+}
 
 } // namespace llmquant
