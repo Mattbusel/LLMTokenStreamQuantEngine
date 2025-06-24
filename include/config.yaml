@@ -1,0 +1,22 @@
+token_stream:
+  data_file_path: "data/mock_token_streams/sample.txt"
+  token_interval_ms: 10
+  buffer_size: 1024
+  use_memory_stream: true
+
+trading:
+  bias_sensitivity: 1.0
+  volatility_sensitivity: 1.0
+  signal_decay_rate: 0.95
+  signal_cooldown_us: 1000
+
+latency:
+  target_latency_us: 10
+  sample_window: 1000
+  enable_profiling: true
+
+logging:
+  log_file_path: "logs/metrics.log"
+  format: "CSV"
+  enable_console: true
+  flush_interval_ms: 100
