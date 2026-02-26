@@ -4,6 +4,7 @@
 #include "LLMAdapter.h"
 #include "MetricsLogger.h"
 #include "Config.h"
+#include "OutputSink.h"
 #include <iostream>
 #include <iomanip>
 #include <thread>
@@ -67,6 +68,10 @@ int main(int argc, char* argv[]) {
         .signal_cooldown = std::chrono::microseconds(sys_config.trading.signal_cooldown_us)
     });
     
+    // Wire an in-memory sink for telemetry (signals accessible for inspection/export).
+    auto memory_sink = std::make_shared<llmquant::MemoryOutputSink>();
+    trade_engine.add_output_sink(memory_sink);
+
     TokenStreamSimulator token_sim({
         .token_interval = std::chrono::microseconds(sys_config.token_stream.token_interval_ms * 1000),
         .buffer_size = sys_config.token_stream.buffer_size,
@@ -173,6 +178,7 @@ int main(int argc, char* argv[]) {
     }
     
     token_sim.stop();
+    std::cout << "Signals captured by memory sink: " << memory_sink->get_signals().size() << std::endl;
     logger.log_performance_summary();
     config.stop_watching();
 

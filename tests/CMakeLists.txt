@@ -6,13 +6,16 @@ add_executable(tests
     unit/test_token_stream_simulator.cpp
     unit/test_trade_signal_engine.cpp
     unit/test_output_sink.cpp
+    unit/test_risk_manager.cpp
     integration/test_pipeline.cpp
+    performance/bench_hot_path.cpp
     ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
     ${CMAKE_SOURCE_DIR}/src/TradeSignalEngine.cpp
     ${CMAKE_SOURCE_DIR}/src/LatencyController.cpp
     ${CMAKE_SOURCE_DIR}/src/LLMAdapter.cpp
     ${CMAKE_SOURCE_DIR}/src/MetricsLogger.cpp
     ${CMAKE_SOURCE_DIR}/src/Config.cpp
+    ${CMAKE_SOURCE_DIR}/src/RiskManager.cpp
 )
 
 target_link_libraries(tests

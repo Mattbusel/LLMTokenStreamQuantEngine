@@ -78,9 +78,8 @@ clang-format --dry-run src/*.cpp include/*.h
 | OutputSink | ✓ | ✓ (header-only) | ✓ | ✓ |
 
 ## What Still Needs Building
-- Real-time LLM API streaming integration (direct API streaming, planned)
-- Distributed deduplication layer (cross-node, planned)
-- Production risk management hooks (position limits, drawdown guards)
+- Real-time LLM API streaming integration (direct OpenAI-compatible SSE streaming, planned)
+- Distributed deduplication layer (cross-node Redis-backed, planned)
 
 ## Non-Obvious Design Decisions
 
@@ -96,3 +95,18 @@ clang-format --dry-run src/*.cpp include/*.h
 - OutputSink concrete classes (CsvOutputSink, JsonOutputSink, MemoryOutputSink)
   are implemented inline in OutputSink.h because they are thin wrappers over
   std::ofstream / std::vector with no separate compilation unit needed.
+
+## Test Coverage Summary
+| Test File | Count | Coverage |
+|-----------|-------|----------|
+| test_config.cpp | 7 | YAML parse, missing fields, hot-reload |
+| test_llm_adapter.cpp | 11 | Token lookup, sequences, SIMD |
+| test_latency_controller.cpp | 11 | Stats, percentiles, pressure, backoff |
+| test_metrics_logger.cpp | 7 | Construction, log events, flush |
+| test_token_stream_simulator.cpp | 9 | Load, callback, ring buffer |
+| test_trade_signal_engine.cpp | 10 | Signals, fields, backtest, cooldown |
+| test_output_sink.cpp | 6 | CSV, JSON, memory sink |
+| test_risk_manager.cpp | 10 | Magnitude, confidence, rate, drawdown |
+| test_pipeline.cpp (integration) | 5 | End-to-end, latency, accumulation |
+| bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput |
+| **Total** | **81** | |

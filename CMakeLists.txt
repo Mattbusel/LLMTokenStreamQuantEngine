@@ -40,6 +40,7 @@ set(ENGINE_SOURCES
     src/LLMAdapter.cpp
     src/MetricsLogger.cpp
     src/Config.cpp
+    src/RiskManager.cpp
 )
 
 add_executable(LLMTokenStreamQuantEngine ${ENGINE_SOURCES})

@@ -95,6 +95,19 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     } else {
         stats_.signals_suppressed++;
     }
+
+    // Emit to all registered output sinks.
+    for (const auto& sink : output_sinks_) {
+        sink->emit(signal);
+    }
+}
+
+void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
+    output_sinks_.push_back(std::move(sink));
+}
+
+void TradeSignalEngine::clear_output_sinks() {
+    output_sinks_.clear();
 }
 
 } // namespace llmquant

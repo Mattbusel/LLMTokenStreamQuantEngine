@@ -4,8 +4,11 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <vector>
 
-#include "LLMAdapter.h"  // SemanticWeight
+#include "LLMAdapter.h"   // SemanticWeight
+#include "OutputSink.h"
 
 namespace llmquant {
 
@@ -114,6 +117,18 @@ public:
     /// Return a const reference to the live statistics struct.
     const Stats& get_stats() const { return stats_; }
 
+    /// Register an OutputSink to receive all emitted signals.
+    ///
+    /// The sink is called synchronously inside emit_signal() after the
+    /// user callback.  Multiple sinks can be added; all receive every signal.
+    ///
+    /// # Arguments
+    /// * `sink` — Shared pointer to an OutputSink implementation.
+    void add_output_sink(std::shared_ptr<OutputSink> sink);
+
+    /// Remove all registered output sinks.
+    void clear_output_sinks();
+
 private:
     bool should_emit_signal() const;
     void emit_signal(const TradeSignal& signal);
@@ -128,6 +143,7 @@ private:
     std::atomic<double> last_confidence_{0.5};
     std::chrono::high_resolution_clock::time_point last_signal_time_;
     Stats stats_;
+    std::vector<std::shared_ptr<OutputSink>> output_sinks_;
 };
 
 } // namespace llmquant
