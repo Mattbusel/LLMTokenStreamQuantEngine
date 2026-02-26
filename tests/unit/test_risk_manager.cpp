@@ -241,3 +241,124 @@ TEST(RiskManagerTest, test_risk_manager_negative_magnitude_checked_via_abs) {
     EXPECT_FALSE(rm.evaluate(sig_spread));
     EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 2u);
 }
+
+// ============================================================
+// Test 13 (OMS): hard position breach blocks signal.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_oms_hard_position_breach_blocks_signal) {
+    RiskManager rm(default_config());
+
+    // Position already at 0.9 with limit 1.0; a signal of +0.2 would push to
+    // 1.1 which exceeds the hard limit.
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.9;
+    pos.position_limit = 1.0;
+    pos.pnl            = 0.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    auto sig = make_signal(0.2, 0.1, 0.05, 0.8);
+    bool result = rm.evaluate(sig);
+
+    EXPECT_FALSE(result);
+    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(), 1u);
+    EXPECT_EQ(rm.get_stats().signals_passed.load(), 0u);
+}
+
+// ============================================================
+// Test 14 (OMS): soft position warn fires callback but allows signal through.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_oms_soft_position_warn_allows_signal_but_fires_callback) {
+    RiskManager rm(default_config());
+
+    // Position at 0.5; limit 1.0; warn fraction 0.8; signal +0.4 pushes to
+    // 0.9 which is > 0.8*1.0 (soft threshold) but <= 1.0 (hard limit).
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.5;
+    pos.position_limit = 1.0;
+    pos.pnl            = 0.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    std::string captured_event;
+    rm.set_oms_callback([&](const std::string& event,
+                             const RiskManager::PositionState&,
+                             const TradeSignal&) {
+        captured_event = event;
+    });
+
+    auto sig = make_signal(0.4, 0.1, 0.05, 0.8);
+    bool result = rm.evaluate(sig);
+
+    EXPECT_TRUE(result)
+        << "Signal within hard limit must be allowed through despite soft warn";
+    EXPECT_EQ(captured_event, "position_limit_approaching")
+        << "OMS callback must receive the soft-warn event string";
+    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(), 0u);
+    EXPECT_EQ(rm.get_stats().signals_passed.load(), 1u);
+}
+
+// ============================================================
+// Test 15 (OMS): PnL breach blocks signal.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_oms_pnl_breach_blocks_signal) {
+    RiskManager rm(default_config());
+
+    // PnL is -15 which is below the pnl_limit of -10; any signal must be blocked.
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.0;
+    pos.position_limit = 1.0;
+    pos.pnl            = -15.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    bool result = rm.evaluate(sig);
+
+    EXPECT_FALSE(result);
+    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(), 1u);
+}
+
+// ============================================================
+// Test 16 (OMS): OMS callback receives correct event strings.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_oms_callback_receives_correct_event_string) {
+    // Verify that each code path sends the expected event label to the OMS cb.
+    // Hard breach path.
+    {
+        RiskManager rm(default_config());
+        RiskManager::PositionState pos;
+        pos.net_position   = 0.95;
+        pos.position_limit = 1.0;
+        pos.pnl            = 0.0;
+        pos.pnl_limit      = -10.0;
+        rm.update_position(pos);
+
+        std::string ev;
+        rm.set_oms_callback([&](const std::string& event,
+                                 const RiskManager::PositionState&,
+                                 const TradeSignal&) { ev = event; });
+
+        rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // 0.95 + 0.1 > 1.0
+        EXPECT_EQ(ev, "position_limit_breached");
+    }
+
+    // PnL breach path.
+    {
+        RiskManager rm(default_config());
+        RiskManager::PositionState pos;
+        pos.net_position   = 0.0;
+        pos.position_limit = 1.0;
+        pos.pnl            = -20.0;
+        pos.pnl_limit      = -10.0;
+        rm.update_position(pos);
+
+        std::string ev;
+        rm.set_oms_callback([&](const std::string& event,
+                                 const RiskManager::PositionState&,
+                                 const TradeSignal&) { ev = event; });
+
+        rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+        EXPECT_EQ(ev, "pnl_limit_breached");
+    }
+}

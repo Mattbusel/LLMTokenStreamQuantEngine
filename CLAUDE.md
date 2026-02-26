@@ -76,13 +76,12 @@ clang-format --dry-run src/*.cpp include/*.h
 | TokenStreamSimulator | ✓ | ✓ lock-free ring | ✓ | ✓ |
 | TradeSignalEngine | ✓ | ✓ full fields | ✓ | ✓ |
 | OutputSink | ✓ | ✓ (header-only) | ✓ | ✓ |
-| LLMStreamClient | ✓ | ✓ SSE/HTTP | ✓ | needs TLS |
-| Deduplicator | ✓ | ✓ TTL+Redis stub | ✓ | ✓ |
+| LLMStreamClient | ✓ | ✓ TLS via OpenSSL | ✓ | ✓ |
+| Deduplicator | ✓ | ✓ hiredis (conditional) | ✓ | ✓ |
+| RiskManager | ✓ | ✓ OMS position hooks | ✓ | ✓ |
 
 ## What Still Needs Building
-- Real-time LLM API streaming: TLS support (currently plain HTTP only; TLS via proxy or stunnel)
-- Redis deduplication: wire hiredis to RedisDeduplicator::check_and_register (stub ready)
-- Production risk hooks: position-limit integration with downstream order management system
+- Production OMS integration: connect position updates from a live order management system via FIX or REST adapter
 
 ## Non-Obvious Design Decisions
 
@@ -109,9 +108,11 @@ clang-format --dry-run src/*.cpp include/*.h
 | test_token_stream_simulator.cpp | 9 | Load, callback, ring buffer |
 | test_trade_signal_engine.cpp | 10 | Signals, fields, backtest, cooldown |
 | test_output_sink.cpp | 6 | CSV, JSON, memory sink |
-| test_risk_manager.cpp | 10 | Magnitude, confidence, rate, drawdown |
+| test_risk_manager.cpp | 16 | Magnitude, confidence, rate, drawdown, OMS hard breach, OMS soft warn, PnL breach, OMS event string |
 | test_pipeline.cpp (integration) | 5 | End-to-end, latency, accumulation |
 | bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput |
 | test_llm_stream_client.cpp | 5 | Connect/stop lifecycle, done callback |
 | test_deduplicator.cpp | 14 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
-| **Total** | **100** | |
+| test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline, concurrent dedup+signal |
+| test_invariants.cpp (unit) | 6 | Dedup key determinism, sentiment sign, risk counter identity, latency avg bounds, signal confidence interval, dedup novel+dup sum |
+| **Total** | **118** | |

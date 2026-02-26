@@ -9,7 +9,9 @@ add_executable(tests
     unit/test_risk_manager.cpp
     unit/test_deduplicator.cpp
     unit/test_llm_stream_client.cpp
+    unit/test_invariants.cpp
     integration/test_pipeline.cpp
+    integration/test_chaos.cpp
     performance/bench_hot_path.cpp
     ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
     ${CMAKE_SOURCE_DIR}/src/TradeSignalEngine.cpp
@@ -31,6 +33,14 @@ target_link_libraries(tests
 
 if(WIN32)
     target_link_libraries(tests ws2_32)
+endif()
+
+if(OpenSSL_FOUND OR OPENSSL_FOUND)
+    target_link_libraries(tests OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if(hiredis_FOUND OR HIREDIS_FOUND)
+    target_link_libraries(tests hiredis)
 endif()
 
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)

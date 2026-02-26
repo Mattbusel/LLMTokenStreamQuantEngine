@@ -43,7 +43,24 @@ public:
 
         /// Duration over which drawdown is measured before resetting.
         std::chrono::seconds drawdown_window{60};
+
+        /// Fraction of position_limit at which a limit-approach warning is fired
+        /// (e.g. 0.8 = fire callback when |projected_position| > 80% of limit).
+        double position_warn_fraction{0.8};
     };
+
+    /// Current position state reported to the risk manager by the OMS.
+    struct PositionState {
+        double net_position{0.0};    ///< Current net position (positive = long, negative = short).
+        double position_limit{1.0};  ///< Maximum allowed absolute position.
+        double pnl{0.0};             ///< Current unrealised PnL.
+        double pnl_limit{-10.0};     ///< Maximum tolerated loss (negative number).
+    };
+
+    /// OMS notification callback: fired when position limits are approached or breached.
+    using OmsCallback = std::function<void(const std::string& event,
+                                           const PositionState& state,
+                                           const TradeSignal& signal)>;
 
     /// Live statistics updated by the risk manager.
     struct Stats {
@@ -52,6 +69,7 @@ public:
         std::atomic<uint64_t> signals_blocked_confidence{0};
         std::atomic<uint64_t> signals_blocked_rate{0};
         std::atomic<uint64_t> signals_blocked_drawdown{0};
+        std::atomic<uint64_t> signals_blocked_position{0};
     };
 
     /// Alert callback type: invoked synchronously when a signal is blocked.
@@ -73,6 +91,25 @@ public:
     /// * `cb` — Callable matching AlertCallback; stored by value.
     void set_alert_callback(AlertCallback cb);
 
+    /// Update the current position state from the OMS.
+    ///
+    /// Thread-safe. Called by the OMS adapter on each fill or position update.
+    ///
+    /// # Arguments
+    /// * `state` — Latest position snapshot from the order management system.
+    void update_position(const PositionState& state);
+
+    /// Register a callback for OMS events (limit-approach, limit-breach, pnl-alert).
+    ///
+    /// # Arguments
+    /// * `cb` — Callable matching OmsCallback; stored by value.
+    void set_oms_callback(OmsCallback cb);
+
+    /// Return the most recently reported position state.
+    ///
+    /// Thread-safe (acquires mutex_).
+    PositionState get_position() const;
+
     /// Reset the drawdown accumulator and rate-limit window.
     void reset();
 
@@ -87,8 +124,14 @@ private:
     void update_drawdown(const TradeSignal& signal);
     void fire_alert(const std::string& reason, const TradeSignal& signal);
 
-    Config config_;
+    /// Check position limits and fire OMS callbacks if thresholds are crossed.
+    /// Must be called with mutex_ held.
+    bool check_and_notify_position(const TradeSignal& signal);
+
+    Config        config_;
     AlertCallback alert_cb_;
+    OmsCallback   oms_cb_;
+    PositionState position_;
     mutable std::mutex mutex_;
 
     // Rate limiting.

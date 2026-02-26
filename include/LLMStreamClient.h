@@ -42,10 +42,10 @@ public:
         std::string user_prompt{"Describe current market conditions in one word."};
         std::chrono::seconds connect_timeout{5};
         size_t      max_tokens{256};
-        /// When true, use plain HTTP (port 80 or custom); when false, TLS is
-        /// assumed but not implemented — set port=80 and use_tls=false for
-        /// unencrypted local/mock endpoints.
-        bool use_tls{false};
+        /// When true, negotiate TLS via OpenSSL (requires LLMQUANT_TLS_ENABLED).
+        /// When false, use plain HTTP (suitable for local/mock endpoints on
+        /// port 80 or a custom port).
+        bool use_tls{true};
     };
 
     /// Construct a streaming client with the given connection parameters.
@@ -90,6 +90,31 @@ private:
     bool open_socket();
     void close_socket();
 
+#ifdef LLMQUANT_TLS_ENABLED
+    /// Perform the TLS handshake on the already-connected TCP socket.
+    ///
+    /// # Returns
+    /// `true` if the handshake succeeded and the TLS session is ready.
+    /// `false` if SSL_connect failed; the socket is left open for the caller
+    /// to close.
+    bool tls_handshake();
+
+    /// Gracefully shut down and free the active TLS session and SSL_CTX.
+    void tls_close();
+
+    /// Send `len` bytes from `buf` over TLS.
+    ///
+    /// # Returns
+    /// Number of bytes written, or a negative value on error.
+    ssize_t tls_send(const char* buf, size_t len);
+
+    /// Receive up to `len` bytes from the TLS session into `buf`.
+    ///
+    /// # Returns
+    /// Number of bytes read, or a non-positive value on EOF / error.
+    ssize_t tls_recv(char* buf, size_t len);
+#endif
+
     /// Build the JSON request body for the streaming completions call.
     std::string build_request_body() const;
 
@@ -114,6 +139,11 @@ private:
     std::atomic<bool> running_{false};
     std::thread     thread_;
     int             sockfd_{-1};
+
+#ifdef LLMQUANT_TLS_ENABLED
+    void* ssl_ctx_{nullptr};   ///< SSL_CTX* — opaque to avoid OpenSSL headers leaking.
+    void* ssl_{nullptr};       ///< SSL*     — active TLS session.
+#endif
 };
 
 } // namespace llmquant

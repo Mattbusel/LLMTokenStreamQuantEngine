@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <sstream>
 
+#ifdef LLMQUANT_REDIS_ENABLED
+  #include <hiredis/hiredis.h>
+#endif
+
 namespace llmquant {
 
 // ---------------------------------------------------------------------------
@@ -75,18 +79,107 @@ void InProcessDeduplicator::purge_expired() {
 }
 
 // ---------------------------------------------------------------------------
-// RedisDeduplicator (stub)
+// RedisDeduplicator
 // ---------------------------------------------------------------------------
 
 RedisDeduplicator::RedisDeduplicator(std::string redis_url)
-    : redis_url_(std::move(redis_url)) {}
+    : redis_url_(std::move(redis_url)) {
+#ifdef LLMQUANT_REDIS_ENABLED
+    try_connect();
+#endif
+}
+
+RedisDeduplicator::~RedisDeduplicator() {
+#ifdef LLMQUANT_REDIS_ENABLED
+    redis_disconnect();
+#endif
+}
+
+#ifdef LLMQUANT_REDIS_ENABLED
+bool RedisDeduplicator::try_connect() {
+    // Parse redis://host:port — minimal parser, no path/auth.
+    std::string url = redis_url_;
+    if (url.rfind("redis://", 0) == 0) url = url.substr(8);
+    // Strip any trailing /db segment.
+    size_t slash = url.find('/');
+    if (slash != std::string::npos) url = url.substr(0, slash);
+
+    std::string host = "127.0.0.1";
+    int port = 6379;
+    size_t colon = url.find(':');
+    if (colon != std::string::npos) {
+        host = url.substr(0, colon);
+        port = std::stoi(url.substr(colon + 1));
+    } else if (!url.empty()) {
+        host = url;
+    }
+
+    auto* ctx = redisConnect(host.c_str(), port);
+    if (!ctx || ctx->err) {
+        if (ctx) redisFree(ctx);
+        redis_connected_ = false;
+        return false;
+    }
+    redis_ctx_       = ctx;
+    redis_connected_ = true;
+    return true;
+}
+
+void RedisDeduplicator::redis_disconnect() {
+    if (redis_ctx_) {
+        redisFree(static_cast<redisContext*>(redis_ctx_));
+        redis_ctx_ = nullptr;
+    }
+    redis_connected_ = false;
+}
+#endif
+
+bool RedisDeduplicator::is_connected() const {
+#ifdef LLMQUANT_REDIS_ENABLED
+    return redis_connected_;
+#else
+    return false;
+#endif
+}
 
 DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
                                                    std::chrono::milliseconds ttl) {
+#ifdef LLMQUANT_REDIS_ENABLED
+    if (redis_connected_) {
+        auto* ctx    = static_cast<redisContext*>(redis_ctx_);
+        long long ttl_sec = std::max(1LL,
+            static_cast<long long>(ttl.count()) / 1000);
+        // SET key "" NX EX ttl_sec — atomic check-and-set with TTL.
+        // Returns status "OK" if the key was newly set (novel), or nil if it
+        // already existed (duplicate).
+        auto* reply = static_cast<redisReply*>(
+            redisCommand(ctx, "SET %s \"\" NX EX %lld",
+                         key.value.c_str(), ttl_sec));
+        if (!reply) {
+            // Connection lost — fall through to in-process backend.
+            redis_connected_ = false;
+        } else {
+            bool is_novel = (reply->type == REDIS_REPLY_STATUS);
+            freeReplyObject(reply);
+            return is_novel ? DedupResult::Novel : DedupResult::Duplicate;
+        }
+    }
+#endif
     return inner_.check_and_register(key, ttl);
 }
 
-void RedisDeduplicator::evict(const DedupKey& key) { inner_.evict(key); }
+void RedisDeduplicator::evict(const DedupKey& key) {
+#ifdef LLMQUANT_REDIS_ENABLED
+    if (redis_connected_) {
+        auto* ctx   = static_cast<redisContext*>(redis_ctx_);
+        auto* reply = static_cast<redisReply*>(
+            redisCommand(ctx, "DEL %s", key.value.c_str()));
+        if (reply) freeReplyObject(reply);
+    }
+#endif
+    inner_.evict(key);
+}
+
 size_t RedisDeduplicator::size() const { return inner_.size(); }
 void RedisDeduplicator::purge_expired() { inner_.purge_expired(); }
 

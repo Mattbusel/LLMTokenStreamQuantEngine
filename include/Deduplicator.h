@@ -126,45 +126,69 @@ private:
     std::atomic<uint64_t> total_novel_{0};
 };
 
-/// Redis deduplicator stub.
+/// Redis deduplicator with optional live hiredis connection.
 ///
-/// Provides the same DeduplicatorBackend interface as InProcessDeduplicator
-/// but is backed by an in-process map (not a real Redis connection).  This
-/// stub exists so that call sites can be written against the abstract interface
-/// today and swapped to a real Redis client (via hiredis or similar) without
-/// any changes outside this file.
+/// When built with LLMQUANT_REDIS_ENABLED (hiredis found at CMake time),
+/// check_and_register and evict issue real Redis commands (SET NX EX / DEL).
+/// If the connection is unavailable at construction time or drops mid-run,
+/// the implementation falls back transparently to the in-process backend.
 ///
-/// To integrate with a live Redis instance, replace the implementation of
-/// check_and_register / evict with SETNX + EXPIRE / DEL commands over the
-/// Redis wire protocol.
+/// When built without hiredis, the class is a pure in-process stub: same
+/// public interface, no network I/O.
 class RedisDeduplicator : public DeduplicatorBackend {
 public:
-    /// Construct the stub. `redis_url` is stored for future integration.
+    /// Construct and optionally connect to Redis.
+    ///
+    /// When LLMQUANT_REDIS_ENABLED is defined, attempts to connect to the
+    /// parsed host:port from `redis_url`. Falls back silently to in-process
+    /// mode if the connection fails.
     ///
     /// # Arguments
-    /// * `redis_url` — e.g. "redis://127.0.0.1:6379/0" (not connected in stub).
+    /// * `redis_url` — e.g. "redis://127.0.0.1:6379" or "127.0.0.1:6379".
     explicit RedisDeduplicator(std::string redis_url);
 
-    /// Delegate to the inner in-process deduplicator.
+    /// Disconnect from Redis and free all resources.
+    ~RedisDeduplicator();
+
+    /// Check and register `key` with `ttl`.
+    ///
+    /// Uses Redis SET NX EX when connected; falls back to in-process backend
+    /// on disconnection or when hiredis is absent.
     DedupResult check_and_register(const DedupKey& key,
                                    std::chrono::milliseconds ttl) override;
 
-    /// Delegate to the inner in-process deduplicator.
+    /// Evict `key` from Redis (DEL) and from the in-process backend.
     void evict(const DedupKey& key) override;
 
-    /// Delegate to the inner in-process deduplicator.
+    /// Return the number of entries in the in-process backend.
     size_t size() const override;
 
-    /// Delegate to the inner in-process deduplicator.
+    /// Purge expired entries from the in-process backend.
     void purge_expired() override;
 
-    /// Return the Redis URL this stub was constructed with.
+    /// Return the Redis URL this instance was constructed with.
     const std::string& redis_url() const { return redis_url_; }
+
+    /// Returns true if a live Redis connection is active.
+    ///
+    /// Always returns false when built without hiredis (stub mode).
+    bool is_connected() const;
 
 private:
     std::string redis_url_;
-    // Stub: delegates to an in-process deduplicator.
+    // Fallback: in-process deduplicator used when Redis is unavailable.
     InProcessDeduplicator inner_;
+
+#ifdef LLMQUANT_REDIS_ENABLED
+    void* redis_ctx_{nullptr};   ///< redisContext* — opaque to avoid hiredis header leaking.
+    bool  redis_connected_{false};
+
+    /// Parse redis_url_ and attempt redisConnect. Returns true on success.
+    bool try_connect();
+
+    /// Free the redisContext and mark disconnected.
+    void redis_disconnect();
+#endif
 };
 
 /// Facade that wraps a DeduplicatorBackend and adds convenience methods.

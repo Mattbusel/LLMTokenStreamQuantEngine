@@ -24,6 +24,18 @@ find_package(yaml-cpp REQUIRED)
 find_package(GTest    REQUIRED)
 find_package(Threads  REQUIRED)
 
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND OR OPENSSL_FOUND)
+    message(STATUS "OpenSSL found — TLS enabled in LLMStreamClient")
+    add_compile_definitions(LLMQUANT_TLS_ENABLED)
+endif()
+
+find_package(hiredis QUIET)
+if(hiredis_FOUND OR HIREDIS_FOUND)
+    message(STATUS "hiredis found — Redis deduplication enabled")
+    add_compile_definitions(LLMQUANT_REDIS_ENABLED)
+endif()
+
 # ---------------------------------------------------------------------------
 # Include paths
 # ---------------------------------------------------------------------------
@@ -55,6 +67,14 @@ target_link_libraries(LLMTokenStreamQuantEngine
 
 if(WIN32)
     target_link_libraries(LLMTokenStreamQuantEngine ws2_32)
+endif()
+
+if(OpenSSL_FOUND OR OPENSSL_FOUND)
+    target_link_libraries(LLMTokenStreamQuantEngine OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if(hiredis_FOUND OR HIREDIS_FOUND)
+    target_link_libraries(LLMTokenStreamQuantEngine hiredis)
 endif()
 
 # ---------------------------------------------------------------------------

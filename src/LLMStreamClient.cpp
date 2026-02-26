@@ -1,5 +1,11 @@
 #include "LLMStreamClient.h"
 
+#ifdef LLMQUANT_TLS_ENABLED
+  #include <openssl/ssl.h>
+  #include <openssl/err.h>
+  #include <openssl/x509v3.h>
+#endif
+
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
@@ -23,10 +29,26 @@ LLMStreamClient::LLMStreamClient(Config config) : config_(std::move(config)) {
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
+#ifdef LLMQUANT_TLS_ENABLED
+    SSL_library_init();
+    SSL_load_error_strings();
+    ssl_ctx_ = SSL_CTX_new(TLS_client_method());
+    // Load system CA bundle for certificate verification.
+    SSL_CTX_set_default_verify_paths(static_cast<SSL_CTX*>(ssl_ctx_));
+    SSL_CTX_set_verify(static_cast<SSL_CTX*>(ssl_ctx_), SSL_VERIFY_PEER, nullptr);
+#endif
 }
 
 LLMStreamClient::~LLMStreamClient() {
     stop();
+#ifdef LLMQUANT_TLS_ENABLED
+    // ssl_ is cleaned up inside close_socket() -> tls_close().
+    // If ssl_ctx_ survived (e.g. never connected), free it here.
+    if (ssl_ctx_) {
+        SSL_CTX_free(static_cast<SSL_CTX*>(ssl_ctx_));
+        ssl_ctx_ = nullptr;
+    }
+#endif
 #ifdef _WIN32
     WSACleanup();
 #endif
@@ -75,10 +97,23 @@ bool LLMStreamClient::open_socket() {
 #endif
     }
     freeaddrinfo(res);
-    return sockfd_ >= 0;
+    if (sockfd_ < 0) return false;
+
+#ifdef LLMQUANT_TLS_ENABLED
+    if (config_.use_tls) {
+        if (!tls_handshake()) {
+            close_socket();
+            return false;
+        }
+    }
+#endif
+    return true;
 }
 
 void LLMStreamClient::close_socket() {
+#ifdef LLMQUANT_TLS_ENABLED
+    tls_close();
+#endif
     if (sockfd_ >= 0) {
 #ifdef _WIN32
         closesocket(sockfd_);
@@ -88,6 +123,45 @@ void LLMStreamClient::close_socket() {
         sockfd_ = -1;
     }
 }
+
+#ifdef LLMQUANT_TLS_ENABLED
+bool LLMStreamClient::tls_handshake() {
+    auto* ctx = static_cast<SSL_CTX*>(ssl_ctx_);
+    auto* ssl = SSL_new(ctx);
+    if (!ssl) return false;
+    ssl_ = ssl;
+    SSL_set_fd(ssl, sockfd_);
+    SSL_set_tlsext_host_name(ssl, config_.host.c_str());
+    // SNI + hostname verification.
+    SSL_set1_host(ssl, config_.host.c_str());
+    if (SSL_connect(ssl) != 1) {
+        SSL_free(ssl);
+        ssl_ = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void LLMStreamClient::tls_close() {
+    if (ssl_) {
+        SSL_shutdown(static_cast<SSL*>(ssl_));
+        SSL_free(static_cast<SSL*>(ssl_));
+        ssl_ = nullptr;
+    }
+    if (ssl_ctx_) {
+        SSL_CTX_free(static_cast<SSL_CTX*>(ssl_ctx_));
+        ssl_ctx_ = nullptr;
+    }
+}
+
+ssize_t LLMStreamClient::tls_send(const char* buf, size_t len) {
+    return SSL_write(static_cast<SSL*>(ssl_), buf, static_cast<int>(len));
+}
+
+ssize_t LLMStreamClient::tls_recv(char* buf, size_t len) {
+    return SSL_read(static_cast<SSL*>(ssl_), buf, static_cast<int>(len));
+}
+#endif
 
 std::string LLMStreamClient::build_request_body() const {
     // Minimal JSON construction — no external JSON library required.
@@ -147,9 +221,15 @@ void LLMStreamClient::reader_thread() {
     // Send the full HTTP request.
     size_t sent = 0;
     while (sent < request.size() && running_.load()) {
-        ssize_t n = send(sockfd_,
-                         request.c_str() + sent,
+#ifdef LLMQUANT_TLS_ENABLED
+        ssize_t n = config_.use_tls
+            ? tls_send(request.c_str() + sent, request.size() - sent)
+            : send(sockfd_, request.c_str() + sent,
+                   static_cast<int>(request.size() - sent), 0);
+#else
+        ssize_t n = send(sockfd_, request.c_str() + sent,
                          static_cast<int>(request.size() - sent), 0);
+#endif
         if (n <= 0) break;
         sent += static_cast<size_t>(n);
     }
@@ -161,7 +241,13 @@ void LLMStreamClient::reader_thread() {
 
     char chunk[4096];
     while (running_.load()) {
+#ifdef LLMQUANT_TLS_ENABLED
+        ssize_t n = config_.use_tls
+            ? tls_recv(chunk, sizeof(chunk) - 1)
+            : recv(sockfd_, chunk, sizeof(chunk) - 1, 0);
+#else
         ssize_t n = recv(sockfd_, chunk, sizeof(chunk) - 1, 0);
+#endif
         if (n <= 0) break;
         chunk[n] = '\0';
         buf.append(chunk, static_cast<size_t>(n));
