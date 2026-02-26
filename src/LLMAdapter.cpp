@@ -13,15 +13,26 @@ LLMAdapter::LLMAdapter() {
 
 SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     stats_.tokens_processed++;
-    
-    auto it = token_weights_.find(token);
+
+    // Normalize: strip leading/trailing whitespace, lowercase.
+    // GPT-4o streams tokens like " bullish" or "Bullish" that must map to "bullish".
+    std::string norm;
+    norm.reserve(token.size());
+    size_t start = 0;
+    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) ++start;
+    size_t end = token.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) --end;
+    for (size_t i = start; i < end; ++i)
+        norm += static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
+
+    auto it = token_weights_.find(norm);
     if (it != token_weights_.end()) {
         stats_.cache_hits++;
         return it->second;
     }
-    
+
     stats_.cache_misses++;
-    
+
     // Default neutral weight for unknown tokens
     return SemanticWeight{0.0, 0.5, 0.1, 0.0};
 }

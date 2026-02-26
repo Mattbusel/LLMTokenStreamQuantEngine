@@ -55,6 +55,8 @@ public:
         bool use_tls{true};
         /// Interval between successive streaming requests in loop mode.
         std::chrono::seconds loop_interval{5};
+        /// When true, dump every raw byte received to stderr for 3 seconds then exit.
+        bool debug_raw{false};
     };
 
     /// Construct a streaming client with the given connection parameters.

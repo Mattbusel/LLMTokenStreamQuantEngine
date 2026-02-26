@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
     bool        stream_mode    = false;
     std::string stream_api_key;
     bool        no_color       = false;
+    bool        debug_raw      = false;
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--stream" && i + 1 < argc) {
@@ -42,11 +43,21 @@ int main(int argc, char* argv[]) {
             stream_api_key = argv[++i];
         } else if (arg == "--no-color") {
             no_color = true;
+        } else if (arg == "--debug-raw") {
+            debug_raw = true;
         }
     }
 
     // Colour helpers — emit empty string when --no-color is active.
     auto C = [&](const char* code) -> const char* { return no_color ? "" : code; };
+    // Line helpers — ASCII dividers when --no-color, Unicode otherwise.
+    const char* DIV1 = no_color
+        ? "  ---------------------------------------------------------\n"
+        : "  \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\n";
+    const char* DIV2 = no_color
+        ? "  -----------------------------------------------------------------\n"
+        : "  \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\n";
+    const char* ARROW = no_color ? "->" : "\xe2\x86\x92";
 
     // Load configuration (skip --stream / <key> args when looking for config path).
     Config config;
@@ -258,19 +269,19 @@ int main(int argc, char* argv[]) {
     // Print banner.
     std::cout << "\n";
     std::cout << "  LLMTokenStreamQuantEngine\n";
-    std::cout << "  ─────────────────────────────────────────────────────────\n";
+    std::cout << DIV1;
     if (stream_mode) {
-        std::cout << "  MODE    : LIVE STREAM  (gpt-4o → api.openai.com:443)\n";
+        std::cout << "  MODE    : LIVE STREAM  (gpt-4o " << ARROW << " api.openai.com:443)\n";
         std::cout << "  PROMPT  : market sentiment / tickers / directional\n";
         std::cout << "  INTERVAL: 5s per request\n";
     } else {
         std::cout << "  MODE    : SIMULATOR  (in-memory token loop)\n";
         std::cout << "  INTERVAL: " << sys_config.token_stream.token_interval_ms << "ms/token\n";
     }
-    std::cout << "  LATENCY : target p99 < " << sys_config.latency.target_latency_us << "μs\n";
-    std::cout << "  ─────────────────────────────────────────────────────────\n\n";
-    std::cout << "  TIME(ms)     TOKEN              BIAS      VOL       LATENCY   GATE\n";
-    std::cout << "  ─────────────────────────────────────────────────────────────────\n";
+    std::cout << "  LATENCY : target p99 < " << sys_config.latency.target_latency_us << "us\n";
+    std::cout << DIV1 << "\n";
+    std::cout << "  TIME(ms)     BIAS      VOL       LATENCY   GATE\n";
+    std::cout << DIV2;
 
     std::unique_ptr<llmquant::LLMStreamClient> stream_client;
     if (stream_mode) {
@@ -282,6 +293,7 @@ int main(int argc, char* argv[]) {
         stream_cfg.use_tls      = true;
         stream_cfg.max_tokens   = 300;
         stream_cfg.loop_interval = std::chrono::seconds(5);
+        stream_cfg.debug_raw    = debug_raw;
         stream_cfg.system_prompt =
             "You are a high-frequency financial markets analyst. Every response "
             "must include specific tickers and explicit directional words: "
@@ -374,9 +386,9 @@ int main(int argc, char* argv[]) {
     config.stop_watching();
 
     auto final_stats = latency_ctrl.get_stats();
-    std::cout << "\n\n  ═══════════════════════════════════════════════════════\n";
+    std::cout << "\n\n  =========================================================\n";
     std::cout << "  SESSION SUMMARY\n";
-    std::cout << "  ───────────────────────────────────────────────────────\n";
+    std::cout << "  ---------------------------------------------------------\n";
     std::cout << "  Tokens processed : " << variance_n.load() << "\n";
     std::cout << "  Signals emitted  : " << trade_engine.get_stats().signals_generated.load() << "\n";
     std::cout << "  Signals blocked  : "
@@ -386,10 +398,10 @@ int main(int argc, char* argv[]) {
                   + risk_mgr.get_stats().signals_blocked_drawdown.load()
                   + risk_mgr.get_stats().signals_blocked_position.load()) << "\n";
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
-    std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "μs\n";
-    std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "μs\n";
-    std::cout << "  Max latency      : " << final_stats.max_latency.count() << "μs\n";
-    std::cout << "  ═══════════════════════════════════════════════════════\n\n";
+    std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
+    std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";
+    std::cout << "  Max latency      : " << final_stats.max_latency.count() << "us\n";
+    std::cout << "  ---------------------------------------------------------\n\n";
 
     logger.log_performance_summary();
     return 0;

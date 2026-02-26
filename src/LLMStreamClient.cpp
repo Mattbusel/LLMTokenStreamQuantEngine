@@ -315,6 +315,9 @@ void LLMStreamClient::reader_thread() {
         bool chunked      = false;
         bool stream_done  = false;
 
+        // --debug-raw: dump all bytes to stderr for 3 seconds then stop.
+        auto debug_start = std::chrono::steady_clock::now();
+
         char chunk[4096];
         while (running_.load() && !stream_done) {
             ssize_t n;
@@ -330,6 +333,18 @@ void LLMStreamClient::reader_thread() {
             if (n <= 0) break;
             chunk[n] = '\0';
             buf.append(chunk, static_cast<size_t>(n));
+
+            if (config_.debug_raw) {
+                std::cerr.write(chunk, n);
+                std::cerr.flush();
+                auto elapsed = std::chrono::steady_clock::now() - debug_start;
+                if (elapsed >= std::chrono::seconds(3)) {
+                    std::cerr << "\n[debug-raw] 3s dump complete — exiting\n";
+                    running_ = false;
+                    break;
+                }
+                continue;  // skip all parsing in raw-dump mode
+            }
 
             if (!headers_done) {
                 size_t hdr_end = buf.find("\r\n\r\n");

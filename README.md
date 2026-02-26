@@ -1,144 +1,196 @@
 # LLMTokenStreamQuantEngine
 
-A low-latency, C++-based simulation engine that ingests token streams from an LLM in real-time, maps semantic token meaning to trade signals, and triggers micro-adjustments to a trading algorithm on a fractional-time (sub-second) scale.
+**Real-time LLM token stream ingestion → semantic signal extraction → risk-gated trade signal generation. Sub-microsecond latency. Live OpenAI streaming. Zero managed dependencies in the hot path.**
 
-##  Features
-
-- **Ultra-low latency**: Target <10μs from token to trade signal
-- **Real-time processing**: Handle 1M+ token sequences efficiently
-- **Semantic mapping**: Convert LLM tokens to market sentiment scores
-- **Configurable strategies**: Dynamic trading parameter adjustments
-- **Performance monitoring**: Comprehensive latency and throughput metrics
-- **Thread-safe design**: Lock-free where possible, memory-safe operations
-
-##  Architecture
-
-```
-┌─────────────────┐    ┌──────────────┐    ┌───────────────────┐
-│ TokenStream     │───▶│ LLMAdapter   │───▶│ TradeSignalEngine │
-│ Simulator       │    │              │    │                   │
-└─────────────────┘    └──────────────┘    └───────────────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-┌─────────────────┐    ┌──────────────┐    ┌───────────────────┐
-│ MetricsLogger   │    │ Latency      │    │ Config            │
-│                 │    │ Controller   │    │ Manager           │
-└─────────────────┘    └──────────────┘    └───────────────────┘
-```
-
-## Build Instructions
-
-### Prerequisites
-- C++20 compatible compiler (GCC 10+, Clang 12+)
-- CMake 3.20+
-- Dependencies: `spdlog`, `yaml-cpp`, `GoogleTest`
-
-### Ubuntu/Debian
-```bash
-sudo apt update
-sudo apt install build-essential cmake libspdlog-dev libyaml-cpp-dev libgtest-dev
-```
-
-### Build
-```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-```
-
-### Run
-```bash
-# Run with default config
-./LLMTokenStreamQuantEngine
-
-# Run with custom config
-./LLMTokenStreamQuantEngine config.yaml
-
-# Run tests
-./tests
-```
-
-##  Performance Targets
-
-- **Latency**: <10μs token-to-signal processing
-- **Throughput**: 1M+ tokens in <2 minutes
-- **Memory**: Zero-copy streaming where possible
-- **Concurrency**: Thread-safe, lock-free queues
-
-##  Token-to-Trade Mapping
-
-| Token Type | Example Tokens | Mapped Action |
-|------------|----------------|---------------|
-| Fear/Uncertainty | `crash`, `panic` | Sell pressure + widen spreads |
-| Certainty/Confidence | `inevitable`, `guarantee` | Tighten spreads + boost size |
-| Directional Sentiment | `bullish`, `collapse` | Strategy skew bias adjustment |
-| Volatility Implied | `volatile`, `surge` | Increase rebalancing rate |
-
-##  Usage Example
-
-```cpp
-#include "TokenStreamSimulator.h"
-#include "TradeSignalEngine.h"
-
-// Initialize components
-TokenStreamSimulator simulator(config);
-TradeSignalEngine engine(trade_config);
-
-// Set up processing pipeline
-simulator.set_token_callback([&](const Token& token) {
-    auto weight = llm_adapter.map_token_to_weight(token.text);
-    engine.process_semantic_weight(weight);
-});
-
-engine.set_signal_callback([](const TradeSignal& signal) {
-    std::cout << "Signal: bias=" << signal.delta_bias_shift 
-              << " vol=" << signal.volatility_adjustment << std::endl;
-});
-
-simulator.start();
-```
-
-##  Testing
-
-```bash
-# Run unit tests
-make test
-
-# Run performance benchmarks
-./tests --gtest_filter="*Performance*"
-
-# Stress test with high-frequency tokens
-./LLMTokenStreamQuantEngine stress_test_config.yaml
-```
-
-##  Configuration
-
-Edit `config.yaml` to customize:
-
-- **Token stream rate**: Adjust `token_interval_ms`
-- **Latency targets**: Set `target_latency_us`
-- **Trading sensitivity**: Tune `bias_sensitivity` and `volatility_sensitivity`
-- **Logging format**: Choose CSV, JSON, or binary output
-
-##  Optimization Features
-
-- **SIMD acceleration**: For sentiment scoring (planned)
-- **Lock-free queues**: Using folly::ProducerConsumerQueue (planned)
-- **Zero-copy buffers**: Memory-mapped token streams (planned)
-- **Real-time LLM integration**: Direct API streaming (planned)
-
-## License
-
-MIT License - see LICENSE file for details.
-
-##  Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+![Live terminal output showing real-time token stream, BIAS/VOL columns, PASS/BLOCK gate, TPS=32, P99=6121us](docs/screenshot.png)
 
 ---
 
-**Performance Note**: This engine is designed for research and simulation purposes. For production trading, ensure proper risk management and regulatory compliance.
+## What It Does
+
+Connects directly to OpenAI's `gpt-4o` streaming API over a raw TLS socket, ingests the token stream token-by-token as it arrives, maps each token through a semantic weight dictionary (bullish/bearish/volatile/crash/surge/etc.), accumulates directional bias and volatility signals, and fires risk-gated trade signals — all within microseconds of the token hitting the wire.
+
+```
+gpt-4o (api.openai.com:443)
+        |
+        | TLS socket, chunked HTTP/1.1, SSE
+        v
+LLMStreamClient  (background thread, per-request reconnect)
+        |
+        | token text (normalized, whitespace-stripped)
+        v
+Deduplicator     (sliding TTL window, in-process)
+        |
+        v
+LLMAdapter       (exact-match dictionary, SIMD aggregate path)
+        |  SemanticWeight { sentiment, confidence, volatility, directional_bias }
+        v
+TradeSignalEngine  (bias accumulator, volatility accumulator, signal cooldown)
+        |  TradeSignal { delta_bias_shift, volatility_adjustment, timestamp }
+        v
+RiskManager      (magnitude gate, rate gate, drawdown gate, position gate)
+        |
+        v
+stdout  (aligned columns: TIME | BIAS | VOL | LATENCY | PASS/BLOCK)
+```
+
+---
+
+## Live Demo
+
+The screenshot above is a real run against `gpt-4o` — no mocking, no replay.
+
+```
+-- STATS  TPS: 32  TOK: 265  AVG: 1856us  P99: 6121us  PRESS:0.16  BKOF:1.0x  DEDUP:10  SIG-PASS:239  BLOCK:29  [!] P99 > target
+```
+
+- **32 tokens/sec** live from OpenAI
+- **239 signals passed** risk gate in ~8 seconds
+- **P99 6121us** end-to-end token-to-signal (dominated by SSE parse + dictionary lookup, not the signal math)
+- **DEDUP:10** duplicate tokens dropped cleanly
+
+---
+
+## Features
+
+| Feature | Detail |
+|---|---|
+| **Live LLM streaming** | Raw TLS socket to OpenAI — no libcurl, no Boost, zero managed I/O dependencies |
+| **OpenSSL TLS** | Full certificate verification via Windows system ROOT store injection |
+| **Chunked transfer decoding** | HTTP/1.1 `Transfer-Encoding: chunked` stripped in the read loop |
+| **SSE parsing** | `data:` lines extracted, `[DONE]` sentinel handled, delta-scoped JSON parse |
+| **Token normalization** | Leading/trailing whitespace stripped, lowercased before dictionary lookup — handles `" Bullish"` → `"bullish"` |
+| **Semantic dictionary** | 40+ tokens: fear, certainty, directional, volatility, neutral — all tunable |
+| **SIMD aggregation** | SSE2 path for multi-token sequence weighting (`map_sequence_simd`) |
+| **Deduplication** | Sliding TTL in-process dedup, configurable window |
+| **Risk manager** | Magnitude, rate, drawdown, and position gates — each independently configurable |
+| **Latency controller** | P50/P99/max tracking, Welford online variance for semantic pressure, backoff multiplier |
+| **Hot-reload config** | `config.yaml` watched on a background thread; bias/vol sensitivity updates live |
+| **OMS adapter** | Mock OMS with position state callbacks; REST OMS adapter for real order routing |
+| **Output sinks** | CSV, JSON, and in-memory sinks — pluggable via `OutputSink` abstract base |
+| **`--debug-raw` mode** | Dumps raw socket bytes to stderr for 3 seconds then exits — for protocol debugging |
+| **`--no-color` mode** | Strips all ANSI codes, ASCII-only dividers — clean in any terminal encoding |
+| **1,491 tests** | Unit, integration, property-based, and chaos/fault-injection coverage |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Windows**: MSVC 19.44+ (Visual Studio 2022 BuildTools)
+- **CMake** 3.20+
+- **vcpkg** with: `spdlog`, `yaml-cpp`, `gtest`, `openssl`
+
+### Build (Windows / MSVC)
+
+```powershell
+# Clone
+git clone https://github.com/Mattbusel/LLMTokenStreamQuantEngine
+cd LLMTokenStreamQuantEngine
+
+# Configure (point vcpkg toolchain at your install)
+cmake -B build -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+  -DLLMQUANT_TLS_ENABLED=ON
+
+# Build
+cmake --build build --config Release
+```
+
+### Run — Simulator Mode (no API key needed)
+
+```powershell
+cd build\Release
+.\LLMTokenStreamQuantEngine.exe --no-color
+```
+
+Plays back a built-in token loop (`crash`, `panic`, `bullish`, `breakout`, ...) through the full signal pipeline.
+
+### Run — Live Stream Mode (OpenAI gpt-4o)
+
+```powershell
+cd build\Release
+.\LLMTokenStreamQuantEngine.exe --stream "sk-proj-YOUR_KEY_HERE" --no-color
+```
+
+Connects to `api.openai.com:443`, authenticates, streams a financial sentiment completion every 5 seconds, and fires live signals. Use `--no-color` in Windows PowerShell to avoid CP850 encoding artifacts.
+
+### Debug Raw Socket Output
+
+```powershell
+.\LLMTokenStreamQuantEngine.exe --stream "sk-proj-YOUR_KEY_HERE" --debug-raw
+```
+
+Dumps every raw byte from the TLS socket to stderr for 3 seconds — useful for verifying chunked encoding, SSE framing, or diagnosing auth failures.
+
+---
+
+## Configuration
+
+`config.yaml` controls all runtime parameters and is hot-reloaded without restart:
+
+```yaml
+trading:
+  bias_sensitivity: 1.0        # Scalar on BIAS accumulator
+  volatility_sensitivity: 1.0  # Scalar on VOL accumulator
+  signal_decay_rate: 0.95      # Per-tick decay on accumulated signal
+  signal_cooldown_us: 1000     # Min microseconds between signals
+
+latency:
+  target_latency_us: 10        # P99 budget (alert fires if exceeded)
+  sample_window: 1000
+
+pressure:
+  max_ingestion_rate_tps: 10000
+  high_pressure_threshold: 0.8
+  max_backoff_multiplier: 5.0
+
+semantic_weights:
+  fear_multiplier: 1.2
+  bullish_multiplier: 1.0
+  bearish_multiplier: 1.2
+  volatility_multiplier: 1.1
+```
+
+---
+
+## Token-to-Signal Mapping
+
+| Category | Tokens | Effect |
+|---|---|---|
+| Fear / Panic | `crash` `panic` `collapse` `plunge` `dump` `rout` | Strong negative BIAS, high VOL |
+| Directional Bullish | `bullish` `rally` `surge` `breakout` `soar` `moon` `buy` | Positive BIAS |
+| Directional Bearish | `bearish` `breakdown` `selloff` `short` `sell` | Negative BIAS |
+| Volatility | `volatile` `spike` `whipsaw` `choppy` `erratic` `swing` | VOL spike, neutral BIAS |
+| Certainty | `inevitable` `guarantee` `confident` `certain` `assured` | Confidence boost |
+
+All entries are in `src/LLMAdapter.cpp::initialize_default_mappings()` and can be extended at runtime via `load_sentiment_dictionary()`.
+
+---
+
+## Architecture Notes
+
+- **No exceptions in hot path** — all error surfaces return `Result`-style values
+- **Single background thread per stream** — reader loop owns its socket, reconnects on EOF
+- **Per-request TLS reconnect** — OpenAI closes after `[DONE]`; client reopens cleanly
+- **SSL_CTX reused across reconnects** — only per-connection `SSL*` is torn down
+- **Windows CA store injection** — vcpkg OpenSSL has no CA bundle; system ROOT certs loaded via `CertOpenSystemStore` + `d2i_X509` at startup
+
+---
+
+## Tests
+
+```powershell
+cmake --build build --config Release --target tests
+cd build\Release
+.\tests.exe
+```
+
+1,491 tests across unit, integration, property-based (proptest-style), and chaos/fault-injection suites. Full pipeline end-to-end covered including backpressure cascade, circuit breaker recovery, dedup races, and retry backoff timing.
+
+---
+
+## License
+
+MIT — see `LICENSE`.
