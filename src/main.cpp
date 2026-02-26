@@ -31,16 +31,22 @@ int main(int argc, char* argv[]) {
   try {
     std::signal(SIGINT, signal_handler);
 
-    // Parse --stream flag before anything else.
+    // Parse flags before anything else.
     bool        stream_mode    = false;
     std::string stream_api_key;
+    bool        no_color       = false;
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--stream" && i + 1 < argc) {
+        std::string arg(argv[i]);
+        if (arg == "--stream" && i + 1 < argc) {
             stream_mode    = true;
-            stream_api_key = argv[i + 1];
-            break;
+            stream_api_key = argv[++i];
+        } else if (arg == "--no-color") {
+            no_color = true;
         }
     }
+
+    // Colour helpers — emit empty string when --no-color is active.
+    auto C = [&](const char* code) -> const char* { return no_color ? "" : code; };
 
     // Load configuration (skip --stream / <key> args when looking for config path).
     Config config;
@@ -211,13 +217,12 @@ int main(int argc, char* argv[]) {
 
         std::string gate_str;
         if (passed) {
-            gate_str = " \033[32mPASS\033[0m";
+            gate_str = std::string(" ") + C("\033[32m") + "PASS" + C("\033[0m");
         } else {
             std::lock_guard<std::mutex> lk(block_reason_mutex);
             std::string reason = last_block_reason.empty() ? "risk" : last_block_reason;
-            // Truncate to 16 chars for column alignment.
             if (reason.size() > 16) reason = reason.substr(0, 16);
-            gate_str = " \033[31mBLOCK\033[0m(" + reason + ")";
+            gate_str = std::string(" ") + C("\033[31m") + "BLOCK" + C("\033[0m") + "(" + reason + ")";
             last_block_reason.clear();
         }
 
@@ -278,12 +283,13 @@ int main(int argc, char* argv[]) {
         stream_cfg.max_tokens   = 300;
         stream_cfg.loop_interval = std::chrono::seconds(5);
         stream_cfg.system_prompt =
-            "You are a financial markets analyst providing real-time commentary "
-            "on market conditions, options flow, and sentiment. Be specific, "
-            "use tickers, use directional language.";
+            "You are a high-frequency financial markets analyst. Every response "
+            "must include specific tickers and explicit directional words: "
+            "bullish, bearish, crash, surge, panic, breakout, collapse, volatile, "
+            "guarantee, inevitable. Be terse and signal-dense.";
         stream_cfg.user_prompt =
-            "Give a fresh real-time market sentiment update with specific "
-            "tickers and directional signals.";
+            "Give a terse real-time market signal update. Use tickers. "
+            "Use words: bullish, bearish, surge, crash, breakout, collapse, volatile.";
 
         stream_client = std::make_unique<llmquant::LLMStreamClient>(stream_cfg);
         stream_client->set_token_callback([&](const std::string& text) {
@@ -322,28 +328,28 @@ int main(int argc, char* argv[]) {
         // Colour the P99 value: green < 10μs, yellow < 50μs, red otherwise.
         auto p99 = stats.p99_latency.count();
         const char* p99_colour =
-            (p99 < 10)  ? "\033[32m" :
-            (p99 < 50)  ? "\033[33m" : "\033[31m";
+            (p99 < 10)  ? C("\033[32m") :
+            (p99 < 50)  ? C("\033[33m") : C("\033[31m");
 
         // Colour the pressure bar.
         const char* press_colour =
-            (pressure.composite < 0.5) ? "\033[32m" :
-            (pressure.composite < 0.8) ? "\033[33m" : "\033[31m";
+            (pressure.composite < 0.5) ? C("\033[32m") :
+            (pressure.composite < 0.8) ? C("\033[33m") : C("\033[31m");
 
         uint64_t tokens_total = stream_mode
                                     ? static_cast<uint64_t>(variance_n.load())
                                     : token_sim.get_stats().tokens_emitted.load();
 
         // Overwrite the stats line in-place.
-        std::cout << "\n  ─ STATS  "
+        std::cout << "\n  -- STATS "
                   << " TPS:"   << std::setw(4) << tps
                   << "  TOK:"  << std::setw(7) << tokens_total
-                  << "  AVG:"  << std::setw(5) << stats.avg_latency.count() << "μs"
+                  << "  AVG:"  << std::setw(5) << stats.avg_latency.count() << "us"
                   << "  P99:"  << p99_colour
-                               << std::setw(5) << p99 << "μs\033[0m"
+                               << std::setw(5) << p99 << "us" << C("\033[0m")
                   << "  PRESS:" << press_colour
                                << std::fixed << std::setprecision(2)
-                               << pressure.composite << "\033[0m"
+                               << pressure.composite << C("\033[0m")
                   << "  BKOF:" << std::setprecision(1) << backoff << "x"
                   << "  DEDUP:" << dedup_backend->total_duplicates()
                   << "  SIG-PASS:" << eng_stats.signals_generated.load()
@@ -357,7 +363,7 @@ int main(int argc, char* argv[]) {
 
         // Alert if P99 exceeds budget.
         if (p99 > sys_config.latency.target_latency_us && last_tick != stats.measurements) {
-            std::cout << "  \033[31m[!] P99 > target\033[0m" << std::flush;
+            std::cout << "  " << C("\033[31m") << "[!] P99 > target" << C("\033[0m") << std::flush;
         }
         last_tick = stats.measurements;
     }

@@ -223,10 +223,19 @@ std::string LLMStreamClient::build_http_request(const std::string& body) const {
 
 std::string LLMStreamClient::parse_sse_delta(const std::string& data_line) {
     // data_line is the raw text after "data: ".
-    // Look for "\"content\":\"<token>\"" — minimal parser, no regex.
+    // OpenAI SSE format: {"choices":[{"delta":{"content":"<token>"},...},...]}
+    // Scope the search to after "delta": to avoid matching top-level "content".
+    const std::string delta_key = "\"delta\":";
+    size_t delta_pos = data_line.find(delta_key);
+    const std::string search_region = (delta_pos != std::string::npos)
+                                          ? data_line.substr(delta_pos)
+                                          : data_line;
+
     const std::string needle = "\"content\":\"";
-    size_t pos = data_line.find(needle);
+    size_t pos = search_region.find(needle);
     if (pos == std::string::npos) return {};
+    // Remap pos back to data_line base (pos is relative to search_region).
+    pos += (delta_pos != std::string::npos ? delta_pos : 0);
     pos += needle.size();
     std::string token;
     while (pos < data_line.size() && data_line[pos] != '"') {
@@ -271,6 +280,15 @@ static bool send_all(int sockfd, void* ssl, bool use_tls,
     return true;
 }
 
+// Returns true if `s` is a valid hex chunk-size token (possibly with extensions).
+static bool is_chunk_size_line(const std::string& s) {
+    if (s.empty()) return false;
+    for (char c : s) {
+        if (!std::isxdigit(static_cast<unsigned char>(c)) && c != ';') return false;
+    }
+    return true;
+}
+
 void LLMStreamClient::reader_thread() {
     // Loop: send one request, stream the response, wait loop_interval, repeat.
     while (running_.load()) {
@@ -289,10 +307,12 @@ void LLMStreamClient::reader_thread() {
             continue;
         }
 
-        // Read response: skip HTTP headers, then process SSE body.
+        // Read response: accumulate until we have the full header block,
+        // then detect Transfer-Encoding and stream the SSE body.
         std::string buf;
         buf.reserve(8192);
         bool headers_done = false;
+        bool chunked      = false;
         bool stream_done  = false;
 
         char chunk[4096];
@@ -314,11 +334,17 @@ void LLMStreamClient::reader_thread() {
             if (!headers_done) {
                 size_t hdr_end = buf.find("\r\n\r\n");
                 if (hdr_end == std::string::npos) continue;
+                // Check for chunked transfer encoding in the header block.
+                std::string headers = buf.substr(0, hdr_end);
+                // Case-insensitive search for Transfer-Encoding: chunked
+                std::string hdrs_lower = headers;
+                for (char& c : hdrs_lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                chunked = (hdrs_lower.find("transfer-encoding: chunked") != std::string::npos);
                 buf = buf.substr(hdr_end + 4);
                 headers_done = true;
             }
 
-            // Scan complete SSE lines.
+            // Scan complete lines from the accumulated body.
             size_t start = 0;
             while (true) {
                 size_t nl = buf.find('\n', start);
@@ -326,6 +352,11 @@ void LLMStreamClient::reader_thread() {
                 std::string line = buf.substr(start, nl - start);
                 if (!line.empty() && line.back() == '\r') line.pop_back();
                 start = nl + 1;
+
+                // With chunked encoding, skip hex chunk-size lines entirely.
+                if (chunked && is_chunk_size_line(line)) continue;
+                // Skip blank lines (SSE event separators and chunk boundaries).
+                if (line.empty()) continue;
 
                 if (line.rfind("data: ", 0) == 0) {
                     std::string payload = line.substr(6);
