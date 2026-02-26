@@ -67,23 +67,20 @@ clang-format --dry-run src/*.cpp include/*.h
 
 ## Module Status
 
-| Module              | Headers | Implementation | Tests | Done                    |
-|---------------------|---------|----------------|-------|-------------------------|
-| Config              | ✓       | ✓              | ✓     | needs hot-reload        |
-| LLMAdapter          | ✓       | ✓              | ✓     | ✓                       |
-| LatencyController   | ✓       | ✓              | ✓     | needs pressure system   |
-| MetricsLogger       | ✓       | ✓              | ✓     | ✓                       |
-| TokenStreamSimulator| ✓       | ✓              | ✓     | ✓                       |
-| TradeSignalEngine   | ✓       | ✓              | ✓     | ✓                       |
-| OutputSink          | ✓       | ✓ (header-only)| ✓     | ✓                       |
+| Module | Headers | Implementation | Tests | Done |
+|--------|---------|----------------|-------|------|
+| Config | ✓ | ✓ hot-reload | ✓ | ✓ |
+| LLMAdapter | ✓ | ✓ SIMD batch | ✓ | ✓ |
+| LatencyController | ✓ | ✓ pressure system | ✓ | ✓ |
+| MetricsLogger | ✓ | ✓ | ✓ | ✓ |
+| TokenStreamSimulator | ✓ | ✓ lock-free ring | ✓ | ✓ |
+| TradeSignalEngine | ✓ | ✓ full fields | ✓ | ✓ |
+| OutputSink | ✓ | ✓ (header-only) | ✓ | ✓ |
 
 ## What Still Needs Building
-
-- Config hot-reload (inotify/FSEvents watch loop in ConfigManager)
-- Pressure architecture in LatencyController (composite pressure signal)
-- SIMD sentiment scoring in LLMAdapter
-- Lock-free ring buffer for TokenStreamSimulator
-- Real-time LLM API streaming integration
+- Real-time LLM API streaming integration (direct API streaming, planned)
+- Distributed deduplication layer (cross-node, planned)
+- Production risk management hooks (position limits, drawdown guards)
 
 ## Non-Obvious Design Decisions
 

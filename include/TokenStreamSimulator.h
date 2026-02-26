@@ -57,6 +57,7 @@ public:
         std::atomic<uint64_t> tokens_emitted{0};
         std::atomic<uint64_t> avg_latency_us{0};
         std::atomic<uint64_t> max_latency_us{0};
+        std::atomic<uint64_t> ring_buffer_drops{0};   ///< Tokens dropped when ring buffer was full.
     };
 
     /// Construct a simulator with the given configuration.
@@ -107,12 +108,68 @@ public:
     const Stats& get_stats() const { return stats_; }
 
 private:
+    /// Lock-free SPSC ring buffer for token strings.
+    ///
+    /// Uses two cache-line-separated atomics (head_ / tail_) to avoid
+    /// false sharing.  Capacity is rounded up to the next power of two so
+    /// the index mask trick applies.
+    struct RingBuffer {
+        static constexpr size_t kCacheLineSize = 64;
+
+        explicit RingBuffer(size_t capacity) {
+            // Round up to next power of two.
+            size_t cap = 1;
+            while (cap < capacity) cap <<= 1;
+            mask_ = cap - 1;
+            slots_.resize(cap);
+        }
+
+        /// Try to push a token.  Returns false if the buffer is full.
+        bool try_push(std::string token) {
+            const size_t t = tail_.load(std::memory_order_relaxed);
+            const size_t next = (t + 1) & mask_;
+            if (next == head_.load(std::memory_order_acquire)) return false;  // full
+            slots_[t] = std::move(token);
+            tail_.store(next, std::memory_order_release);
+            return true;
+        }
+
+        /// Try to pop a token.  Returns false if the buffer is empty.
+        bool try_pop(std::string& out) {
+            const size_t h = head_.load(std::memory_order_relaxed);
+            if (h == tail_.load(std::memory_order_acquire)) return false;  // empty
+            out = std::move(slots_[h]);
+            head_.store((h + 1) & mask_, std::memory_order_release);
+            return true;
+        }
+
+        size_t size() const {
+            size_t h = head_.load(std::memory_order_acquire);
+            size_t t = tail_.load(std::memory_order_acquire);
+            return (t - h) & mask_;
+        }
+
+        bool empty() const { return size() == 0; }
+
+        void clear() {
+            head_.store(0, std::memory_order_relaxed);
+            tail_.store(0, std::memory_order_relaxed);
+        }
+
+    private:
+        alignas(kCacheLineSize) std::atomic<size_t> head_{0};
+        alignas(kCacheLineSize) std::atomic<size_t> tail_{0};
+        size_t mask_{0};
+        std::vector<std::string> slots_;
+    };
+
     void stream_worker();
 
     Config config_;
     TokenCallback callback_;
-    std::vector<std::string> token_buffer_;
-    std::mutex buffer_mutex_;
+    RingBuffer ring_buffer_;
+    std::vector<std::string> source_tokens_;   // master token list (filled once, read-only after load)
+    std::mutex load_mutex_;                    // protects source_tokens_ during load
     std::atomic<bool> running_{false};
     std::atomic<uint64_t> current_sequence_{0};
     std::thread worker_thread_;

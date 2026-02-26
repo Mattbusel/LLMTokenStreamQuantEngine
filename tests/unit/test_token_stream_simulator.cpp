@@ -113,5 +113,51 @@ TEST(TokenStreamSimulatorTest, test_token_stream_simulator_stop_without_start_is
     EXPECT_NO_THROW(sim.stop());
 }
 
+TEST(TokenStreamSimulatorTest, test_ring_buffer_try_push_pop_roundtrip) {
+    // Test the RingBuffer directly via the simulator's load/stream behaviour.
+    llmquant::TokenStreamSimulator::Config cfg;
+    cfg.token_interval = std::chrono::microseconds(1);
+    cfg.buffer_size    = 8;
+    cfg.use_memory_stream = true;
+
+    llmquant::TokenStreamSimulator sim(cfg);
+    sim.load_tokens_from_memory({"alpha", "beta", "gamma"});
+
+    std::atomic<int> count{0};
+    sim.set_token_callback([&](const llmquant::Token&) { count++; });
+    sim.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    sim.stop();
+    EXPECT_GT(count.load(), 0);
+}
+
+TEST(TokenStreamSimulatorTest, test_ring_buffer_fills_and_cycles_source) {
+    llmquant::TokenStreamSimulator::Config cfg;
+    cfg.token_interval = std::chrono::microseconds(100);
+    cfg.buffer_size    = 4;
+    cfg.use_memory_stream = true;
+
+    llmquant::TokenStreamSimulator sim(cfg);
+    // Only 2 source tokens — ring must cycle them.
+    sim.load_tokens_from_memory({"a", "b"});
+
+    std::vector<std::string> received;
+    std::mutex rx_mutex;
+    sim.set_token_callback([&](const llmquant::Token& tok) {
+        std::lock_guard<std::mutex> lk(rx_mutex);
+        received.push_back(tok.text);
+    });
+    sim.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    sim.stop();
+
+    // All received tokens must be either "a" or "b".
+    std::lock_guard<std::mutex> lk(rx_mutex);
+    for (const auto& t : received) {
+        EXPECT_TRUE(t == "a" || t == "b");
+    }
+    EXPECT_FALSE(received.empty());
+}
+
 } // namespace
 } // namespace llmquant

@@ -100,5 +100,44 @@ TEST(LLMAdapterTest, test_llm_adapter_cache_stats_track_hits_and_misses) {
     EXPECT_DOUBLE_EQ(miss.confidence_score, 0.5);
 }
 
+TEST(LLMAdapterTest, test_llm_adapter_simd_empty_returns_zero) {
+    LLMAdapter adapter;
+    auto w = adapter.map_sequence_simd({});
+    EXPECT_DOUBLE_EQ(w.sentiment_score,  0.0);
+    EXPECT_DOUBLE_EQ(w.confidence_score, 0.0);
+    EXPECT_DOUBLE_EQ(w.volatility_score, 0.0);
+    EXPECT_DOUBLE_EQ(w.directional_bias, 0.0);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_simd_matches_scalar_for_single_token) {
+    LLMAdapter adapter;
+    auto scalar = adapter.map_sequence_to_weight({"bullish"});
+    auto simd   = adapter.map_sequence_simd({"bullish"});
+    EXPECT_NEAR(scalar.sentiment_score,  simd.sentiment_score,  1e-9);
+    EXPECT_NEAR(scalar.directional_bias, simd.directional_bias, 1e-9);
+    EXPECT_NEAR(scalar.volatility_score, simd.volatility_score, 1e-9);
+    EXPECT_NEAR(scalar.confidence_score, simd.confidence_score, 1e-9);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_simd_matches_scalar_for_four_tokens) {
+    LLMAdapter adapter;
+    std::vector<std::string> tokens{"bullish", "crash", "volatile", "rally"};
+    auto scalar = adapter.map_sequence_to_weight(tokens);
+    auto simd   = adapter.map_sequence_simd(tokens);
+    EXPECT_NEAR(scalar.sentiment_score,  simd.sentiment_score,  1e-9);
+    EXPECT_NEAR(scalar.directional_bias, simd.directional_bias, 1e-9);
+    EXPECT_NEAR(scalar.volatility_score, simd.volatility_score, 1e-9);
+    EXPECT_NEAR(scalar.confidence_score, simd.confidence_score, 1e-9);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_simd_odd_count_matches_scalar) {
+    LLMAdapter adapter;
+    std::vector<std::string> tokens{"crash", "panic", "bullish", "rally", "volatile"};
+    auto scalar = adapter.map_sequence_to_weight(tokens);
+    auto simd   = adapter.map_sequence_simd(tokens);
+    EXPECT_NEAR(scalar.sentiment_score,  simd.sentiment_score,  1e-9);
+    EXPECT_NEAR(scalar.directional_bias, simd.directional_bias, 1e-9);
+}
+
 } // namespace
 } // namespace llmquant

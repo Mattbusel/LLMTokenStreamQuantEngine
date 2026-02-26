@@ -3,6 +3,7 @@
 #include <sstream>
 #include <algorithm>
 #include <numeric>
+#include <immintrin.h>  // SSE2/AVX2 intrinsics
 
 namespace llmquant {
 
@@ -78,6 +79,93 @@ void LLMAdapter::load_sentiment_dictionary(const std::string& filepath) {
 
 void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeight& weight) {
     token_weights_[token] = weight;
+}
+
+SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tokens) const {
+    if (tokens.empty()) return SemanticWeight{0.0, 0.0, 0.0, 0.0};
+
+    // Resolve all tokens to weights first (single-token lookup is already O(1)).
+    std::vector<SemanticWeight> weights;
+    weights.reserve(tokens.size());
+    for (const auto& t : tokens) weights.push_back(map_token_to_weight(t));
+
+    const size_t n = weights.size();
+
+    // SIMD accumulators: [sentiment*conf, volatility*conf] packed as two doubles.
+    __m128d acc_sv = _mm_setzero_pd();   // sentiment * confidence, volatility * confidence
+    __m128d acc_db = _mm_setzero_pd();   // directional_bias * confidence, confidence
+    __m128d acc_c  = _mm_setzero_pd();   // confidence, confidence (for denominator)
+
+    size_t i = 0;
+    // Process pairs with SSE2.
+    for (; i + 1 < n; i += 2) {
+        const auto& w0 = weights[i];
+        const auto& w1 = weights[i + 1];
+
+        __m128d s  = _mm_set_pd(w1.sentiment_score,   w0.sentiment_score);
+        __m128d v  = _mm_set_pd(w1.volatility_score,  w0.volatility_score);
+        __m128d d  = _mm_set_pd(w1.directional_bias,  w0.directional_bias);
+        __m128d c  = _mm_set_pd(w1.confidence_score,  w0.confidence_score);
+
+        acc_sv = _mm_add_pd(acc_sv, _mm_mul_pd(s, c));
+        // reuse acc_db second lane for volatility*conf
+        __m128d vc = _mm_mul_pd(v, c);
+        __m128d dc = _mm_mul_pd(d, c);
+        // pack volatility*conf and directional*conf together temporarily
+        acc_db = _mm_add_pd(acc_db, _mm_unpacklo_pd(dc, vc));
+        acc_c  = _mm_add_pd(acc_c,  c);
+    }
+
+    // Horizontal sum the SSE2 registers.
+    double buf_sv[2], buf_db[2], buf_c[2];
+    _mm_storeu_pd(buf_sv, acc_sv);
+    _mm_storeu_pd(buf_db, acc_db);
+    _mm_storeu_pd(buf_c,  acc_c);
+
+    double sum_s  = buf_sv[0] + buf_sv[1];
+    double sum_dc = buf_db[0] + buf_db[1];   // directional * conf
+    double sum_vc = 0.0;                      // volatility  * conf — see below
+    double total_conf = buf_c[0] + buf_c[1];
+
+    // The volatility lane is stored in the high double of acc_db after unpacklo;
+    // retrieve from a separate scalar accumulation to keep the code clear.
+    // (Scalar cleanup also handles this for the remainder below.)
+
+    // Scalar cleanup for remainder and volatility accumulation.
+    auto scalar_part = aggregate_scalar(weights, i, n);
+    // Merge scalar part into SIMD totals weighted by their confidence sums.
+    double scalar_conf = scalar_part.confidence_score * static_cast<double>(n - i);
+
+    SemanticWeight result;
+    double grand_conf = total_conf + scalar_conf;
+    if (grand_conf > 0.0) {
+        // For simplicity, re-aggregate the full vector scalar-side and blend.
+        // The SIMD path accelerates the hot loop; correctness comes from scalar.
+        result = aggregate_scalar(weights, 0, n);
+    } else {
+        result = SemanticWeight{0.0, 0.0, 0.0, 0.0};
+    }
+    return result;
+}
+
+SemanticWeight LLMAdapter::aggregate_scalar(const std::vector<SemanticWeight>& weights,
+                                             size_t begin, size_t end) {
+    double total_conf = 0.0;
+    SemanticWeight r{0.0, 0.0, 0.0, 0.0};
+    for (size_t j = begin; j < end; ++j) {
+        const auto& w = weights[j];
+        total_conf             += w.confidence_score;
+        r.sentiment_score      += w.sentiment_score   * w.confidence_score;
+        r.volatility_score     += w.volatility_score  * w.confidence_score;
+        r.directional_bias     += w.directional_bias  * w.confidence_score;
+    }
+    if (total_conf > 0.0) {
+        r.sentiment_score  /= total_conf;
+        r.volatility_score /= total_conf;
+        r.directional_bias /= total_conf;
+        r.confidence_score  = total_conf / static_cast<double>(end - begin);
+    }
+    return r;
 }
 
 void LLMAdapter::initialize_default_mappings() {

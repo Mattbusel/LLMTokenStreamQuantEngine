@@ -5,9 +5,11 @@
 #include "MetricsLogger.h"
 #include "Config.h"
 #include <iostream>
+#include <iomanip>
 #include <thread>
 #include <chrono>
 #include <csignal>
+#include <atomic>
 
 using namespace llmquant;
 
@@ -27,7 +29,12 @@ int main(int argc, char* argv[]) {
     if (!config.load_from_file(config_file)) {
         std::cout << "Using default configuration" << std::endl;
     }
-    
+
+    config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
+        std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
+                  << updated.trading.bias_sensitivity << std::endl;
+    });
+
     const auto& sys_config = config.get_config();
     
     // Initialize components
@@ -45,6 +52,12 @@ int main(int argc, char* argv[]) {
         .enable_profiling = sys_config.latency.enable_profiling
     });
     
+    // Arrival rate tracking for pressure system.
+    std::atomic<uint64_t> token_count_window{0};
+    std::atomic<double>   sentiment_variance_accum{0.0};
+    std::atomic<double>   sentiment_mean_accum{0.0};
+    std::atomic<uint64_t> variance_n{0};
+
     LLMAdapter llm_adapter;
     
     TradeSignalEngine trade_engine({
@@ -73,8 +86,25 @@ int main(int argc, char* argv[]) {
         
         // Process through trade signal engine
         trade_engine.process_semantic_weight(weight);
-        
+
         latency_ctrl.end_measurement();
+
+        // Track token arrival for ingestion pressure.
+        token_count_window++;
+
+        // Welford online variance for semantic pressure.
+        double s = weight.sentiment_score;
+        uint64_t n = variance_n.fetch_add(1) + 1;
+        double mean = sentiment_mean_accum.load();
+        double delta = s - mean;
+        sentiment_mean_accum.store(mean + delta / static_cast<double>(n));
+        double delta2 = s - sentiment_mean_accum.load();
+        double var = sentiment_variance_accum.load();
+        sentiment_variance_accum.store(var + delta * delta2);
+
+        // Update pressure (semantic only here; ingestion + queue updated in monitoring loop).
+        double current_variance = (n > 1) ? (sentiment_variance_accum.load() / static_cast<double>(n - 1)) : 0.0;
+        latency_ctrl.update_semantic_pressure(current_variance);
     });
     
     trade_engine.set_signal_callback([&](const TradeSignal& signal) {
@@ -117,17 +147,35 @@ int main(int argc, char* argv[]) {
     // Main loop
     while (g_running) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        
-        // Print performance stats
-        auto stats = latency_ctrl.get_stats();
-        std::cout << "\r📊 Tokens: " << token_sim.get_stats().tokens_emitted 
-                  << " | Avg Latency: " << stats.avg_latency.count() << "μs"
-                  << " | Max: " << stats.max_latency.count() << "μs" << std::flush;
+
+        auto stats    = latency_ctrl.get_stats();
+        auto pressure = latency_ctrl.get_pressure();
+
+        // Update ingestion pressure (tokens emitted in the last second).
+        uint64_t tps = token_count_window.exchange(0);
+        double max_tps = static_cast<double>(1000000 / std::max(1, sys_config.token_stream.token_interval_ms));
+        latency_ctrl.update_ingestion_pressure(static_cast<double>(tps), max_tps);
+
+        // Queue pressure: use signal-suppressed count as proxy for backlog depth.
+        auto& engine_stats = trade_engine.get_stats();
+        latency_ctrl.update_queue_pressure(engine_stats.signals_suppressed.load(), 1024);
+
+        double backoff = latency_ctrl.get_backoff_multiplier();
+
+        std::cout << "\r"
+                  << "Tokens: "     << token_sim.get_stats().tokens_emitted
+                  << " | Avg: "     << stats.avg_latency.count()     << "us"
+                  << " | Max: "     << stats.max_latency.count()     << "us"
+                  << " | P99: "     << stats.p99_latency.count()     << "us"
+                  << " | Press: "   << std::fixed << std::setprecision(2) << pressure.composite
+                  << " | Backoff: " << backoff << "x"
+                  << std::flush;
     }
     
     token_sim.stop();
     logger.log_performance_summary();
-    
-    std::cout << "\n✅ Engine stopped successfully" << std::endl;
+    config.stop_watching();
+
+    std::cout << "\nEngine stopped successfully" << std::endl;
     return 0;
 }

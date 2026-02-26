@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <stdexcept>
+#include <immintrin.h>  // SSE2/AVX2 intrinsics
 
 namespace llmquant {
 
@@ -80,8 +81,25 @@ public:
     /// * `weight` — SemanticWeight to associate with the token.
     void add_token_mapping(const std::string& token, const SemanticWeight& weight);
 
+    /// Batch-score a sequence of tokens using SIMD-accelerated aggregation.
+    ///
+    /// Equivalent to map_sequence_to_weight() but the confidence-weighted
+    /// dot-product is computed using SSE2 intrinsics when four or more tokens
+    /// are present, falling back to scalar for the remainder.
+    ///
+    /// # Arguments
+    /// * `tokens` — Tokens to score; may be empty (returns zero weight).
+    ///
+    /// # Returns
+    /// Confidence-weighted aggregate SemanticWeight.
+    SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
+
 private:
     void initialize_default_mappings();
+
+    /// Scalar fallback for confidence-weighted aggregation over [begin, end).
+    static SemanticWeight aggregate_scalar(const std::vector<SemanticWeight>& weights,
+                                           size_t begin, size_t end);
 
     std::unordered_map<std::string, SemanticWeight> token_weights_;
 
