@@ -6,6 +6,11 @@
 #include <string>
 #include <thread>
 
+#ifdef _WIN32
+#  include <BaseTsd.h>
+   using ssize_t = SSIZE_T;
+#endif
+
 namespace llmquant {
 
 /// Streams tokens from an OpenAI-compatible chat completions endpoint.

@@ -1,6 +1,7 @@
 #include "MetricsLogger.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 namespace llmquant {
@@ -17,19 +18,35 @@ MetricsLogger::~MetricsLogger() {
 }
 
 void MetricsLogger::initialize_loggers() {
-    // File logger
-    try {
-        file_logger_ = spdlog::basic_logger_mt("file_logger", config_.log_file_path);
-        file_logger_->set_pattern("[%H:%M:%S.%f] %v");
-        file_logger_->flush_on(spdlog::level::info);
-    } catch (const spdlog::spdlog_ex& ex) {
-        throw std::runtime_error("Failed to initialize file logger: " + std::string(ex.what()));
+    // File logger — drop gracefully if path is empty or creation fails.
+    if (!config_.log_file_path.empty()) {
+        try {
+            // Use a unique logger name to survive multiple MetricsLogger instances.
+            static std::atomic<int> inst_id{0};
+            std::string name = "file_logger_" + std::to_string(inst_id.fetch_add(1));
+            // Drop any stale logger of the same name before creating a new one.
+            spdlog::drop(name);
+            file_logger_ = spdlog::basic_logger_mt(name, config_.log_file_path);
+            file_logger_->set_pattern("[%H:%M:%S.%f] %v");
+            file_logger_->flush_on(spdlog::level::info);
+        } catch (const spdlog::spdlog_ex& ex) {
+            std::cerr << "[warn] MetricsLogger: file logger skipped: " << ex.what() << "\n";
+            file_logger_.reset();
+        }
     }
-    
+
     // Console logger
     if (config_.enable_console_output) {
-        console_logger_ = spdlog::stdout_color_mt("console_logger");
-        console_logger_->set_pattern("[%H:%M:%S.%f] %v");
+        try {
+            static std::atomic<int> cons_id{0};
+            std::string name = "console_logger_" + std::to_string(cons_id.fetch_add(1));
+            spdlog::drop(name);
+            console_logger_ = spdlog::stdout_color_mt(name);
+            console_logger_->set_pattern("[%H:%M:%S.%f] %v");
+        } catch (const spdlog::spdlog_ex& ex) {
+            std::cerr << "[warn] MetricsLogger: console logger skipped: " << ex.what() << "\n";
+            console_logger_.reset();
+        }
     }
 }
 

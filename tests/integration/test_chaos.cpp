@@ -14,7 +14,7 @@
 #include "RiskManager.h"
 #include "Deduplicator.h"
 #include "TokenStreamSimulator.h"
-#include "OutputSink.h"
+#include "OutputSinkImpl.h"
 
 #include <atomic>
 #include <chrono>

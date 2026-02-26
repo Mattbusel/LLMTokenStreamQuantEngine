@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "OutputSink.h"
+#include "OutputSinkImpl.h"
 #include "TradeSignalEngine.h"
 
 #include <chrono>

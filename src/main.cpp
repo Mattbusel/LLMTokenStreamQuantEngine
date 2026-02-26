@@ -4,7 +4,7 @@
 #include "LLMAdapter.h"
 #include "MetricsLogger.h"
 #include "Config.h"
-#include "OutputSink.h"
+#include "OutputSinkImpl.h"
 #include "Deduplicator.h"
 #include "LLMStreamClient.h"
 #include "OmsAdapter.h"
@@ -28,13 +28,31 @@ void signal_handler(int /*signal*/) {
 }
 
 int main(int argc, char* argv[]) {
+  try {
     std::signal(SIGINT, signal_handler);
 
-    // Load configuration.
+    // Parse --stream flag before anything else.
+    bool        stream_mode    = false;
+    std::string stream_api_key;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--stream" && i + 1 < argc) {
+            stream_mode    = true;
+            stream_api_key = argv[i + 1];
+            break;
+        }
+    }
+
+    // Load configuration (skip --stream / <key> args when looking for config path).
     Config config;
-    std::string config_file = (argc > 1) ? argv[1] : "config.yaml";
-    if (!config.load_from_file(config_file)) {
+    std::string config_file = "config.yaml";
+    if (argc > 1 && std::string(argv[1]) != "--stream") {
+        config_file = argv[1];
+    }
+    bool config_loaded = config.load_from_file(config_file);
+    if (!config_loaded) {
         std::cout << "Using default configuration" << std::endl;
+        // No config file: fall back to in-memory token stream so no file I/O required.
+        config.get_mutable_config().token_stream.use_memory_stream = true;
     }
 
     config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
@@ -232,20 +250,6 @@ int main(int argc, char* argv[]) {
         token_sim.load_tokens_from_file(sys_config.token_stream.data_file_path);
     }
 
-    // Detect --stream flag in any position after argv[0].
-    // Accepted forms:
-    //   ./engine --stream <api_key>
-    //   ./engine config.yaml --stream <api_key>
-    std::string stream_api_key;
-    bool stream_mode = false;
-    for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--stream" && i + 1 < argc) {
-            stream_mode    = true;
-            stream_api_key = argv[i + 1];
-            break;
-        }
-    }
-
     // Print banner.
     std::cout << "\n";
     std::cout << "  LLMTokenStreamQuantEngine\n";
@@ -383,4 +387,11 @@ int main(int argc, char* argv[]) {
 
     logger.log_performance_summary();
     return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "\n[FATAL] Unhandled exception: " << ex.what() << std::endl;
+    return 1;
+  } catch (...) {
+    std::cerr << "\n[FATAL] Unknown exception" << std::endl;
+    return 1;
+  }
 }

@@ -70,7 +70,7 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             auto mean = stats.avg_latency.count();
             double variance = 0.0;
             for (const auto& sample : samples_copy) {
-                double diff = sample.count() - mean;
+                double diff = static_cast<double>(sample.count()) - static_cast<double>(mean);
                 variance += diff * diff;
             }
             stats.jitter_ms = std::sqrt(variance / samples_copy.size()) / 1000.0;

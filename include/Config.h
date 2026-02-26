@@ -105,6 +105,7 @@ public:
 
     /// Return a read-only reference to the loaded SystemConfig.
     const SystemConfig& get_config() const { return config_; }
+    SystemConfig&       get_mutable_config()  { return config_; }
 
     /// Start watching the config file for changes and reload automatically.
     ///

@@ -9,8 +9,9 @@
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
+  #include <wincrypt.h>
   #pragma comment(lib, "Ws2_32.lib")
-  using ssize_t = int;
+  #pragma comment(lib, "Crypt32.lib")
 #else
   #include <sys/socket.h>
   #include <netdb.h>
@@ -33,9 +34,30 @@ LLMStreamClient::LLMStreamClient(Config config) : config_(std::move(config)) {
     SSL_library_init();
     SSL_load_error_strings();
     ssl_ctx_ = SSL_CTX_new(TLS_client_method());
-    // Load system CA bundle for certificate verification.
-    SSL_CTX_set_default_verify_paths(static_cast<SSL_CTX*>(ssl_ctx_));
-    SSL_CTX_set_verify(static_cast<SSL_CTX*>(ssl_ctx_), SSL_VERIFY_PEER, nullptr);
+    auto* ctx = static_cast<SSL_CTX*>(ssl_ctx_);
+    // On Windows, load the system certificate store so OpenSSL can verify
+    // server certificates (vcpkg OpenSSL has no built-in CA bundle).
+#ifdef _WIN32
+    {
+        HCERTSTORE hStore = CertOpenSystemStoreA(0, "ROOT");
+        if (hStore) {
+            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+            PCCERT_CONTEXT pCtx = nullptr;
+            while ((pCtx = CertEnumCertificatesInStore(hStore, pCtx)) != nullptr) {
+                const unsigned char* p = pCtx->pbCertEncoded;
+                X509* x509 = d2i_X509(nullptr, &p, static_cast<long>(pCtx->cbCertEncoded));
+                if (x509) {
+                    X509_STORE_add_cert(store, x509);
+                    X509_free(x509);
+                }
+            }
+            CertCloseStore(hStore, 0);
+        }
+    }
+#else
+    SSL_CTX_set_default_verify_paths(ctx);
+#endif
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
 #endif
 }
 
@@ -79,7 +101,9 @@ bool LLMStreamClient::open_socket() {
 
     std::string port_str = std::to_string(config_.port);
     addrinfo* res = nullptr;
-    if (getaddrinfo(config_.host.c_str(), port_str.c_str(), &hints, &res) != 0) {
+    int gai_err = getaddrinfo(config_.host.c_str(), port_str.c_str(), &hints, &res);
+    if (gai_err != 0) {
+        std::cerr << "[stream] getaddrinfo failed: " << gai_strerror(gai_err) << "\n";
         return false;
     }
 
@@ -92,6 +116,8 @@ bool LLMStreamClient::open_socket() {
             break;
         }
 #ifdef _WIN32
+        int wsaerr = WSAGetLastError();
+        std::cerr << "[stream] connect() failed WSA error " << wsaerr << "\n";
         closesocket(fd);
 #else
         ::close(fd);
@@ -136,6 +162,10 @@ bool LLMStreamClient::tls_handshake() {
     // SNI + hostname verification.
     SSL_set1_host(ssl, config_.host.c_str());
     if (SSL_connect(ssl) != 1) {
+        unsigned long err = ERR_get_error();
+        char err_buf[256];
+        ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        std::cerr << "[stream] SSL_connect failed: " << err_buf << "\n";
         SSL_free(ssl);
         ssl_ = nullptr;
         return false;

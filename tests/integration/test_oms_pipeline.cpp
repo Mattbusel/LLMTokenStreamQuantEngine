@@ -4,7 +4,7 @@
 #include "RiskManager.h"
 #include "TradeSignalEngine.h"
 #include "LLMAdapter.h"
-#include "OutputSink.h"
+#include "OutputSinkImpl.h"
 
 #include <atomic>
 #include <chrono>
@@ -57,7 +57,7 @@ static void pump_signals(TradeSignalEngine& engine, int n,
     w.directional_bias = bias;
     w.volatility_score = vol;
     w.sentiment_score  = 0.5;
-    w.confidence       = 0.8;
+    w.confidence_score = 0.8;
     for (int i = 0; i < n; ++i) {
         engine.process_semantic_weight(w);
     }
@@ -103,7 +103,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_position_update_blocks_overlimit_
     w.directional_bias = 0.8;
     w.volatility_score = 0.1;
     w.sentiment_score  = 0.9;
-    w.confidence       = 0.9;
+    w.confidence_score = 0.9;
     for (int i = 0; i < 10; ++i) {
         engine.process_semantic_weight(w);
     }
@@ -240,7 +240,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_oms_event_callback_fires_on_posit
     w.directional_bias = 0.5;
     w.volatility_score = 0.1;
     w.sentiment_score  = 0.7;
-    w.confidence       = 0.8;
+    w.confidence_score = 0.8;
     for (int i = 0; i < 30; ++i) {
         engine.process_semantic_weight(w);
     }

@@ -4,7 +4,7 @@
 #include "LLMAdapter.h"
 #include "TradeSignalEngine.h"
 #include "LatencyController.h"
-#include "OutputSink.h"
+#include "OutputSinkImpl.h"
 
 #include <atomic>
 #include <chrono>
