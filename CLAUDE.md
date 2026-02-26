@@ -76,10 +76,13 @@ clang-format --dry-run src/*.cpp include/*.h
 | TokenStreamSimulator | ✓ | ✓ lock-free ring | ✓ | ✓ |
 | TradeSignalEngine | ✓ | ✓ full fields | ✓ | ✓ |
 | OutputSink | ✓ | ✓ (header-only) | ✓ | ✓ |
+| LLMStreamClient | ✓ | ✓ SSE/HTTP | ✓ | needs TLS |
+| Deduplicator | ✓ | ✓ TTL+Redis stub | ✓ | ✓ |
 
 ## What Still Needs Building
-- Real-time LLM API streaming integration (direct OpenAI-compatible SSE streaming, planned)
-- Distributed deduplication layer (cross-node Redis-backed, planned)
+- Real-time LLM API streaming: TLS support (currently plain HTTP only; TLS via proxy or stunnel)
+- Redis deduplication: wire hiredis to RedisDeduplicator::check_and_register (stub ready)
+- Production risk hooks: position-limit integration with downstream order management system
 
 ## Non-Obvious Design Decisions
 
@@ -109,4 +112,6 @@ clang-format --dry-run src/*.cpp include/*.h
 | test_risk_manager.cpp | 10 | Magnitude, confidence, rate, drawdown |
 | test_pipeline.cpp (integration) | 5 | End-to-end, latency, accumulation |
 | bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput |
-| **Total** | **81** | |
+| test_llm_stream_client.cpp | 5 | Connect/stop lifecycle, done callback |
+| test_deduplicator.cpp | 14 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
+| **Total** | **100** | |

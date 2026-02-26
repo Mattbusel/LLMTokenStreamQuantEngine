@@ -41,6 +41,8 @@ set(ENGINE_SOURCES
     src/MetricsLogger.cpp
     src/Config.cpp
     src/RiskManager.cpp
+    src/Deduplicator.cpp
+    src/LLMStreamClient.cpp
 )
 
 add_executable(LLMTokenStreamQuantEngine ${ENGINE_SOURCES})
@@ -50,6 +52,10 @@ target_link_libraries(LLMTokenStreamQuantEngine
     yaml-cpp
     Threads::Threads
 )
+
+if(WIN32)
+    target_link_libraries(LLMTokenStreamQuantEngine ws2_32)
+endif()
 
 # ---------------------------------------------------------------------------
 # Tests

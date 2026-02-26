@@ -7,6 +7,8 @@ add_executable(tests
     unit/test_trade_signal_engine.cpp
     unit/test_output_sink.cpp
     unit/test_risk_manager.cpp
+    unit/test_deduplicator.cpp
+    unit/test_llm_stream_client.cpp
     integration/test_pipeline.cpp
     performance/bench_hot_path.cpp
     ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
@@ -16,6 +18,8 @@ add_executable(tests
     ${CMAKE_SOURCE_DIR}/src/MetricsLogger.cpp
     ${CMAKE_SOURCE_DIR}/src/Config.cpp
     ${CMAKE_SOURCE_DIR}/src/RiskManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/Deduplicator.cpp
+    ${CMAKE_SOURCE_DIR}/src/LLMStreamClient.cpp
 )
 
 target_link_libraries(tests
@@ -24,6 +28,10 @@ target_link_libraries(tests
     yaml-cpp
     Threads::Threads
 )
+
+if(WIN32)
+    target_link_libraries(tests ws2_32)
+endif()
 
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
