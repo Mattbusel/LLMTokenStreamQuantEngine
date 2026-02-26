@@ -1,0 +1,27 @@
+add_executable(tests
+    unit/test_config.cpp
+    unit/test_llm_adapter.cpp
+    unit/test_latency_controller.cpp
+    unit/test_metrics_logger.cpp
+    unit/test_token_stream_simulator.cpp
+    unit/test_trade_signal_engine.cpp
+    unit/test_output_sink.cpp
+    integration/test_pipeline.cpp
+    ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
+    ${CMAKE_SOURCE_DIR}/src/TradeSignalEngine.cpp
+    ${CMAKE_SOURCE_DIR}/src/LatencyController.cpp
+    ${CMAKE_SOURCE_DIR}/src/LLMAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/MetricsLogger.cpp
+    ${CMAKE_SOURCE_DIR}/src/Config.cpp
+)
+
+target_link_libraries(tests
+    GTest::gtest_main
+    spdlog::spdlog
+    yaml-cpp
+    Threads::Threads
+)
+
+target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+add_test(NAME unit_tests COMMAND tests)
