@@ -55,6 +55,9 @@ set(ENGINE_SOURCES
     src/RiskManager.cpp
     src/Deduplicator.cpp
     src/LLMStreamClient.cpp
+    src/RestOmsAdapter.cpp
+    src/FixOmsAdapter.cpp
+    src/MockOmsAdapter.cpp
 )
 
 add_executable(LLMTokenStreamQuantEngine ${ENGINE_SOURCES})

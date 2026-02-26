@@ -79,9 +79,13 @@ clang-format --dry-run src/*.cpp include/*.h
 | LLMStreamClient | ✓ | ✓ TLS via OpenSSL | ✓ | ✓ |
 | Deduplicator | ✓ | ✓ hiredis (conditional) | ✓ | ✓ |
 | RiskManager | ✓ | ✓ OMS position hooks | ✓ | ✓ |
+| OmsAdapter (abstract) | ✓ | ✓ (interface only) | ✓ | ✓ |
+| RestOmsAdapter | ✓ | ✓ HTTP/1.1 polling | ✓ | ✓ |
+| FixOmsAdapter | ✓ | ✓ FIX 4.2 session reader | ✓ | ✓ |
+| MockOmsAdapter | ✓ | ✓ deterministic test double | ✓ | ✓ |
 
 ## What Still Needs Building
-- Production OMS integration: connect position updates from a live order management system via FIX or REST adapter
+- Production hardening: sequence number reset + ResendRequest in FixOmsAdapter for unattended 24/7 operation
 
 ## Non-Obvious Design Decisions
 
@@ -115,4 +119,6 @@ clang-format --dry-run src/*.cpp include/*.h
 | test_deduplicator.cpp | 14 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
 | test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline, concurrent dedup+signal |
 | test_invariants.cpp (unit) | 6 | Dedup key determinism, sentiment sign, risk counter identity, latency avg bounds, signal confidence interval, dedup novel+dup sum |
-| **Total** | **118** | |
+| test_oms_adapter.cpp (unit) | 12 | Mock emit all/order/stop/self-stop/double-start/stop-before-start; REST refused/error-count/description/update-count-zero; Mock→RiskManager feed; empty list |
+| test_oms_pipeline.cpp (integration) | 4 | Position overlimit blocks signals; safe position allows signals; PnL breach blocks all; OMS callback fires on approach |
+| **Total** | **134** | |

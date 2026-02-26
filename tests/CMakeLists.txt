@@ -10,8 +10,10 @@ add_executable(tests
     unit/test_deduplicator.cpp
     unit/test_llm_stream_client.cpp
     unit/test_invariants.cpp
+    unit/test_oms_adapter.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
+    integration/test_oms_pipeline.cpp
     performance/bench_hot_path.cpp
     ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
     ${CMAKE_SOURCE_DIR}/src/TradeSignalEngine.cpp
@@ -22,6 +24,9 @@ add_executable(tests
     ${CMAKE_SOURCE_DIR}/src/RiskManager.cpp
     ${CMAKE_SOURCE_DIR}/src/Deduplicator.cpp
     ${CMAKE_SOURCE_DIR}/src/LLMStreamClient.cpp
+    ${CMAKE_SOURCE_DIR}/src/RestOmsAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/FixOmsAdapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/MockOmsAdapter.cpp
 )
 
 target_link_libraries(tests

@@ -7,6 +7,9 @@
 #include "OutputSink.h"
 #include "Deduplicator.h"
 #include "LLMStreamClient.h"
+#include "OmsAdapter.h"
+#include "RestOmsAdapter.h"
+#include "MockOmsAdapter.h"
 #include <iostream>
 #include <iomanip>
 #include <memory>
@@ -80,6 +83,47 @@ int main(int argc, char* argv[]) {
     auto memory_sink = std::make_shared<llmquant::MemoryOutputSink>();
     trade_engine.add_output_sink(memory_sink);
 
+    // Risk manager.
+    llmquant::RiskManager::Config risk_cfg;
+    risk_cfg.max_bias_magnitude      = 2.0;
+    risk_cfg.max_volatility_magnitude = 2.0;
+    risk_cfg.max_signals_per_second  = 500;
+    risk_cfg.max_drawdown            = 10.0;
+    llmquant::RiskManager risk_mgr(risk_cfg);
+
+    // OMS adapter: use MockOmsAdapter by default; REST if --oms <host:port> is passed.
+    std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
+    if (argc > 2 && std::string(argv[2]) == "--oms" && argc > 3) {
+        std::string endpoint(argv[3]);
+        llmquant::RestOmsAdapter::Config oms_cfg;
+        size_t colon = endpoint.find(':');
+        if (colon != std::string::npos) {
+            oms_cfg.host = endpoint.substr(0, colon);
+            oms_cfg.port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon + 1)));
+        } else {
+            oms_cfg.host = endpoint;
+        }
+        oms_adapter = std::make_unique<llmquant::RestOmsAdapter>(oms_cfg);
+    } else {
+        auto mock = std::make_unique<llmquant::MockOmsAdapter>();
+        mock->load_states({
+            {0.1,  1.0,  0.5, -10.0},
+            {0.25, 1.0,  0.3, -10.0},
+            {-0.1, 1.0, -0.2, -10.0},
+        });
+        oms_adapter = std::move(mock);
+    }
+
+    oms_adapter->set_position_callback([&](const llmquant::RiskManager::PositionState& state) {
+        risk_mgr.update_position(state);
+    });
+    risk_mgr.set_oms_callback([](const std::string& event,
+                                  const llmquant::RiskManager::PositionState&,
+                                  const llmquant::TradeSignal&) {
+        std::cout << "\n[risk] " << event << std::endl;
+    });
+    oms_adapter->start();
+
     TokenStreamSimulator token_sim({
         .token_interval = std::chrono::microseconds(sys_config.token_stream.token_interval_ms * 1000),
         .buffer_size = sys_config.token_stream.buffer_size,
@@ -132,6 +176,8 @@ int main(int argc, char* argv[]) {
     });
 
     trade_engine.set_signal_callback([&](const TradeSignal& signal) {
+        if (!risk_mgr.evaluate(signal)) return;   // blocked by risk
+
         auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::high_resolution_clock::now() - signal.timestamp
         );
@@ -218,6 +264,7 @@ int main(int argc, char* argv[]) {
 
     token_sim.stop();
     if (stream_client) stream_client->stop();
+    oms_adapter->stop();
 
     std::cout << "Signals captured by memory sink: " << memory_sink->get_signals().size() << std::endl;
     logger.log_performance_summary();
