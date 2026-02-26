@@ -59,7 +59,8 @@ void LLMStreamClient::set_done_callback(DoneCallback cb)   { done_cb_  = std::mo
 
 bool LLMStreamClient::connect() {
     if (running_.load()) return false;
-    if (!open_socket()) return false;
+    // The reader_thread opens (and re-opens) its own socket per request,
+    // so we just start the thread here.
     running_ = true;
     thread_ = std::thread(&LLMStreamClient::reader_thread, this);
     return true;
@@ -143,14 +144,13 @@ bool LLMStreamClient::tls_handshake() {
 }
 
 void LLMStreamClient::tls_close() {
+    // Only tear down the per-connection SSL session here.
+    // ssl_ctx_ lives for the lifetime of the client object and is freed
+    // in the destructor so that reconnect loops can reuse it.
     if (ssl_) {
         SSL_shutdown(static_cast<SSL*>(ssl_));
         SSL_free(static_cast<SSL*>(ssl_));
         ssl_ = nullptr;
-    }
-    if (ssl_ctx_) {
-        SSL_CTX_free(static_cast<SSL_CTX*>(ssl_ctx_));
-        ssl_ctx_ = nullptr;
     }
 }
 
@@ -215,75 +215,108 @@ std::string LLMStreamClient::parse_sse_delta(const std::string& data_line) {
     return token;
 }
 
-void LLMStreamClient::reader_thread() {
-    std::string request = build_http_request(build_request_body());
-
-    // Send the full HTTP request.
+// Send all bytes in request over the active socket (TLS or plain).
+static bool send_all(int sockfd, void* ssl, bool use_tls,
+                     const std::string& data, std::atomic<bool>& running) {
     size_t sent = 0;
-    while (sent < request.size() && running_.load()) {
+    while (sent < data.size() && running.load()) {
+        ssize_t n;
 #ifdef LLMQUANT_TLS_ENABLED
-        ssize_t n = config_.use_tls
-            ? tls_send(request.c_str() + sent, request.size() - sent)
-            : send(sockfd_, request.c_str() + sent,
-                   static_cast<int>(request.size() - sent), 0);
-#else
-        ssize_t n = send(sockfd_, request.c_str() + sent,
-                         static_cast<int>(request.size() - sent), 0);
+        if (use_tls && ssl) {
+            n = SSL_write(static_cast<SSL*>(ssl),
+                          data.c_str() + sent,
+                          static_cast<int>(data.size() - sent));
+        } else {
 #endif
-        if (n <= 0) break;
+            n = send(sockfd, data.c_str() + sent,
+                     static_cast<int>(data.size() - sent), 0);
+#ifdef LLMQUANT_TLS_ENABLED
+        }
+#else
+        (void)use_tls; (void)ssl;
+#endif
+        if (n <= 0) return false;
         sent += static_cast<size_t>(n);
     }
+    return true;
+}
 
-    // Read response: skip HTTP headers, then process SSE body line by line.
-    std::string buf;
-    buf.reserve(4096);
-    bool headers_done = false;
-
-    char chunk[4096];
+void LLMStreamClient::reader_thread() {
+    // Loop: send one request, stream the response, wait loop_interval, repeat.
     while (running_.load()) {
+        // Fresh TCP (+TLS) connection per request — OpenAI closes after [DONE].
+        if (!open_socket()) {
+            if (done_cb_) done_cb_("connect failed");
+            // Back off and retry.
+            for (int i = 0; i < 50 && running_.load(); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        std::string request = build_http_request(build_request_body());
+        if (!send_all(sockfd_, ssl_, config_.use_tls, request, running_)) {
+            close_socket();
+            continue;
+        }
+
+        // Read response: skip HTTP headers, then process SSE body.
+        std::string buf;
+        buf.reserve(8192);
+        bool headers_done = false;
+        bool stream_done  = false;
+
+        char chunk[4096];
+        while (running_.load() && !stream_done) {
+            ssize_t n;
 #ifdef LLMQUANT_TLS_ENABLED
-        ssize_t n = config_.use_tls
-            ? tls_recv(chunk, sizeof(chunk) - 1)
-            : recv(sockfd_, chunk, sizeof(chunk) - 1, 0);
-#else
-        ssize_t n = recv(sockfd_, chunk, sizeof(chunk) - 1, 0);
+            if (config_.use_tls && ssl_) {
+                n = tls_recv(chunk, sizeof(chunk) - 1);
+            } else {
 #endif
-        if (n <= 0) break;
-        chunk[n] = '\0';
-        buf.append(chunk, static_cast<size_t>(n));
-
-        if (!headers_done) {
-            size_t hdr_end = buf.find("\r\n\r\n");
-            if (hdr_end == std::string::npos) continue;
-            buf = buf.substr(hdr_end + 4);
-            headers_done = true;
-        }
-
-        // Scan for complete SSE lines terminated by '\n'.
-        size_t start = 0;
-        while (true) {
-            size_t nl = buf.find('\n', start);
-            if (nl == std::string::npos) break;
-
-            std::string line = buf.substr(start, nl - start);
-            // Strip trailing CR for CRLF line endings.
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            start = nl + 1;
-
-            if (line.rfind("data: ", 0) == 0) {
-                std::string payload = line.substr(6);
-                if (payload == "[DONE]") {
-                    running_ = false;
-                    break;
-                }
-                std::string token = parse_sse_delta(payload);
-                if (!token.empty() && token_cb_) token_cb_(token);
+                n = recv(sockfd_, chunk, sizeof(chunk) - 1, 0);
+#ifdef LLMQUANT_TLS_ENABLED
             }
+#endif
+            if (n <= 0) break;
+            chunk[n] = '\0';
+            buf.append(chunk, static_cast<size_t>(n));
+
+            if (!headers_done) {
+                size_t hdr_end = buf.find("\r\n\r\n");
+                if (hdr_end == std::string::npos) continue;
+                buf = buf.substr(hdr_end + 4);
+                headers_done = true;
+            }
+
+            // Scan complete SSE lines.
+            size_t start = 0;
+            while (true) {
+                size_t nl = buf.find('\n', start);
+                if (nl == std::string::npos) break;
+                std::string line = buf.substr(start, nl - start);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                start = nl + 1;
+
+                if (line.rfind("data: ", 0) == 0) {
+                    std::string payload = line.substr(6);
+                    if (payload == "[DONE]") { stream_done = true; break; }
+                    std::string token = parse_sse_delta(payload);
+                    if (!token.empty() && token_cb_) token_cb_(token);
+                }
+            }
+            buf = buf.substr(start);
         }
-        buf = buf.substr(start);
+
+        close_socket();
+
+        if (!running_.load()) break;
+
+        // Wait loop_interval before the next request.
+        auto deadline = std::chrono::steady_clock::now() + config_.loop_interval;
+        while (running_.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    close_socket();
     running_ = false;
     if (done_cb_) done_cb_("");
 }

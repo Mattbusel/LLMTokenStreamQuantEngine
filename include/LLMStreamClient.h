@@ -35,17 +35,21 @@ public:
         std::string host{"api.openai.com"};
         uint16_t    port{443};
         std::string api_key{};
-        std::string model{"gpt-4o-mini"};
+        std::string model{"gpt-4o"};
         std::string system_prompt{
-            "You are a financial analyst. Output single tokens representing "
-            "market sentiment. Be terse."};
-        std::string user_prompt{"Describe current market conditions in one word."};
+            "You are a financial markets analyst providing real-time commentary "
+            "on market conditions, options flow, and sentiment. Be specific, "
+            "use tickers, use directional language."};
+        std::string user_prompt{
+            "Give a fresh real-time market sentiment update with specific "
+            "tickers and directional signals."};
         std::chrono::seconds connect_timeout{5};
-        size_t      max_tokens{256};
+        size_t      max_tokens{300};
         /// When true, negotiate TLS via OpenSSL (requires LLMQUANT_TLS_ENABLED).
-        /// When false, use plain HTTP (suitable for local/mock endpoints on
-        /// port 80 or a custom port).
+        /// When false, use plain HTTP (suitable for local/mock endpoints).
         bool use_tls{true};
+        /// Interval between successive streaming requests in loop mode.
+        std::chrono::seconds loop_interval{5};
     };
 
     /// Construct a streaming client with the given connection parameters.
