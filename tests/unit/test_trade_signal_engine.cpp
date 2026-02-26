@@ -146,5 +146,57 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_decay_reduces_accumulated_s
               std::abs(signals[0].delta_bias_shift) + 1e-9);
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_emitted_signal_has_nonzero_timestamp_ns) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    SemanticWeight w{0.5, 0.8, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+
+    EXPECT_GT(captured.timestamp_ns, 0u)
+        << "Emitted signal must have a non-zero nanosecond timestamp";
+    // The chrono timestamp should also be non-default (not equal to the epoch).
+    auto since_epoch = captured.timestamp.time_since_epoch().count();
+    EXPECT_GT(since_epoch, 0)
+        << "Emitted signal must have a non-zero chrono timestamp";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_spread_modifier_nonzero_for_strong_bias) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    // Strong bullish bias — bias_sensitivity=1.0 and directional_bias=0.95 with
+    // confidence=1.0 gives delta_bias_shift = 0.95 which is > 0.5.
+    SemanticWeight strong_bullish{0.9, 1.0, 0.1, 0.95};
+    engine.process_semantic_weight(strong_bullish);
+
+    EXPECT_NE(captured.spread_modifier, 0.0)
+        << "spread_modifier must be non-zero when |delta_bias_shift| > 0.5";
+    // Tighten on bullish certainty: modifier should be negative for positive bias.
+    EXPECT_LT(captured.spread_modifier, 0.0)
+        << "spread_modifier must be negative for strong positive bias (tighten spread)";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_confidence_reflects_input_weight) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    const double expected_confidence = 0.77;
+    SemanticWeight w{0.3, expected_confidence, 0.2, 0.4};
+    engine.process_semantic_weight(w);
+
+    EXPECT_DOUBLE_EQ(captured.confidence, expected_confidence)
+        << "signal.confidence must reflect the confidence_score of the processed weight";
+}
+
 } // namespace
 } // namespace llmquant

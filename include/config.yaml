@@ -20,3 +20,18 @@ logging:
   format: "CSV"
   enable_console: true
   flush_interval_ms: 100
+
+pressure:
+  max_ingestion_rate_tps: 10000
+  max_queue_depth: 512
+  high_pressure_threshold: 0.8
+  low_pressure_threshold: 0.5
+  max_backoff_multiplier: 5.0
+
+semantic_weights:
+  fear_multiplier: 1.2
+  certainty_multiplier: 1.0
+  bullish_multiplier: 1.0
+  bearish_multiplier: 1.2
+  volatility_multiplier: 1.1
+  neutral_multiplier: 0.0

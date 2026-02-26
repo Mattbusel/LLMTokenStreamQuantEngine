@@ -123,6 +123,9 @@ private:
     std::atomic<double> accumulated_bias_{0.0};
     std::atomic<double> accumulated_volatility_{0.0};
     std::atomic<bool>   realtime_mode_{true};
+    /// Last confidence score observed from process_semantic_weight(); used to
+    /// populate TradeSignal::confidence on emission.
+    std::atomic<double> last_confidence_{0.5};
     std::chrono::high_resolution_clock::time_point last_signal_time_;
     Stats stats_;
 };

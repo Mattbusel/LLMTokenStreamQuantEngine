@@ -103,4 +103,57 @@ void LatencyController::profile_queue_lag() {
     // Hook for queue lag profiling
 }
 
+void LatencyController::update_ingestion_pressure(double arrival_rate_tps,
+                                                   double max_rate_tps) {
+    double p = (max_rate_tps > 0.0)
+                   ? std::clamp(arrival_rate_tps / max_rate_tps, 0.0, 1.0)
+                   : 0.0;
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    pressure_.ingestion_pressure = p;
+    recompute_composite();
+}
+
+void LatencyController::update_semantic_pressure(double weight_variance) {
+    // Variance > 0.25 saturates semantic pressure.
+    double p = std::clamp(weight_variance / 0.25, 0.0, 1.0);
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    pressure_.semantic_pressure = p;
+    recompute_composite();
+}
+
+void LatencyController::update_queue_pressure(size_t queue_depth,
+                                              size_t queue_capacity) {
+    double p = (queue_capacity > 0)
+                   ? std::clamp(static_cast<double>(queue_depth) / queue_capacity, 0.0, 1.0)
+                   : 0.0;
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    pressure_.queue_pressure = p;
+    recompute_composite();
+}
+
+LatencyController::PressureState LatencyController::get_pressure() const {
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    return pressure_;
+}
+
+double LatencyController::get_backoff_multiplier() const {
+    return backoff_multiplier_.load();
+}
+
+void LatencyController::recompute_composite() {
+    double c = std::max({pressure_.ingestion_pressure,
+                         pressure_.semantic_pressure,
+                         pressure_.queue_pressure});
+    pressure_.composite = c;
+
+    // Exponential backoff: ramps from 1x to 5x as composite exceeds 0.8.
+    if (c >= 0.8) {
+        double current = backoff_multiplier_.load();
+        double next = std::min(current * 1.5, 5.0);
+        backoff_multiplier_.store(next);
+    } else if (c < 0.5) {
+        backoff_multiplier_.store(1.0);
+    }
+}
+
 } // namespace llmquant

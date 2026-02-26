@@ -1,8 +1,11 @@
 #include "gtest/gtest.h"
 #include "Config.h"
 
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <cstdio>
 
 namespace llmquant {
@@ -170,6 +173,52 @@ TEST(ConfigTest, test_config_load_from_yaml_string_malformed_yaml_returns_false)
     EXPECT_FALSE(ok);
     // Defaults must still be valid after a parse failure.
     EXPECT_EQ(cfg.get_config().token_stream.token_interval_ms, 10);
+}
+
+TEST(ConfigTest, test_config_hot_reload_detects_file_change) {
+    const std::string tmp_path = "/tmp/llmquant_test_hot_reload.yaml";
+
+    // Write initial config with token_interval_ms = 10.
+    {
+        std::ofstream f(tmp_path);
+        f << "token_stream:\n  token_interval_ms: 10\n";
+    }
+
+    Config cfg;
+    cfg.load_from_file(tmp_path);
+
+    std::atomic<bool> callback_fired{false};
+    std::atomic<int>  reloaded_interval{0};
+
+    cfg.start_watching(tmp_path,
+        [&](const SystemConfig& sc) {
+            reloaded_interval = sc.token_stream.token_interval_ms;
+            callback_fired    = true;
+        },
+        /*poll_interval_ms=*/100);
+
+    // Sleep briefly to let the watcher capture the initial mtime.
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+    // Modify the file — change token_interval_ms to 99.
+    {
+        std::ofstream f(tmp_path);
+        f << "token_stream:\n  token_interval_ms: 99\n";
+    }
+
+    // Wait up to 1500 ms for the watcher to detect the change.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+    while (!callback_fired.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    cfg.stop_watching();
+    std::remove(tmp_path.c_str());
+
+    EXPECT_TRUE(callback_fired.load())
+        << "Watcher must invoke the callback when the file changes";
+    EXPECT_EQ(reloaded_interval.load(), 99)
+        << "Reloaded config must reflect the new token_interval_ms value";
 }
 
 } // namespace

@@ -81,6 +81,53 @@ public:
     /// No-op if profiling is disabled.
     void profile_queue_lag();
 
+    /// Composite pressure signal derived from token ingestion rate,
+    /// semantic weight variance, and signal queue depth.
+    ///
+    /// All pressure values are normalised to [0.0, 1.0] where 1.0 is
+    /// maximum pressure (shed load / backoff upstream).
+    struct PressureState {
+        double ingestion_pressure{0.0};   ///< Derived from token arrival rate vs capacity.
+        double semantic_pressure{0.0};    ///< Derived from variance in semantic weight scores.
+        double queue_pressure{0.0};       ///< Derived from signal queue depth vs max depth.
+        double composite{0.0};            ///< max(ingestion, semantic, queue) — always worst signal.
+    };
+
+    /// Update the ingestion pressure component.
+    ///
+    /// Call this once per token with the current observed arrival rate
+    /// (tokens/second) and the maximum sustainable rate.
+    ///
+    /// # Arguments
+    /// * `arrival_rate_tps`  — Observed tokens per second.
+    /// * `max_rate_tps`      — Capacity ceiling (tokens per second).
+    void update_ingestion_pressure(double arrival_rate_tps, double max_rate_tps);
+
+    /// Update the semantic pressure component from the variance of recent weights.
+    ///
+    /// High variance in semantic scores signals that the market is receiving
+    /// conflicting signals — a condition that warrants increased caution.
+    ///
+    /// # Arguments
+    /// * `weight_variance` — Variance of recent SemanticWeight.sentiment_score values.
+    void update_semantic_pressure(double weight_variance);
+
+    /// Update the queue-depth pressure component.
+    ///
+    /// # Arguments
+    /// * `queue_depth`    — Current number of pending signals in the output queue.
+    /// * `queue_capacity` — Maximum queue depth before signals are shed.
+    void update_queue_pressure(size_t queue_depth, size_t queue_capacity);
+
+    /// Return the most recently computed composite pressure state.
+    PressureState get_pressure() const;
+
+    /// Return the current exponential-backoff multiplier for source polling.
+    ///
+    /// Starts at 1.0x and increases up to 5.0x as composite pressure rises
+    /// above 0.8.  Resets to 1.0x when pressure drops below 0.5.
+    double get_backoff_multiplier() const;
+
 private:
     Config config_;
     std::chrono::high_resolution_clock::time_point measurement_start_;
@@ -92,6 +139,14 @@ private:
 
     std::vector<std::chrono::microseconds> latency_samples_;
     mutable std::mutex samples_mutex_;
+
+    mutable std::mutex pressure_mutex_;
+    PressureState pressure_;
+    std::atomic<double> backoff_multiplier_{1.0};
+
+    /// Recompute the composite pressure and update the backoff multiplier.
+    /// Must be called with pressure_mutex_ held.
+    void recompute_composite();
 };
 
 } // namespace llmquant

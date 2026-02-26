@@ -136,5 +136,65 @@ TEST(LatencyControllerTest, test_latency_controller_sample_window_limits_vector_
     EXPECT_GE(stats.p99_latency.count(), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Pressure system tests
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_controller_ingestion_pressure_clamps_to_one) {
+    LatencyController lc(make_config());
+
+    // Arrival rate 3x the max — pressure must clamp at 1.0.
+    lc.update_ingestion_pressure(30000.0, 10000.0);
+
+    auto ps = lc.get_pressure();
+    EXPECT_DOUBLE_EQ(ps.ingestion_pressure, 1.0);
+    EXPECT_DOUBLE_EQ(ps.composite,          1.0);
+}
+
+TEST(LatencyControllerTest, test_latency_controller_composite_is_max_of_three) {
+    LatencyController lc(make_config());
+
+    lc.update_ingestion_pressure(2000.0, 10000.0);  // 0.2
+    lc.update_semantic_pressure(0.1);                // 0.4  (0.1/0.25)
+    lc.update_queue_pressure(200, 512);              // ~0.39
+
+    auto ps = lc.get_pressure();
+    double expected_max = std::max({ps.ingestion_pressure,
+                                    ps.semantic_pressure,
+                                    ps.queue_pressure});
+    EXPECT_DOUBLE_EQ(ps.composite, expected_max);
+}
+
+TEST(LatencyControllerTest, test_latency_controller_backoff_ramps_above_high_threshold) {
+    LatencyController lc(make_config());
+
+    // Push composite above 0.8 by driving ingestion to 100 %.
+    for (int i = 0; i < 5; ++i) {
+        lc.update_ingestion_pressure(10000.0, 10000.0);  // composite = 1.0
+    }
+
+    double backoff = lc.get_backoff_multiplier();
+    EXPECT_GT(backoff, 1.0) << "Backoff must ramp when composite pressure >= 0.8";
+    EXPECT_LE(backoff, 5.0) << "Backoff must not exceed the 5x ceiling";
+}
+
+TEST(LatencyControllerTest, test_latency_controller_backoff_resets_below_low_threshold) {
+    LatencyController lc(make_config());
+
+    // First ramp backoff up.
+    for (int i = 0; i < 5; ++i) {
+        lc.update_ingestion_pressure(10000.0, 10000.0);
+    }
+    EXPECT_GT(lc.get_backoff_multiplier(), 1.0);
+
+    // Now drive all pressures to zero — composite drops below 0.5.
+    lc.update_ingestion_pressure(0.0, 10000.0);
+    lc.update_semantic_pressure(0.0);
+    lc.update_queue_pressure(0, 512);
+
+    EXPECT_DOUBLE_EQ(lc.get_backoff_multiplier(), 1.0)
+        << "Backoff must reset to 1.0 when composite pressure < 0.5";
+}
+
 } // namespace
 } // namespace llmquant

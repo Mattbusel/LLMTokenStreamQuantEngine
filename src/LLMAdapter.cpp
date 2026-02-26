@@ -103,9 +103,49 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("breakout", {0.4, 0.7, 0.7, 0.6});
     
     // Support/Resistance
-    add_token_mapping("support", {0.2, 0.6, 0.3, 0.2});
+    add_token_mapping("support",    {0.2,  0.6, 0.3, 0.2});
     add_token_mapping("resistance", {-0.1, 0.6, 0.4, -0.2});
-    add_token_mapping("momentum", {0.5, 0.7, 0.6, 0.4});
+    add_token_mapping("momentum",   {0.5,  0.7, 0.6, 0.4});
+
+    // Fear / Uncertainty — additional entries not already mapped above
+    add_token_mapping("dump",      {-0.8, 0.85, 0.75, -0.75});
+    add_token_mapping("breakdown", {-0.8, 0.85, 0.80, -0.80});
+    add_token_mapping("fear",      {-0.7, 0.80, 0.70, -0.60});
+    add_token_mapping("selloff",   {-0.8, 0.85, 0.80, -0.75});
+    add_token_mapping("tumble",    {-0.7, 0.80, 0.75, -0.65});
+    add_token_mapping("rout",      {-0.9, 0.90, 0.85, -0.85});
+
+    // Certainty / Confidence — additional entries not already mapped above
+    add_token_mapping("confirmed", {0.3,  0.90, 0.15, 0.2});
+    add_token_mapping("certain",   {0.2,  0.90, 0.10, 0.15});
+    add_token_mapping("assured",   {0.4,  0.85, 0.10, 0.25});
+
+    // Directional Bullish — additional entries
+    add_token_mapping("soar",      {0.7,  0.85, 0.60, 0.75});
+    add_token_mapping("moon",      {0.8,  0.80, 0.70, 0.90});
+    add_token_mapping("buy",       {0.6,  0.85, 0.40, 0.80});
+    add_token_mapping("long",      {0.5,  0.80, 0.35, 0.70});
+
+    // Directional Bearish — additional entries (plunge/dump/breakdown/collapse already mapped)
+    add_token_mapping("short",     {-0.5, 0.85, 0.50, -0.80});
+    add_token_mapping("sell",      {-0.5, 0.85, 0.45, -0.75});
+
+    // Volatility — additional entries (volatile/surge already mapped)
+    add_token_mapping("spike",     {0.0,  0.75, 0.90, 0.0});
+    add_token_mapping("whipsaw",   {0.0,  0.70, 0.95, 0.0});
+    add_token_mapping("swing",     {0.0,  0.65, 0.85, 0.0});
+    add_token_mapping("choppy",    {0.0,  0.70, 0.88, 0.0});
+    add_token_mapping("erratic",   {0.0,  0.65, 0.90, 0.0});
+
+    // Neutral / Filler — zero-weight pass-through tokens
+    add_token_mapping("the",       {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("and",       {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("is",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("a",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("an",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("in",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("of",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("to",        {0.0,  0.1,  0.0,  0.0});
 }
 
 } // namespace llmquant

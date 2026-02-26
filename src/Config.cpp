@@ -1,4 +1,5 @@
 #include "Config.h"
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -94,6 +95,45 @@ void Config::save_to_file(const std::string& filepath) const {
 
 void Config::set_defaults() {
     // Defaults are already set in SystemConfig struct initialization
+}
+
+void Config::start_watching(const std::string& filepath,
+                            std::function<void(const SystemConfig&)> on_reload,
+                            int poll_interval_ms) {
+    if (watching_.load()) return;
+    watching_ = true;
+
+    watcher_thread_ = std::thread([this, filepath, on_reload, poll_interval_ms]() {
+        namespace fs = std::filesystem;
+        std::filesystem::file_time_type last_mtime{};
+
+        // Capture the initial mtime so we don't fire immediately.
+        try {
+            last_mtime = fs::last_write_time(filepath);
+        } catch (...) {}
+
+        while (watching_.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+            try {
+                auto mtime = fs::last_write_time(filepath);
+                if (mtime != last_mtime) {
+                    last_mtime = mtime;
+                    if (load_from_file(filepath)) {
+                        on_reload(config_);
+                    }
+                }
+            } catch (...) {
+                // File temporarily unavailable during write — retry next poll.
+            }
+        }
+    });
+}
+
+void Config::stop_watching() {
+    watching_ = false;
+    if (watcher_thread_.joinable()) {
+        watcher_thread_.join();
+    }
 }
 
 } // namespace llmquant

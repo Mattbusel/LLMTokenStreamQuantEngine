@@ -1,6 +1,9 @@
 #pragma once
 
+#include <atomic>
+#include <functional>
 #include <string>
+#include <thread>
 #include <yaml-cpp/yaml.h>
 
 namespace llmquant {
@@ -68,6 +71,10 @@ class Config {
 public:
     Config() { set_defaults(); }
 
+    /// Destructor stops any running file-watcher thread before the object is
+    /// destroyed.
+    ~Config() { stop_watching(); }
+
     /// Load configuration from a YAML file on disk.
     ///
     /// # Arguments
@@ -99,8 +106,27 @@ public:
     /// Return a read-only reference to the loaded SystemConfig.
     const SystemConfig& get_config() const { return config_; }
 
+    /// Start watching the config file for changes and reload automatically.
+    ///
+    /// Spawns a background thread that polls the file's mtime every
+    /// `poll_interval_ms` milliseconds. On change, reloads and invokes
+    /// `on_reload` with the new SystemConfig.
+    ///
+    /// # Arguments
+    /// * `filepath`         — Path to watch (same file passed to load_from_file).
+    /// * `on_reload`        — Callback invoked on the watcher thread after reload.
+    /// * `poll_interval_ms` — How often to check for changes (default 500ms).
+    void start_watching(const std::string& filepath,
+                        std::function<void(const SystemConfig&)> on_reload,
+                        int poll_interval_ms = 500);
+
+    /// Stop the background file-watcher thread. Blocks until the thread exits.
+    void stop_watching();
+
 private:
     SystemConfig config_;
+    std::thread watcher_thread_;
+    std::atomic<bool> watching_{false};
 };
 
 } // namespace llmquant

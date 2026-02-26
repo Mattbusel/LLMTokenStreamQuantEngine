@@ -27,6 +27,9 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     accumulated_bias_ = current_bias;
     accumulated_volatility_ = current_vol;
     
+    // Record latest confidence for use in emitted signals.
+    last_confidence_ = weight.confidence_score;
+
     // Check if we should emit a signal
     if (should_emit_signal()) {
         TradeSignal signal;
@@ -71,13 +74,24 @@ bool TradeSignalEngine::should_emit_signal() const {
     return elapsed >= config_.signal_cooldown;
 }
 
-void TradeSignalEngine::emit_signal(const TradeSignal& signal) {
+void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
+    TradeSignal signal = signal_in;
+    auto now = std::chrono::high_resolution_clock::now();
+    signal.timestamp    = now;
+    signal.timestamp_ns = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
+    signal.spread_modifier = (std::abs(signal.delta_bias_shift) > 0.5)
+                                 ? -0.1 * signal.delta_bias_shift
+                                 : 0.0;
+    signal.confidence = last_confidence_.load();
+
     if (callback_) {
         callback_(signal);
         stats_.signals_generated++;
-        stats_.avg_signal_strength = (stats_.avg_signal_strength.load() + 
-                                    std::abs(signal.delta_bias_shift)) / 2.0;
-        last_signal_time_ = std::chrono::high_resolution_clock::now();
+        stats_.avg_signal_strength =
+            (stats_.avg_signal_strength.load() + std::abs(signal.delta_bias_shift)) / 2.0;
+        last_signal_time_ = now;
     } else {
         stats_.signals_suppressed++;
     }
