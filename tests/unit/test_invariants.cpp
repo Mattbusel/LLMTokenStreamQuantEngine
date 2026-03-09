@@ -37,7 +37,7 @@ static TradeSignal make_signal(double bias, double vol, double spread, double co
     return s;
 }
 
-static RiskManager::Config permissive_config() {
+[[maybe_unused]] static RiskManager::Config permissive_config() {
     RiskManager::Config cfg;
     cfg.max_bias_magnitude       = 100.0;
     cfg.max_volatility_magnitude = 100.0;
