@@ -34,14 +34,15 @@ public:
     struct Config {
         /// Delay between consecutive state emissions.
         std::chrono::milliseconds emit_interval{10};
-        Config() = default;
+
     };
 
     /// Construct the mock adapter with the given configuration.
     ///
     /// # Arguments
     /// * `config` — Emission timing parameters (default: 10 ms interval).
-    explicit MockOmsAdapter(Config config = Config{});
+    explicit MockOmsAdapter();
+    explicit MockOmsAdapter(Config config);
 
     /// Destructor: calls stop() to join the background thread.
     ~MockOmsAdapter() override;
