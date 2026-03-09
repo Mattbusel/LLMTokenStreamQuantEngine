@@ -133,9 +133,9 @@ SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tok
     _mm_storeu_pd(buf_db, acc_db);
     _mm_storeu_pd(buf_c,  acc_c);
 
-    double sum_s  = buf_sv[0] + buf_sv[1];
-    double sum_dc = buf_db[0] + buf_db[1];   // directional * conf
-    double sum_vc = 0.0;                      // volatility  * conf — see below
+    [[maybe_unused]] double sum_s  = buf_sv[0] + buf_sv[1];
+    [[maybe_unused]] double sum_dc = buf_db[0] + buf_db[1];   // directional * conf
+    [[maybe_unused]] double sum_vc = 0.0;                      // volatility  * conf — see below
     double total_conf = buf_c[0] + buf_c[1];
 
     // The volatility lane is stored in the high double of acc_db after unpacklo;
