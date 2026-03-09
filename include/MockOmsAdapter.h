@@ -40,7 +40,7 @@ public:
     ///
     /// # Arguments
     /// * `config` — Emission timing parameters (default: 10 ms interval).
-    explicit MockOmsAdapter(Config config = Config{});
+    explicit MockOmsAdapter(Config config = {});
 
     /// Destructor: calls stop() to join the background thread.
     ~MockOmsAdapter() override;
