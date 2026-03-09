@@ -2,6 +2,8 @@
 
 namespace llmquant {
 
+MockOmsAdapter::MockOmsAdapter() : MockOmsAdapter(Config{}) {}
+
 MockOmsAdapter::MockOmsAdapter(Config config) : config_(std::move(config)) {}
 
 MockOmsAdapter::~MockOmsAdapter() {
