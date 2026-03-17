@@ -88,10 +88,6 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
 
     if (callback_) {
         callback_(signal);
-        stats_.signals_generated++;
-        stats_.avg_signal_strength =
-            (stats_.avg_signal_strength.load() + std::abs(signal.delta_bias_shift)) / 2.0;
-        last_signal_time_ = now;
     } else {
         stats_.signals_suppressed++;
     }
@@ -100,6 +96,15 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     for (const auto& sink : output_sinks_) {
         sink->emit(signal);
     }
+
+    // Update stats unconditionally — count every emitted signal regardless of
+    // whether a callback or only sinks are registered.
+    stats_.signals_generated++;
+    uint64_t n = stats_.signals_generated.load();
+    double old_avg = stats_.avg_signal_strength.load();
+    // Welford running mean: mean_n = mean_{n-1} + (x - mean_{n-1}) / n
+    stats_.avg_signal_strength = old_avg + (std::abs(signal.delta_bias_shift) - old_avg) / static_cast<double>(n);
+    last_signal_time_ = now;
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {

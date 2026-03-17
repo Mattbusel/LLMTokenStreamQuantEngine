@@ -279,7 +279,12 @@ void FixOmsAdapter::reader_thread() {
 
     // Send FIX Logon.
     std::string logon = build_logon();
-    send(sockfd_, logon.c_str(), static_cast<int>(logon.size()), 0);
+    ssize_t sent = send(sockfd_, logon.c_str(), static_cast<int>(logon.size()), 0);
+    if (sent != static_cast<ssize_t>(logon.size())) {
+        close_socket();
+        running_ = false;
+        return;
+    }
     seq_num_++;
 
     auto last_heartbeat = std::chrono::steady_clock::now();

@@ -60,17 +60,22 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             auto samples_copy = latency_samples_;
             std::sort(samples_copy.begin(), samples_copy.end());
             
-            size_t p95_idx = static_cast<size_t>(samples_copy.size() * 0.95);
-            size_t p99_idx = static_cast<size_t>(samples_copy.size() * 0.99);
-            
+            // Percentile indices: ceil(p * N) - 1 (0-based)
+            size_t p95_idx = static_cast<size_t>(std::ceil(samples_copy.size() * 0.95)) - 1;
+            size_t p99_idx = static_cast<size_t>(std::ceil(samples_copy.size() * 0.99)) - 1;
+
             stats.p95_latency = samples_copy[std::min(p95_idx, samples_copy.size() - 1)];
             stats.p99_latency = samples_copy[std::min(p99_idx, samples_copy.size() - 1)];
-            
-            // Calculate jitter (standard deviation)
-            auto mean = stats.avg_latency.count();
+
+            // Calculate jitter (std dev) against the window mean, not global avg
+            double window_mean = 0.0;
+            for (const auto& s : samples_copy)
+                window_mean += static_cast<double>(s.count());
+            window_mean /= static_cast<double>(samples_copy.size());
+
             double variance = 0.0;
             for (const auto& sample : samples_copy) {
-                double diff = static_cast<double>(sample.count()) - static_cast<double>(mean);
+                double diff = static_cast<double>(sample.count()) - window_mean;
                 variance += diff * diff;
             }
             stats.jitter_ms = std::sqrt(variance / samples_copy.size()) / 1000.0;

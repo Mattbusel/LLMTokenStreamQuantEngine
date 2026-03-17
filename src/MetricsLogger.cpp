@@ -79,8 +79,8 @@ void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_
     
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",SIGNAL_GENERATED,," << std::fixed << std::setprecision(3) 
-            << ",," << bias << "," << volatility << "," << latency_us << ",,";
+        oss << timestamp << ",SIGNAL_GENERATED,,," << std::fixed << std::setprecision(3)
+            << bias << "," << volatility << "," << latency_us << ",,";
         
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_) {
@@ -107,8 +107,8 @@ void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
     
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",SYSTEM_STATS,,,,,," << std::fixed << std::setprecision(1)
-            << ",," << (memory_usage / 1024 / 1024) << "," << cpu_usage;
+        oss << timestamp << ",SYSTEM_STATS,,,,,,," << std::fixed << std::setprecision(1)
+            << (memory_usage / 1024 / 1024) << "," << cpu_usage;
         
         if (file_logger_) file_logger_->info(oss.str());
     }
