@@ -5,17 +5,18 @@
 PROJECT_NAME           = "LLMTokenStreamQuantEngine"
 PROJECT_NUMBER         = "1.1.0"
 PROJECT_BRIEF          = "Real-time LLM token stream ingestion, semantic signal extraction, and risk-gated trade signal generation."
-OUTPUT_DIRECTORY       = docs
+OUTPUT_DIRECTORY       = docs/api
 CREATE_SUBDIRS         = NO
 OUTPUT_LANGUAGE        = English
 
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
-INPUT                  = include src
-FILE_PATTERNS          = *.h *.cpp
-RECURSIVE              = NO
-EXCLUDE_PATTERNS       =
+INPUT                  = include src README.md docs/ARCHITECTURE.md
+FILE_PATTERNS          = *.h *.hpp *.cpp *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */build/* */.git/*
+USE_MDFILE_AS_MAINPAGE = README.md
 
 # ---------------------------------------------------------------------------
 # Source browsing

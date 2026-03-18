@@ -21,18 +21,20 @@ namespace llmquant {
 // CsvOutputSink
 // ---------------------------------------------------------------------------
 
-/// CSV file sink — writes one signal per line as comma-separated values.
-///
-/// A header row is written at construction time so the file is self-describing.
+/**
+ * @brief CSV file sink — writes one signal per line as comma-separated values.
+ *
+ * A header row is written at construction time so the file is self-describing.
+ * Not thread-safe; see OutputSink class documentation.
+ */
 class CsvOutputSink : public OutputSink {
 public:
-    /// Open (or create) the named file and write a CSV header row.
-    ///
-    /// # Arguments
-    /// * `filename` — Path to the output CSV file; existing file is truncated.
-    ///
-    /// # Throws
-    /// `std::runtime_error` if the file cannot be opened.
+    /**
+     * @brief Open (or create) the named file and write a CSV header row.
+     *
+     * @param filename Path to the output CSV file; existing file is truncated.
+     * @throws std::runtime_error if the file cannot be opened.
+     */
     explicit CsvOutputSink(const std::string& filename)
         : out_(filename, std::ios::out | std::ios::trunc)
     {
@@ -45,6 +47,13 @@ public:
         out_.flush();
     }
 
+    /**
+     * @brief Write one signal as a CSV row.
+     *
+     * NaN and Inf values are replaced with 0.0 so the output is always valid CSV.
+     *
+     * @param sig Fully populated TradeSignal to serialise.
+     */
     void emit(const TradeSignal& sig) override {
         // Guard against NaN/Inf which are not valid CSV values.
         auto safe_d = [](double v) -> double {
@@ -60,6 +69,7 @@ public:
              << safe_d(sig.strategy_weight) << "\n";
     }
 
+    /// @brief Flush the underlying file stream to disk.
     void flush() override { out_.flush(); }
 
 private:
@@ -70,9 +80,19 @@ private:
 // JsonOutputSink
 // ---------------------------------------------------------------------------
 
-/// JSON file sink — writes one JSON object per line (NDJSON format).
+/**
+ * @brief JSON file sink — writes one JSON object per line (NDJSON format).
+ *
+ * Not thread-safe; see OutputSink class documentation.
+ */
 class JsonOutputSink : public OutputSink {
 public:
+    /**
+     * @brief Open (or create) the named file.
+     *
+     * @param filename Path to the output NDJSON file; existing file is truncated.
+     * @throws std::runtime_error if the file cannot be opened.
+     */
     explicit JsonOutputSink(const std::string& filename)
         : out_(filename, std::ios::out | std::ios::trunc)
     {
@@ -81,6 +101,13 @@ public:
         }
     }
 
+    /**
+     * @brief Write one signal as a JSON object followed by a newline.
+     *
+     * NaN and Inf values are replaced with 0.0 so the output is always valid JSON.
+     *
+     * @param sig Fully populated TradeSignal to serialise.
+     */
     void emit(const TradeSignal& sig) override {
         // Guard against NaN/Inf which are not valid JSON values.
         auto safe_d = [](double v) -> double {
@@ -98,6 +125,7 @@ public:
              << "}\n";
     }
 
+    /// @brief Flush the underlying file stream to disk.
     void flush() override { out_.flush(); }
 
 private:
@@ -108,20 +136,35 @@ private:
 // MemoryOutputSink
 // ---------------------------------------------------------------------------
 
-/// In-memory buffer sink — accumulates all emitted signals in a vector.
-///
-/// Intended for unit and integration tests where the full signal sequence
-/// needs to be inspected after the fact without touching the filesystem.
+/**
+ * @brief In-memory buffer sink — accumulates all emitted signals in a vector.
+ *
+ * Intended for unit and integration tests where the full signal sequence
+ * needs to be inspected after the fact without touching the filesystem.
+ * Not thread-safe; see OutputSink class documentation.
+ */
 class MemoryOutputSink : public OutputSink {
 public:
+    /// @brief Default constructor.
     MemoryOutputSink() = default;
 
+    /**
+     * @brief Append the signal to the internal buffer.
+     *
+     * @param sig Fully populated TradeSignal to store.
+     */
     void emit(const TradeSignal& sig) override {
         signals_.push_back(sig);
     }
 
+    /**
+     * @brief Return a const reference to all stored signals.
+     *
+     * @return Const reference to the internal signal vector.
+     */
     const std::vector<TradeSignal>& get_signals() const { return signals_; }
 
+    /// @brief Clear the internal signal buffer.
     void clear() { signals_.clear(); }
 
 private:

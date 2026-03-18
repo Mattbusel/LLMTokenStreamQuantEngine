@@ -10,13 +10,76 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- Nothing yet.
+- `include/llmquant_version.h.in` — CMake-generated version header exposing
+  `LLMQUANT_VERSION`, `LLMQUANT_VERSION_MAJOR/MINOR/PATCH`, and
+  `LLMQUANT_VERSION_NUMBER` for compile-time feature detection.
+- CMakeLists.txt: `LLMQUANT_ENABLE_ASAN` option bakes AddressSanitizer +
+  UBSan into non-MSVC Debug builds (`-fsanitize=address,undefined`).
+- CMakeLists.txt: `LLMQUANT_WARNINGS_AS_ERRORS` option (default ON) controls
+  whether `-Werror` / `/WX` is applied; can be disabled for downstream
+  integration.
+- CMakeLists.txt: `LLMQUANT_ENABLE_CLANG_TIDY` option sets
+  `CMAKE_CXX_CLANG_TIDY` for in-build static analysis.
+- CI: AddressSanitizer + UBSan re-run step for Debug builds with
+  `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and
+  `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`.
+- CI: Valgrind memcheck step for GCC Release builds
+  (`--leak-check=full --show-leak-kinds=definite,indirect`).
+- CI: Windows MSVC matrix job (Release + Debug) via `windows-latest`.
+- CI: CMake configure step in the `docs` job to generate `llmquant_version.h`
+  before running Doxygen.
+- CI: `LLMQUANT_WARNINGS_AS_ERRORS=OFF` in the docs configure step to avoid
+  spurious header-only warnings.
+- `tests/unit/test_production_readiness.cpp` — 25 new unit tests covering:
+  - `Config::start_watching()` hot-reload callback fires on file change.
+  - `Config::save_to_file()` error path returns false on unwritable path.
+  - `Deduplicator::evict()` allows re-registration of an evicted key.
+  - `InProcessDeduplicator` counter correctness (`total_novel`,
+    `total_duplicates`, `size`).
+  - `InProcessDeduplicator::purge_expired()` removes TTL-expired entries.
+  - `DedupKey::from_token()` context scoping and determinism.
+  - `TradeSignalEngine::add_output_sink()` and `clear_output_sinks()`.
+  - `TradeSignalEngine` backtest mode emits a signal on every token.
+  - `LLMAdapter::map_sequence_to_weight()` confidence-weighted average
+    correctness.
+  - `LLMAdapter` unknown-token neutral-weight fallback.
+  - SIMD (`map_sequence_simd`) matches scalar for even and odd-length sequences.
+  - `LatencyController` profile hooks do not crash.
+  - `LatencyController::reset_stats()` zeroes all counters.
+  - `LatencyController::update_ingestion_pressure(rate, 0)` does not divide by zero.
+  - `MemoryOutputSink::clear()` resets the buffer.
+  - `OutputSink` default `flush()` is a no-op.
+  - `RiskManager::get_position()` reflects the last `update_position()` call.
+  - `MetricsLogger` CSV and JSON paths for all log methods do not crash with
+    an empty file path.
+  - `TokenStreamSimulator::stop()` before `start()` is safe.
+  - `TokenStreamSimulator` emits all loaded in-memory tokens.
+  - `Config` default construction produces valid field values.
 
 ### Changed
-- Nothing yet.
+- All `std::cerr` error output in library code replaced with `spdlog`:
+  - `src/Config.cpp` — load/save errors now via `spdlog::error/warn`.
+  - `src/MetricsLogger.cpp` — sink creation failures now via `spdlog::warn`.
+  - `src/LLMStreamClient.cpp` — socket, TLS, and HTTP errors now via
+    `spdlog::error/warn/debug`; debug-raw dump uses `std::fwrite`/`std::fflush`
+    (intentional, gated behind an explicit debug flag).
+  - `src/FixOmsAdapter.cpp` — recv failures, reconnect, heartbeat, and
+    sequence-reset errors now via `spdlog::warn/info`.
+  - `src/RestOmsAdapter.cpp` — HTTP error status now via `spdlog::warn`.
+  - `src/Deduplicator.cpp` — backend type mismatch warning now via `spdlog::info`.
+- `docs/Doxyfile` enhanced: `USE_MDFILE_AS_MAINPAGE = README.md`,
+  `WARN_NO_PARAMDOC = YES`, `WARN_LOGFILE` set, `HAVE_DOT = YES` with SVG
+  output, `GENERATE_TREEVIEW = YES`, README.md and ARCHITECTURE.md added
+  to `INPUT`.
+- README.md rewritten with full architecture description, CMake option table,
+  Linux/macOS/Windows build instructions, ASan build instructions, API
+  reference, configuration reference, risk gate table, performance notes,
+  and Prometheus metrics reference.
 
 ### Fixed
-- Nothing yet.
+- `src/LLMStreamClient.cpp` `debug_raw` path: replaced `std::cerr.write` with
+  `std::fwrite(chunk, 1, n, stderr)` to avoid mixing C++ stream buffering with
+  raw byte dumps.
 
 ---
 
