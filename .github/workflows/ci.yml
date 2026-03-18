@@ -5,5 +5,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get install -y libspdlog-dev libfmt-dev
+      - run: sudo apt-get install -y libspdlog-dev libfmt-dev libyaml-cpp-dev
       - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
