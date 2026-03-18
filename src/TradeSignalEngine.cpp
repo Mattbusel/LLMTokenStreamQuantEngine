@@ -6,7 +6,10 @@
 namespace llmquant {
 
 TradeSignalEngine::TradeSignalEngine(const Config& config)
-    : config_(config), last_signal_time_(std::chrono::high_resolution_clock::now()) {
+    : config_(config)
+    // Initialise last_signal_time_ to the epoch so the very first token always
+    // passes the cooldown check regardless of the configured cooldown duration.
+    , last_signal_time_(std::chrono::high_resolution_clock::time_point{}) {
     if (config_.bias_sensitivity <= 0.0)
         throw std::invalid_argument("TradeSignalEngine: bias_sensitivity must be > 0");
     if (config_.volatility_sensitivity <= 0.0)

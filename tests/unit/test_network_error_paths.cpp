@@ -99,6 +99,10 @@ TEST(NetworkErrorPaths_RestOmsAdapter, description_contains_host_and_port) {
 // ============================================================
 
 /// Helper: bind a raw TCP socket to a port so the exporter cannot reuse it.
+///
+/// On Windows we use SO_EXCLUSIVEADDRUSE so that a second SO_REUSEADDR bind
+/// (as used by PrometheusExporter) is correctly rejected.  On POSIX a plain
+/// listen socket without SO_REUSEADDR is sufficient.
 static int bind_blocker_socket(uint16_t port) {
 #ifdef _WIN32
     WSADATA wsa;
@@ -107,9 +111,16 @@ static int bind_blocker_socket(uint16_t port) {
     int fd = static_cast<int>(socket(AF_INET, SOCK_STREAM, 0));
     if (fd < 0) return -1;
 
-    int opt = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
-               reinterpret_cast<const char*>(&opt), sizeof(opt));
+#ifdef _WIN32
+    // SO_EXCLUSIVEADDRUSE prevents any other socket (including ones with
+    // SO_REUSEADDR) from binding to the same local address/port.
+    int excl = 1;
+    setsockopt(fd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+               reinterpret_cast<const char*>(&excl), sizeof(excl));
+#else
+    // On POSIX, simply not setting SO_REUSEADDR is enough to block re-binds.
+    (void)0;
+#endif
 
     sockaddr_in addr{};
     addr.sin_family      = AF_INET;
@@ -363,7 +374,7 @@ TEST(NetworkErrorPaths_TradeSignalEngine, decay_reduces_signal_over_time) {
 
 TEST(NetworkErrorPaths_TradeSignalEngine, realtime_cooldown_suppresses_rapid_signals) {
     TradeSignalEngine::Config cfg;
-    // Set a very long cooldown to guarantee suppression.
+    // Set a very long cooldown to guarantee suppression after the first emission.
     cfg.signal_cooldown = std::chrono::microseconds{1'000'000};  // 1 second
     TradeSignalEngine engine(cfg);
     engine.set_realtime_mode(true);
@@ -372,10 +383,20 @@ TEST(NetworkErrorPaths_TradeSignalEngine, realtime_cooldown_suppresses_rapid_sig
     engine.set_signal_callback([&](const TradeSignal&) { ++emitted; });
 
     SemanticWeight w{0.5, 0.8, 0.3, 0.5};
-    // Submit 10 tokens rapidly — only the first should produce a signal.
+    // Submit 10 tokens rapidly. The first token fires because last_signal_time_
+    // is initialised to the epoch (far in the past). The remaining 9 are
+    // suppressed by the 1-second cooldown — no signal reaches the callback.
     for (int i = 0; i < 10; ++i) engine.process_semantic_weight(w);
 
+    // Exactly 1 signal should have been emitted (the first token).
     EXPECT_EQ(emitted.load(), 1)
         << "With a 1-second cooldown, only the first of 10 rapid tokens should emit";
-    EXPECT_GE(engine.get_stats().signals_suppressed.load(), 9u);
+    // signals_generated counts every emitted signal (including the one above).
+    EXPECT_EQ(engine.get_stats().signals_generated.load(), 1u)
+        << "signals_generated must equal 1 — only the first token crossed the cooldown";
+    // signals_suppressed counts only signals that found no callback and no sinks.
+    // Since a callback is registered here, suppressed stays 0.
+    EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 0u)
+        << "signals_suppressed counts unclaimed signals (no callback, no sink); "
+           "suppressed must be 0 when a callback is registered";
 }
