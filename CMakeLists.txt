@@ -108,8 +108,9 @@ add_library(llmquant STATIC
 
 target_include_directories(llmquant
     PUBLIC
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}/include
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # MSVC optimisation flags: appended to the target rather than overriding
@@ -124,7 +125,7 @@ endif()
 target_link_libraries(llmquant
     PUBLIC
         spdlog::spdlog
-        yaml-cpp
+        yaml-cpp::yaml-cpp
         nlohmann_json::nlohmann_json
         Threads::Threads
 )

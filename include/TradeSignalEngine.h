@@ -89,6 +89,24 @@ public:
         std::atomic<uint64_t> signals_generated{0};
         std::atomic<uint64_t> signals_suppressed{0};
         std::atomic<double>   avg_signal_strength{0.0};
+
+        Stats() = default;
+
+        /// @brief Explicit copy constructor: loads each atomic value individually.
+        Stats(const Stats& other)
+            : signals_generated{other.signals_generated.load()}
+            , signals_suppressed{other.signals_suppressed.load()}
+            , avg_signal_strength{other.avg_signal_strength.load()} {}
+
+        /// @brief Explicit copy assignment: stores each atomic value individually.
+        Stats& operator=(const Stats& other) {
+            if (this != &other) {
+                signals_generated.store(other.signals_generated.load());
+                signals_suppressed.store(other.signals_suppressed.load());
+                avg_signal_strength.store(other.avg_signal_strength.load());
+            }
+            return *this;
+        }
     };
 
     /**
