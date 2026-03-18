@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(LLMTokenStreamQuantEngine VERSION 1.0.0 LANGUAGES CXX)
+project(LLMTokenStreamQuantEngine VERSION 1.1.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
 # C++ standard

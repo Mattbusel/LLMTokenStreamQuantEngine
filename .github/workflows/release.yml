@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build and package a release artifact (Linux)
+  # ---------------------------------------------------------------------------
+  release-linux:
+    name: "Release build (Linux, GCC, Release)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libgtest-dev \
+            libgmock-dev \
+            nlohmann-json3-dev \
+            libssl-dev \
+            doxygen \
+            graphviz
+
+      - name: CMake configure
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir build \
+            --output-on-failure \
+            --parallel 4
+
+      - name: Generate API documentation
+        run: doxygen Doxyfile
+
+      - name: Create release archive
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          # Strip the binary.
+          strip build/LLMTokenStreamQuantEngine
+          cp build/LLMTokenStreamQuantEngine dist/
+          cp config.yaml dist/
+          cp README.md CHANGELOG.md LICENSE dist/
+          tar -czf "LLMTokenStreamQuantEngine-${TAG}-linux-x86_64.tar.gz" -C dist .
+
+      - name: Create GitHub Release and upload artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "LLMTokenStreamQuantEngine-*.tar.gz"
+          body: |
+            ## Release ${{ github.ref_name }}
+
+            See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+            ### Download
+            - `LLMTokenStreamQuantEngine-${{ github.ref_name }}-linux-x86_64.tar.gz` — Linux x86_64 release binary + config
+
+            ### Quickstart
+            ```bash
+            tar xzf LLMTokenStreamQuantEngine-${{ github.ref_name }}-linux-x86_64.tar.gz
+            ./LLMTokenStreamQuantEngine --no-color
+            ```
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

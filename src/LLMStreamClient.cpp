@@ -30,12 +30,17 @@ namespace llmquant {
 LLMStreamClient::LLMStreamClient(Config config) : config_(std::move(config)) {
 #ifdef _WIN32
     WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        throw std::runtime_error("LLMStreamClient: WSAStartup failed");
+    }
 #endif
 #ifdef LLMQUANT_TLS_ENABLED
     SSL_library_init();
     SSL_load_error_strings();
     ssl_ctx_ = SSL_CTX_new(TLS_client_method());
+    if (!ssl_ctx_) {
+        throw std::runtime_error("LLMStreamClient: SSL_CTX_new failed — OpenSSL not initialised correctly");
+    }
     auto* ctx = static_cast<SSL_CTX*>(ssl_ctx_);
     // On Windows, load the system certificate store so OpenSSL can verify
     // server certificates (vcpkg OpenSSL has no built-in CA bundle).

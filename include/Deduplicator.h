@@ -12,28 +12,40 @@
 
 namespace llmquant {
 
-/// Result of a deduplication check.
+/**
+ * @brief Result of a deduplication check.
+ */
 enum class DedupResult {
-    Novel,      ///< This key has not been seen within the TTL window — process it.
-    Duplicate,  ///< This key was seen recently — skip processing.
+    Novel,      ///< This key has not been seen within the TTL window -- process it.
+    Duplicate,  ///< This key was seen recently -- skip processing.
 };
 
-/// Key type for deduplication: a raw FNV-1a 64-bit hash of token text + optional context.
+/**
+ * @brief Key type for deduplication: a raw FNV-1a 64-bit hash of token text + optional context.
+ */
 struct DedupKey {
-    /// Raw FNV-1a 64-bit hash of the token and context concatenation.
+    /** @brief Raw FNV-1a 64-bit hash of the token and context concatenation. */
     uint64_t value{0};
 
-    /// Construct a dedup key from a raw token string and optional context.
-    ///
-    /// The same (token, context) pair always produces the same key value
-    /// (deterministic, no randomisation).
-    ///
-    /// # Arguments
-    /// * `token`   — Raw token string.
-    /// * `context` — Optional context string that scopes the key (default: "").
+    /**
+     * @brief Construct a dedup key from a raw token string and optional context.
+     *
+     * The same (token, context) pair always produces the same key value
+     * (deterministic, no randomisation).
+     *
+     * @param token   Raw token string.
+     * @param context Optional context string that scopes the key (default: "").
+     * @return A DedupKey with the computed hash.
+     */
     static DedupKey from_token(const std::string& token,
                                const std::string& context = "");
 
+    /**
+     * @brief Equality comparison operator.
+     *
+     * @param other DedupKey to compare against.
+     * @return true if both keys have the same hash value.
+     */
     bool operator==(const DedupKey& other) const noexcept { return value == other.value; }
 };
 
@@ -50,86 +62,127 @@ template<> struct hash<llmquant::DedupKey> {
 
 namespace llmquant {
 
-/// Abstract deduplication backend interface.
-///
-/// Concrete implementations: InProcessDeduplicator (in-memory, TTL eviction)
-/// and RedisDeduplicator (stub — interface only, not wired to a live Redis).
+/**
+ * @brief Abstract deduplication backend interface.
+ *
+ * Concrete implementations: InProcessDeduplicator (in-memory, TTL eviction)
+ * and RedisDeduplicator (optional live Redis via hiredis; falls back to in-process).
+ */
 class DeduplicatorBackend {
 public:
     virtual ~DeduplicatorBackend() = default;
 
-    /// Check whether `key` is a duplicate and register it if novel.
-    ///
-    /// Implementations must be thread-safe.
-    ///
-    /// # Arguments
-    /// * `key` — The deduplication key derived from token + context.
-    /// * `ttl` — How long the key should be considered live after registration.
-    ///
-    /// # Returns
-    /// DedupResult::Novel if this is the first occurrence within the TTL.
-    /// DedupResult::Duplicate otherwise.
+    /**
+     * @brief Check whether key is a duplicate and register it if novel.
+     *
+     * Implementations must be thread-safe.
+     *
+     * @param key The deduplication key derived from token + context.
+     * @param ttl How long the key should be considered live after registration.
+     * @return DedupResult::Novel if this is the first occurrence within the TTL;
+     *         DedupResult::Duplicate otherwise.
+     */
     virtual DedupResult check_and_register(const DedupKey& key,
                                            std::chrono::milliseconds ttl) = 0;
 
-    /// Explicitly remove a key (e.g. after processing completes).
-    ///
-    /// # Arguments
-    /// * `key` — The key to remove from the live set.
+    /**
+     * @brief Explicitly remove a key (e.g. after processing completes).
+     *
+     * @param key The key to remove from the live set.
+     */
     virtual void evict(const DedupKey& key) = 0;
 
-    /// Return the number of entries currently tracked (including expired ones
-    /// that have not yet been purged).
+    /**
+     * @brief Return the number of entries currently tracked (including expired ones
+     *        that have not yet been purged).
+     *
+     * @return Current entry count.
+     */
     virtual size_t size() const = 0;
 
-    /// Remove all expired entries.  May be a no-op if the backend evicts lazily.
+    /**
+     * @brief Remove all expired entries.
+     *
+     * May be a no-op if the backend evicts lazily.
+     */
     virtual void purge_expired() = 0;
 };
 
-/// In-process deduplicator backed by an unordered_map with TTL entries.
-///
-/// Memory usage is bounded by the number of unique keys seen within the
-/// configured TTL window.  Call start_background_purge() to automatically
-/// reclaim memory at a regular interval; the destructor stops the thread.
-///
-/// Thread safety: all public methods are safe to call concurrently.
+/**
+ * @brief In-process deduplicator backed by an unordered_map with TTL entries.
+ *
+ * Memory usage is bounded by the number of unique keys seen within the
+ * configured TTL window. Call start_background_purge() to automatically
+ * reclaim memory at a regular interval; the destructor stops the thread.
+ *
+ * Thread safety: all public methods are safe to call concurrently.
+ */
 class InProcessDeduplicator : public DeduplicatorBackend {
 public:
     explicit InProcessDeduplicator() = default;
 
-    /// Stop the background purge thread (if running) before destruction.
+    /**
+     * @brief Destructor stops the background purge thread (if running) before destruction.
+     */
     ~InProcessDeduplicator();
 
-    /// Check and register a key; see DeduplicatorBackend::check_and_register.
+    /**
+     * @brief Check and register a key; see DeduplicatorBackend::check_and_register.
+     *
+     * @param key The deduplication key.
+     * @param ttl Time-to-live for this registration.
+     * @return DedupResult::Novel or DedupResult::Duplicate.
+     */
     DedupResult check_and_register(const DedupKey& key,
                                    std::chrono::milliseconds ttl) override;
 
-    /// Remove a key from the live set; see DeduplicatorBackend::evict.
+    /**
+     * @brief Remove a key from the live set; see DeduplicatorBackend::evict.
+     *
+     * @param key The key to remove.
+     */
     void evict(const DedupKey& key) override;
 
-    /// Return the number of tracked entries (including not-yet-purged expired ones).
+    /**
+     * @brief Return the number of tracked entries (including not-yet-purged expired ones).
+     *
+     * @return Current map size.
+     */
     size_t size() const override;
 
-    /// Remove all entries whose TTL has elapsed.
+    /**
+     * @brief Remove all entries whose TTL has elapsed.
+     */
     void purge_expired() override;
 
-    /// Return the total number of duplicate hits since construction.
+    /**
+     * @brief Return the total number of duplicate hits since construction.
+     *
+     * @return Duplicate hit count.
+     */
     uint64_t total_duplicates() const { return total_duplicates_.load(); }
 
-    /// Return the total number of novel keys registered since construction.
+    /**
+     * @brief Return the total number of novel keys registered since construction.
+     *
+     * @return Novel registration count.
+     */
     uint64_t total_novel() const { return total_novel_.load(); }
 
-    /// Start a background thread that calls purge_expired() every interval_s seconds.
-    ///
-    /// No-op if the thread is already running.
-    ///
-    /// # Arguments
-    /// * `interval_s` — Purge interval in seconds (default: 60).
+    /**
+     * @brief Start a background thread that calls purge_expired() every interval_s seconds.
+     *
+     * No-op if the thread is already running.
+     *
+     * @param interval_s Purge interval in seconds (default: 60).
+     */
     void start_background_purge(int interval_s = 60);
 
-    /// Stop the background purge thread and join it.
-    ///
-    /// Safe to call even if start_background_purge() was never called.
+    /**
+     * @brief Stop the background purge thread and join it.
+     *
+     * Safe to call even if start_background_purge() was never called.
+     */
     void stop_background_purge();
 
 private:
@@ -146,145 +199,190 @@ private:
     std::atomic<bool> purge_running_{false};
 };
 
-/// Redis deduplicator with optional live hiredis connection.
-///
-/// When built with LLMQUANT_REDIS_ENABLED (hiredis found at CMake time),
-/// check_and_register and evict issue real Redis commands (SET NX EX / DEL).
-/// If the connection is unavailable at construction time or drops mid-run,
-/// the implementation falls back transparently to the in-process backend.
-///
-/// When built without hiredis, the class is a pure in-process stub: same
-/// public interface, no network I/O.
+/**
+ * @brief Redis deduplicator with optional live hiredis connection.
+ *
+ * When built with LLMQUANT_REDIS_ENABLED (hiredis found at CMake time),
+ * check_and_register and evict issue real Redis commands (SET NX EX / DEL).
+ * If the connection is unavailable at construction time or drops mid-run,
+ * the implementation falls back transparently to the in-process backend.
+ *
+ * When built without hiredis, the class is a pure in-process stub: same
+ * public interface, no network I/O.
+ */
 class RedisDeduplicator : public DeduplicatorBackend {
 public:
-    /// Construct and optionally connect to Redis.
-    ///
-    /// When LLMQUANT_REDIS_ENABLED is defined, attempts to connect to the
-    /// parsed host:port from `redis_url`. Falls back silently to in-process
-    /// mode if the connection fails.
-    ///
-    /// # Arguments
-    /// * `redis_url` — e.g. "redis://127.0.0.1:6379" or "127.0.0.1:6379".
+    /**
+     * @brief Construct and optionally connect to Redis.
+     *
+     * When LLMQUANT_REDIS_ENABLED is defined, attempts to connect to the
+     * parsed host:port from redis_url. Falls back silently to in-process
+     * mode if the connection fails.
+     *
+     * @param redis_url Redis URL, e.g. "redis://127.0.0.1:6379" or "127.0.0.1:6379".
+     */
     explicit RedisDeduplicator(std::string redis_url);
 
-    /// Disconnect from Redis and free all resources.
+    /**
+     * @brief Disconnect from Redis and free all resources.
+     */
     ~RedisDeduplicator();
 
-    /// Check and register `key` with `ttl`.
-    ///
-    /// Uses Redis SET NX EX when connected; falls back to in-process backend
-    /// on disconnection or when hiredis is absent.
+    /**
+     * @brief Check and register key with ttl.
+     *
+     * Uses Redis SET NX EX when connected; falls back to in-process backend
+     * on disconnection or when hiredis is absent.
+     *
+     * @param key The deduplication key.
+     * @param ttl Time-to-live for this registration.
+     * @return DedupResult::Novel or DedupResult::Duplicate.
+     */
     DedupResult check_and_register(const DedupKey& key,
                                    std::chrono::milliseconds ttl) override;
 
-    /// Evict `key` from Redis (DEL) and from the in-process backend.
+    /**
+     * @brief Evict key from Redis (DEL) and from the in-process backend.
+     *
+     * @param key The key to remove.
+     */
     void evict(const DedupKey& key) override;
 
-    /// Return the number of entries in the in-process backend.
+    /**
+     * @brief Return the number of entries in the in-process backend.
+     *
+     * @return Entry count.
+     */
     size_t size() const override;
 
-    /// Purge expired entries from the in-process backend.
+    /**
+     * @brief Purge expired entries from the in-process backend.
+     */
     void purge_expired() override;
 
-    /// Return the Redis URL this instance was constructed with.
+    /**
+     * @brief Return the Redis URL this instance was constructed with.
+     *
+     * @return The redis_url string passed to the constructor.
+     */
     const std::string& redis_url() const { return redis_url_; }
 
-    /// Returns true if a live Redis connection is active.
-    ///
-    /// Always returns false when built without hiredis (stub mode).
+    /**
+     * @brief Returns true if a live Redis connection is active.
+     *
+     * Always returns false when built without hiredis (stub mode).
+     *
+     * @return Connection status.
+     */
     bool is_connected() const;
 
-    /// Callback type invoked when the Redis connection is lost.
+    /** @brief Callback type invoked when the Redis connection is lost. */
     using DisconnectCallback = std::function<void(const std::string& error)>;
 
-    /// Register a callback invoked once per disconnection event.
-    /// The callback fires from the thread that detected the failure.
+    /**
+     * @brief Register a callback invoked once per disconnection event.
+     *
+     * The callback fires from the thread that detected the failure.
+     *
+     * @param cb Callable matching DisconnectCallback.
+     */
     void set_disconnect_callback(DisconnectCallback cb);
 
-    /// Attempt to re-establish the Redis connection.
-    /// Returns true if reconnect succeeded. No-op stub when built without hiredis.
+    /**
+     * @brief Attempt to re-establish the Redis connection.
+     *
+     * @return true if reconnect succeeded; false otherwise. No-op stub when built without hiredis.
+     */
     bool try_reconnect();
 
 private:
     std::string redis_url_;
-    // Fallback: in-process deduplicator used when Redis is unavailable.
     InProcessDeduplicator inner_;
 
     DisconnectCallback disconnect_cb_;
-    std::mutex reconnect_mutex_;   ///< Serializes reconnect attempts.
+    std::mutex reconnect_mutex_;   ///< Serialises reconnect attempts.
 
 #ifdef LLMQUANT_REDIS_ENABLED
-    void* redis_ctx_{nullptr};   ///< redisContext* — opaque to avoid hiredis header leaking.
+    void* redis_ctx_{nullptr};   ///< redisContext* -- opaque to avoid hiredis header leaking.
     bool  redis_connected_{false};
 
-    /// Parse redis_url_ and attempt redisConnect. Returns true on success.
+    /** @brief Parse redis_url_ and attempt redisConnect. Returns true on success. */
     bool try_connect();
 
-    /// Free the redisContext and mark disconnected.
+    /** @brief Free the redisContext and mark disconnected. */
     void redis_disconnect();
 #endif
 };
 
-/// Facade that wraps a DeduplicatorBackend and adds convenience methods.
-///
-/// The default TTL can be set at construction and overridden per-call.
-///
-/// Example:
-/// ```cpp
-/// auto backend = std::make_shared<InProcessDeduplicator>();
-/// Deduplicator dedup(backend, std::chrono::milliseconds{5000});
-/// if (dedup.check("bullish") == DedupResult::Novel) { /* process */ }
-/// ```
+/**
+ * @brief Facade that wraps a DeduplicatorBackend and adds convenience methods.
+ *
+ * The default TTL can be set at construction and overridden per-call.
+ *
+ * Example:
+ * @code
+ * auto backend = std::make_shared<InProcessDeduplicator>();
+ * Deduplicator dedup(backend, std::chrono::milliseconds{5000});
+ * if (dedup.check("bullish") == DedupResult::Novel) { // process }
+ * @endcode
+ */
 class Deduplicator {
 public:
-    /// Construct with the given backend and default TTL.
-    ///
-    /// # Arguments
-    /// * `backend`     — Shared ownership of a DeduplicatorBackend.
-    /// * `default_ttl` — TTL applied when check() is used (default: 5000 ms).
+    /**
+     * @brief Construct with the given backend and default TTL.
+     *
+     * @param backend     Shared ownership of a DeduplicatorBackend.
+     * @param default_ttl TTL applied when check() is used (default: 5000 ms).
+     */
     explicit Deduplicator(std::shared_ptr<DeduplicatorBackend> backend,
                           std::chrono::milliseconds default_ttl =
                               std::chrono::milliseconds{5000});
 
-    /// Check and register a token string using the default TTL.
-    ///
-    /// # Arguments
-    /// * `token`   — Raw token string to deduplicate.
-    /// * `context` — Optional context string (default: "").
-    ///
-    /// # Returns
-    /// DedupResult::Novel or DedupResult::Duplicate.
+    /**
+     * @brief Check and register a token string using the default TTL.
+     *
+     * @param token   Raw token string to deduplicate.
+     * @param context Optional context string (default: "").
+     * @return DedupResult::Novel or DedupResult::Duplicate.
+     */
     DedupResult check(const std::string& token,
                       const std::string& context = "");
 
-    /// Check and register a pre-built key with a custom TTL.
-    ///
-    /// # Arguments
-    /// * `key` — Pre-built DedupKey.
-    /// * `ttl` — Per-call TTL override.
+    /**
+     * @brief Check and register a pre-built key with a custom TTL.
+     *
+     * @param key Pre-built DedupKey.
+     * @param ttl Per-call TTL override.
+     * @return DedupResult::Novel or DedupResult::Duplicate.
+     */
     DedupResult check_with_ttl(const DedupKey& key, std::chrono::milliseconds ttl);
 
-    /// Evict a key by token string and optional context.
-    ///
-    /// # Arguments
-    /// * `token`   — Raw token string.
-    /// * `context` — Optional context string (default: "").
+    /**
+     * @brief Evict a key by token string and optional context.
+     *
+     * @param token   Raw token string.
+     * @param context Optional context string (default: "").
+     */
     void evict(const std::string& token, const std::string& context = "");
 
-    /// Trigger expired-entry purge on the backend.
+    /**
+     * @brief Trigger expired-entry purge on the backend.
+     */
     void purge_expired();
 
-    /// Start a background purge thread on the backend if it is an
-    /// InProcessDeduplicator.  No-op for other backend types.
-    ///
-    /// # Arguments
-    /// * `interval_s` — Purge interval in seconds (default: 60).
+    /**
+     * @brief Start a background purge thread on the backend if it is an
+     *        InProcessDeduplicator. No-op for other backend types.
+     *
+     * @param interval_s Purge interval in seconds (default: 60).
+     */
     void start_background_purge(int interval_s = 60);
 
-    /// Return the underlying backend (for stats access).
-    ///
-    /// # Returns
-    /// Reference to the concrete DeduplicatorBackend.
+    /**
+     * @brief Return the underlying backend (for stats access).
+     *
+     * @return Reference to the concrete DeduplicatorBackend.
+     */
     DeduplicatorBackend& backend() { return *backend_; }
 
 private:

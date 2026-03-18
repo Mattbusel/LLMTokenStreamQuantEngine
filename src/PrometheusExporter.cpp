@@ -14,6 +14,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <cstring>
 
 namespace llmquant {
@@ -21,7 +22,9 @@ namespace llmquant {
 PrometheusExporter::PrometheusExporter(Config config) : config_(std::move(config)) {
 #ifdef _WIN32
     WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        throw std::runtime_error("PrometheusExporter: WSAStartup failed");
+    }
 #endif
 }
 

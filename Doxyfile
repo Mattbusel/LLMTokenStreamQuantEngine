@@ -3,7 +3,7 @@
 # Output: docs/html/
 
 PROJECT_NAME           = "LLMTokenStreamQuantEngine"
-PROJECT_NUMBER         = "1.0.0"
+PROJECT_NUMBER         = "1.1.0"
 PROJECT_BRIEF          = "Real-time LLM token stream ingestion, semantic signal extraction, and risk-gated trade signal generation."
 OUTPUT_DIRECTORY       = docs
 CREATE_SUBDIRS         = NO

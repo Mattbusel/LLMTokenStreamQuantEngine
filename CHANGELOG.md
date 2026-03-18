@@ -9,9 +9,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-03-17
+
 ### Added
+- CI: `.github/workflows/release.yml` — tag-triggered release workflow that
+  builds a stripped Linux release binary, runs the full test suite, generates
+  Doxygen docs, and uploads a `tar.gz` artifact to GitHub Releases.
+- `tests/unit/test_network_error_paths.cpp` — new test suite covering:
+  - `RestOmsAdapter` refused-connection handling (no crash, error counter
+    increments, `update_count` stays zero on a refused port).
+  - `RestOmsAdapter` lifecycle idempotency (`stop()` before `start()` safe;
+    `start()` returns false when already running).
+  - `PrometheusExporter::start()` returns false when port is already bound.
+  - `PrometheusExporter::stop()` before `start()` is safe.
+  - `LLMStreamClient` done-callback behaviour on repeated failed connects.
+  - SSE delta parsing under adversarial JSON: integer content, array content,
+    multiple choices, very long content, special characters.
+  - `LLMAdapter` signal extraction: volatility tokens, panic/bearish tokens,
+    custom mapping override, SIMD vs scalar agreement on known tokens.
+  - `TradeSignalEngine` signal extraction: high-sensitivity amplification,
+    decay reduces bias over time, realtime cooldown suppresses rapid signals.
+- CMake install targets and package config files (`llmquantConfig.cmake`,
+  `llmquantConfigVersion.cmake`, `llmquantTargets.cmake`) for downstream use.
+- `cmake/llmquantConfig.cmake.in` template for package configuration.
+- CI: clang-tidy-14 static analysis step (clang+Release matrix cell).
+- CI: cppcheck static analysis step (gcc+Release matrix cell).
+- CI: `actions/cache@v4` caching of CMake build artifacts keyed on source hash.
+- CI: upgraded runner images from `ubuntu-22.04` to `ubuntu-latest`.
 - Doxyfile for HTML API documentation generation via `doxygen Doxyfile`.
-- CHANGELOG.md (this file).
 - Expanded CI pipeline: GCC + Clang matrix (Release + Debug), clang-format
   gate, and Doxygen build job.
 - Doxygen `/** @brief ... @param ... @return ... @throws ... */` doc-comments
@@ -19,6 +46,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `AGENTS.md` and `CLAUDE.md` coordination notes for agentic workflows.
 
 ### Changed
+- `LLMStreamClient` constructor now throws `std::runtime_error` if
+  `WSAStartup` fails on Windows (previously silently ignored).
+- `LLMStreamClient` constructor now throws `std::runtime_error` if
+  `SSL_CTX_new` returns null (prevents a null-pointer dereference on the
+  first `tls_handshake()` call when OpenSSL is misconfigured).
+- `PrometheusExporter` constructor now throws `std::runtime_error` if
+  `WSAStartup` fails on Windows (previously silently ignored).
 - `Config::load_from_yaml_string` now validates field ranges (signal_decay_rate
   in (0,1), buffer_size > 0, bias/volatility sensitivity >= 0) and returns
   `false` on validation failure, restoring defaults automatically.

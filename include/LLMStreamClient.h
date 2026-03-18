@@ -74,6 +74,8 @@ public:
      * @brief Construct a streaming client with the given connection parameters.
      *
      * @param config Connection, authentication, and behaviour configuration.
+     * @throws std::runtime_error on Windows if WSAStartup fails, or if
+     *         SSL_CTX_new fails when TLS support is compiled in.
      */
     explicit LLMStreamClient(Config config);
 

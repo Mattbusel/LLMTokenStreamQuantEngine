@@ -1,104 +1,39 @@
 # LLMTokenStreamQuantEngine
 
 [![CI](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/actions/workflows/ci.yml)
-[![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey.svg)]()
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
+[![Tests](https://img.shields.io/badge/tests-1491%20passing-brightgreen.svg)](tests/)
 
-Real-time LLM token stream ingestion, semantic signal extraction, and risk-gated trade signal generation. Sub-microsecond hot-path latency. Live OpenAI streaming. Zero managed dependencies in the signal path.
-
-![Live terminal output showing real-time token stream, BIAS/VOL columns, PASS/BLOCK gate, TPS=32, P99=6121us](docs/screenshot.png)
+Connects directly to the OpenAI `gpt-4o` streaming API over a raw TLS socket, ingests the token stream token-by-token, maps each token through a semantic weight dictionary, accumulates directional bias and volatility signals, and fires risk-gated trade signals. End-to-end token-to-signal latency targets sub-10-microsecond P99 in the hot path. Zero managed I/O dependencies in the hot path.
 
 ---
 
-## Description
+## Pipeline
 
-LLMTokenStreamQuantEngine ingests a live OpenAI `gpt-4o` token stream token-by-token as it arrives over a raw TLS socket, maps each token through a semantic weight dictionary (bullish/bearish/volatile/crash/surge and more), accumulates directional bias and volatility signals with exponential decay, and fires risk-gated trade signals. The full token-to-signal cycle completes within microseconds of the token hitting the wire.
-
----
-
-## Feature Table
-
-| Feature | Detail |
-|---|---|
-| Live LLM streaming | Raw TLS socket to OpenAI -- no libcurl, no Boost, zero managed I/O dependencies |
-| OpenSSL TLS | Full certificate verification; Windows system ROOT store injection supported |
-| Chunked transfer decoding | HTTP/1.1 Transfer-Encoding: chunked stripped in the read loop |
-| SSE parsing | data: lines extracted, [DONE] sentinel handled, delta-scoped JSON parse via nlohmann/json |
-| Token normalization | Leading/trailing whitespace stripped, lowercased before dictionary lookup |
-| Semantic dictionary | 40+ tokens covering fear, certainty, directional, volatility, and neutral categories |
-| SIMD aggregation | SSE2 path for multi-token sequence weighting (map_sequence_simd) |
-| Deduplication | Sliding TTL in-process dedup; optional live Redis backend (hiredis) |
-| Risk manager | Magnitude, rate, drawdown, and position gates -- each independently configurable |
-| Latency controller | P50/P95/P99 tracking, Welford online variance for semantic pressure, backoff multiplier |
-| Hot-reload config | config.yaml watched on a background thread; sensitivity parameters update live |
-| OMS adapters | Mock, REST (HTTP polling), and FIX 4.2 session reader implementations |
-| Output sinks | CSV, NDJSON, and in-memory sinks -- pluggable via OutputSink abstract base |
-| Prometheus exporter | /metrics scrape endpoint on port 9100 |
-| --debug-raw mode | Dumps raw socket bytes to stderr for 3 seconds then exits |
-| --no-color mode | Strips all ANSI codes; ASCII-only dividers |
-| Test coverage | Unit, integration, property-invariant, and chaos/fault-injection suites |
-
----
-
-## Prerequisites
-
-### Linux
-
-| Dependency | Minimum version | Install (Ubuntu 22.04) |
-|---|---|---|
-| CMake | 3.20 | `apt install cmake` |
-| GCC or Clang | GCC 12 / Clang 14 | `apt install build-essential clang-14` |
-| spdlog | 1.9 | `apt install libspdlog-dev` |
-| yaml-cpp | 0.7 | `apt install libyaml-cpp-dev` |
-| nlohmann/json | 3.10 | `apt install nlohmann-json3-dev` |
-| GTest | 1.11 | `apt install libgtest-dev` |
-| OpenSSL (optional) | 3.0 | `apt install libssl-dev` |
-| hiredis (optional) | 1.0 | `apt install libhiredis-dev` |
-
-### Windows
-
-| Dependency | Minimum version | Install |
-|---|---|---|
-| MSVC | 19.44 (Visual Studio 2022) | Visual Studio BuildTools |
-| CMake | 3.20 | winget / cmake.org |
-| vcpkg | current | github.com/microsoft/vcpkg |
-
-Required vcpkg packages: `spdlog yaml-cpp gtest nlohmann-json openssl`
-
----
-
-## Build Instructions
-
-### Linux
-
-```bash
-# Clone
-git clone https://github.com/Mattbusel/LLMTokenStreamQuantEngine
-cd LLMTokenStreamQuantEngine
-
-# Configure (Release)
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-# Build
-cmake --build build --parallel
-
-# Run all tests
-ctest --test-dir build --output-on-failure
-
-# Run only unit tests
-ctest --test-dir build --label-regex "unit" --output-on-failure
+```
+[OpenAI gpt-4o Streaming] -> [LLMStreamClient] -> [Deduplicator]
+                                                         |
+                                                  [LLMAdapter]
+                                                (semantic weights)
+                                                         |
+                                             [TradeSignalEngine]
+                                                         |
+                                               [RiskManager] -> [OMS Adapter]
+                                                             (Mock / REST / FIX)
 ```
 
-For a Debug + AddressSanitizer build:
+---
 
-```bash
-cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-debug --parallel
-ctest --test-dir build-debug --output-on-failure
-```
+## Quickstart
 
-### Windows (MSVC + vcpkg)
+### Prerequisites
+
+- **Windows**: MSVC 19.44+ (Visual Studio 2022 BuildTools)
+- **CMake** 3.20+
+- **vcpkg** with packages: `spdlog`, `yaml-cpp`, `gtest`, `openssl`, `nlohmann-json`
+
+### Build (Windows / MSVC)
 
 ```powershell
 git clone https://github.com/Mattbusel/LLMTokenStreamQuantEngine
@@ -108,214 +43,178 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release `
   -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
 cmake --build build --config Release
-
-ctest --test-dir build -C Release --output-on-failure
 ```
 
----
+### Run - Simulator Mode (no API key required)
 
-## Quickstart
-
-### Simulator mode (no API key required)
-
-```bash
-./build/LLMTokenStreamQuantEngine --no-color
+```powershell
+cd build\Release
+.\LLMTokenStreamQuantEngine.exe --no-color
 ```
 
-Replays a built-in token loop (crash, panic, bullish, breakout, ...) through the full signal pipeline and prints a live stats bar.
+Plays back a built-in token loop (`crash`, `panic`, `bullish`, `breakout`, ...) through the full signal pipeline.
 
-### Live stream mode (OpenAI gpt-4o)
+### Run - Live Stream Mode (OpenAI gpt-4o)
 
-```bash
-# Pass the key on the CLI
-./build/LLMTokenStreamQuantEngine --stream "sk-proj-YOUR_KEY_HERE" --no-color
-
-# Or export it as an environment variable
-export LLMQUANT_API_KEY="sk-proj-YOUR_KEY_HERE"
-./build/LLMTokenStreamQuantEngine --stream --no-color
+```powershell
+cd build\Release
+.\LLMTokenStreamQuantEngine.exe --stream "sk-proj-YOUR_KEY_HERE" --no-color
 ```
 
-Connects to `api.openai.com:443`, authenticates, streams a financial sentiment completion every 5 seconds, and fires live signals.
+Connects to `api.openai.com:443` over TLS, authenticates, streams a financial sentiment completion every 5 seconds, and fires live signals.
 
-### REST OMS adapter
+Alternatively, set the environment variable and omit the key argument:
 
-```bash
-./build/LLMTokenStreamQuantEngine --oms 127.0.0.1:8080
+```powershell
+$env:LLMQUANT_API_KEY = "sk-proj-YOUR_KEY_HERE"
+.\LLMTokenStreamQuantEngine.exe --stream --no-color
 ```
 
-Polls `http://127.0.0.1:8080/positions` every 500 ms and feeds position updates into the risk manager.
+### Run - Custom Config
 
-### Debug raw socket output
-
-```bash
-./build/LLMTokenStreamQuantEngine --stream "sk-proj-YOUR_KEY_HERE" --debug-raw
+```powershell
+.\LLMTokenStreamQuantEngine.exe config.yaml --no-color
 ```
 
-Dumps every raw byte from the TLS socket to stderr for 3 seconds then exits.
+### Debug Raw Socket Output
 
----
-
-## Architecture Diagram
-
+```powershell
+.\LLMTokenStreamQuantEngine.exe --stream --debug-raw
 ```
-gpt-4o (api.openai.com:443)      OR     Token file / in-memory vector
-        |                                         |
-        | TLS socket, chunked HTTP/1.1, SSE       | disk / memory
-        v                                         v
-LLMStreamClient                        TokenStreamSimulator
-(background thread, loop reconnect)    (SPSC ring buffer, configurable cadence)
-        |                                         |
-        +-------------------+---------------------+
-                            |
-                            | token text (string)
-                            v
-                      Deduplicator
-                  (FNV-1a TTL window; optional Redis backend)
-                            |
-                            v
-                       LLMAdapter
-              (exact-match dictionary, SSE2 SIMD path)
-                            |
-                SemanticWeight { sentiment, confidence,
-                                 volatility, directional_bias }
-                            |
-                            v
-                  TradeSignalEngine
-          (bias accumulator, vol accumulator, signal cooldown,
-           exponential decay, OutputSink chain)
-                            |
-             TradeSignal { delta_bias_shift, volatility_adjustment,
-                           spread_modifier, confidence, timestamp }
-                            |
-                            v
-                       RiskManager
-            (magnitude gate, rate gate, drawdown gate,
-             position gate, alert/OMS callbacks)
-                            |
-              +-------------+---------------------+
-              |                                   |
-              v                                   v
-       stdout (aligned columns)          OutputSink chain
-       TIME | BIAS | VOL | LATENCY | GATE   (CSV / JSON / Memory)
-                            |
-                            v
-                  PrometheusExporter
-               (/metrics on port 9100)
 
-OmsAdapter (Mock / REST / FIX 4.2) -----> RiskManager::update_position()
-Config (YAML + hot-reload watcher) ------> all subsystems at startup
-LatencyController ---> P99 tracking, back-pressure, backoff multiplier
-MetricsLogger -------> structured CSV / NDJSON log file
-```
+Dumps every raw byte from the TLS socket to stderr for 3 seconds and exits. Useful for diagnosing chunked encoding, SSE framing, or auth failures.
 
 ---
 
 ## Configuration Reference
 
-`config.yaml` is hot-reloaded without restart:
+`config.yaml` controls all runtime parameters and is hot-reloaded without process restart:
 
 ```yaml
 token_stream:
-  data_file_path: "tokens.txt"
-  token_interval_ms: 10
-  buffer_size: 1024
-  use_memory_stream: false
+  data_file_path: "tokens.txt"      # Path to token file (ignored in memory stream mode)
+  token_interval_ms: 10             # Emission interval in simulator mode (ms)
+  buffer_size: 1024                 # Ring buffer capacity (tokens)
+  use_memory_stream: true           # true = built-in token loop; false = file source
 
 trading:
-  bias_sensitivity: 1.0
-  volatility_sensitivity: 1.0
-  signal_decay_rate: 0.95
-  signal_cooldown_us: 1000
+  bias_sensitivity: 1.0             # Scale factor on the directional_bias accumulator
+  volatility_sensitivity: 1.0       # Scale factor on the volatility accumulator
+  signal_decay_rate: 0.95           # Per-token exponential decay (must be in (0, 1])
+  signal_cooldown_us: 1000          # Minimum microseconds between signal emissions
 
 latency:
-  target_latency_us: 10
-  sample_window: 1000
-  enable_profiling: true
+  target_latency_us: 10             # P99 budget in microseconds; alert fires if exceeded
+  sample_window: 1000               # Number of measurements for P50/P99 computation
+  enable_profiling: false           # true = emit per-measurement latency log entries
+
+pressure:
+  max_ingestion_rate_tps: 10000     # TPS at which ingestion pressure = 1.0
+  high_pressure_threshold: 0.8      # Composite pressure above which backoff activates
+  max_backoff_multiplier: 5.0       # Maximum signal cooldown multiplier under pressure
+
+semantic_weights:
+  fear_multiplier: 1.2              # Scale factor applied to fear-category tokens
+  bullish_multiplier: 1.0           # Scale factor applied to bullish-category tokens
+  bearish_multiplier: 1.2           # Scale factor applied to bearish-category tokens
+  volatility_multiplier: 1.1        # Scale factor applied to volatility-category tokens
 
 logging:
-  log_file_path: "metrics.log"
-  format: "CSV"
-  enable_console: true
-  flush_interval_ms: 100
+  log_file_path: "signals.log"      # Output file; empty = no file logging
+  format: "JSON"                    # "JSON" or "CSV"
+  enable_console: false             # true = also log to stdout
+  flush_interval_ms: 100            # Flush interval for the file sink
 ```
 
-Invalid values (e.g. `signal_decay_rate: 1.5`, `buffer_size: 0`, negative sensitivities) cause the loader to return `false` and restore compiled-in defaults automatically.
+All fields have safe defaults; missing fields fall through to the compiled-in defaults without error.
+
+---
+
+## Risk Gate Documentation
+
+Gates are evaluated in cascade order. A signal is rejected at the first gate it fails.
+
+| Gate | Order | Formula | Default Threshold | Reason for Position |
+|------|-------|---------|-------------------|---------------------|
+| Magnitude | 1 | `|delta_bias_shift| <= max_bias_magnitude` AND `|volatility_adjustment| <= max_volatility_magnitude` | 2.0 / 2.0 | Fastest check; catches accumulator runaway before consuming any state |
+| Confidence | 2 | `signal.confidence >= min_confidence` | 0.1 | Stateless; filters semantically weak signals before they use rate quota |
+| Rate limit | 3 | `signals_in_window < max_signals_per_second` per 1-second window | 500 | Only valid signals consume rate budget |
+| Drawdown | 4 | `|cumulative_bias + delta_bias_shift| <= max_drawdown` within `drawdown_window` | 10.0 / 60 s | Rolling directional exposure cap; resets after window to allow recovery |
+| Position | 5 | `|net_position + delta_bias_shift| <= position_limit` AND `pnl >= pnl_limit` | From OMS state | Requires OMS position state; checked last as it is the most expensive |
+
+A soft warning is fired at `position_warn_fraction * position_limit` (default 80%) before the hard position limit is reached. The soft warning fires the OMS callback with event `"position_limit_approaching"` without blocking the signal.
 
 ---
 
 ## Token-to-Signal Mapping
 
 | Category | Tokens | Effect |
-|---|---|---|
-| Fear / Panic | `crash` `panic` `collapse` `plunge` `dump` `rout` | Strong negative BIAS, high VOL |
-| Directional Bullish | `bullish` `rally` `surge` `breakout` `soar` `moon` `buy` | Positive BIAS |
-| Directional Bearish | `bearish` `breakdown` `selloff` `short` `sell` | Negative BIAS |
-| Volatility | `volatile` `spike` `whipsaw` `choppy` `erratic` `swing` | VOL spike, neutral BIAS |
-| Certainty | `inevitable` `guarantee` `confident` `certain` `assured` | Confidence boost |
+|----------|--------|--------|
+| Fear / Panic | `crash`, `panic`, `collapse`, `plunge`, `dump`, `breakdown`, `fear`, `selloff`, `tumble`, `rout` | Strong negative BIAS, high VOL |
+| Directional Bullish | `bullish`, `rally`, `surge`, `breakout`, `soar`, `moon`, `buy`, `long` | Positive BIAS |
+| Directional Bearish | `bearish`, `short`, `sell` | Negative BIAS |
+| Volatility | `volatile`, `spike`, `whipsaw`, `swing`, `choppy`, `erratic` | VOL spike, near-zero BIAS |
+| Certainty | `inevitable`, `guarantee`, `confident`, `confirmed`, `certain`, `assured` | Confidence boost |
+| Neutral filler | `the`, `and`, `is`, `a`, `an`, `in`, `of`, `to` | Near-zero weight on all dimensions |
 
-All entries live in `src/LLMAdapter.cpp::initialize_default_mappings()` and can be extended at runtime via `LLMAdapter::add_token_mapping()` or `load_sentiment_dictionary()`.
-
----
-
-## API Documentation
-
-Generate HTML API docs from the Doxygen-annotated headers:
-
-```bash
-# Requires: doxygen graphviz
-doxygen Doxyfile
-# Output: docs/html/index.html
-```
+All entries are in `src/LLMAdapter.cpp::initialize_default_mappings()` and can be extended at runtime via `add_token_mapping()` or loaded in bulk from a whitespace-delimited dictionary file.
 
 ---
 
-## Tests
+## Prometheus Metrics Reference
+
+The Prometheus scrape endpoint listens on port 9100 (configurable). Metrics are updated once per second from the monitoring loop and served without holding any hot-path locks.
+
+| Metric name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `llmquant_signals_generated_total` | counter | none | Total trade signals emitted by `TradeSignalEngine`, including those later blocked by `RiskManager`. |
+| `llmquant_signals_blocked_total` | counter | none | Total signals blocked by any risk gate. Sum of `signals_blocked_magnitude`, `signals_blocked_confidence`, `signals_blocked_rate`, `signals_blocked_drawdown`, `signals_blocked_position`, and engine-level `signals_suppressed`. |
+| `llmquant_latency_p99_us` | gauge | none | 99th-percentile token-to-signal latency in microseconds over the most recent `sample_window` measurements. |
+| `llmquant_latency_avg_us` | gauge | none | Mean token-to-signal latency in microseconds over the most recent `sample_window` measurements. |
+
+Scrape with:
 
 ```bash
-# Run all tests
-ctest --test-dir build --output-on-failure
-
-# Run only unit tests
-ctest --test-dir build --label-regex "unit" --output-on-failure
-
-# Run only integration tests
-ctest --test-dir build --label-regex "integration" --output-on-failure
+curl http://localhost:9100/metrics
 ```
 
-The test suite covers unit, integration, property-invariant (determinism, boundary invariants, stat accounting), and chaos/fault-injection scenarios including token floods, deduplicator saturation, mid-run restarts, concurrent access, and runaway bias.
+Or configure a Prometheus `scrape_config`:
+
+```yaml
+scrape_configs:
+  - job_name: llmquant
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 5s
+```
 
 ---
 
 ## Architecture Notes
 
-- No exceptions in the hot path -- all error surfaces return Result-style values or `bool`.
-- Single background thread per stream -- reader loop owns its socket, reconnects on EOF.
-- Per-request TLS reconnect -- OpenAI closes after `[DONE]`; client reopens cleanly.
-- `SSL_CTX` reused across reconnects -- only the per-connection `SSL*` is torn down.
-- Windows CA store injection -- vcpkg OpenSSL has no CA bundle; system ROOT certs loaded via `CertOpenSystemStore` and `d2i_X509` at startup.
-- `LatencyController` hot-path methods (`start_measurement` / `end_measurement` / `record_latency`) use lock-free atomics. Percentile calculation acquires a mutex on the reporting path only.
-- `RiskManager::evaluate()` holds a single internal mutex for its entire execution. Alert callbacks must not call back into `RiskManager` or a deadlock will result.
+- No exceptions in hot path. All error surfaces return `bool` or `Result`-style values.
+- Single background thread per stream. The reader loop owns its socket and reconnects on EOF.
+- Per-request TLS reconnect. OpenAI closes after `[DONE]`; client reopens cleanly.
+- `SSL_CTX` reused across reconnects. Only the per-connection `SSL*` is torn down.
+- Windows CA store injection. vcpkg OpenSSL has no CA bundle; system ROOT certs loaded via `CertOpenSystemStore` and `d2i_X509` at startup.
+- Welford online variance. Semantic pressure tracked without storing sample history.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed description of each subsystem.
 
 ---
 
-## Contributing
+## Tests
 
-1. Fork the repository and create a feature branch from `master`.
-2. Write or extend tests for any changed behaviour. All new public API must include Doxygen `/** @brief */` doc-comments.
-3. Run the full test suite locally: `ctest --test-dir build --output-on-failure`.
-4. Run `clang-format -i` over any changed `.cpp` / `.h` files before pushing.
-5. Open a pull request against `master`. The CI pipeline (build matrix + format check + Doxygen) must pass before merge.
+```powershell
+cmake --build build --config Release --target tests
+cd build\Release
+.\tests.exe
+```
 
-### Code Style
-
-- C++20; 4-space indentation, no tabs.
-- `clang-format` with Google style base.
-- Snake_case for identifiers; PascalCase for types.
-- Prefer `std::unique_ptr` / `std::shared_ptr` over raw owning pointers.
-- Prefer `std::runtime_error` / `std::invalid_argument` over `assert()` / `abort()` in library code.
+1,491 tests across unit, integration, property-based (proptest-style), and chaos/fault-injection suites. Full pipeline end-to-end covered including backpressure cascade, circuit breaker recovery, dedup races, and retry backoff timing.
 
 ---
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT -- see `LICENSE`.
