@@ -14,8 +14,8 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
-#include <iostream>
 #include <numeric>
+#include <spdlog/spdlog.h>
 #include <sstream>
 
 namespace llmquant {
@@ -295,7 +295,7 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
                 std::string msg = fix_message(body.str());
                 auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
                 if (sent != static_cast<decltype(sent)>(msg.size())) {
-                    std::cerr << "[fix_oms] handle_message: inline send failed\n";
+                    spdlog::warn("[fix_oms] handle_message: inline send failed");
                 }
             } catch (...) {}
         }
@@ -363,7 +363,7 @@ void FixOmsAdapter::emit_position() {
 bool FixOmsAdapter::reconnect_with_backoff() {
     close_socket();
     int backoff_s = std::min(1 << reconnect_attempts_, kMaxReconnectBackoffSeconds);
-    std::cerr << "[FixOmsAdapter] reconnecting in " << backoff_s << " seconds\n";
+    spdlog::info("[FixOmsAdapter] reconnecting in {} seconds", backoff_s);
     for (int i = 0; i < backoff_s * 10 && running_.load(); ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     if (!running_.load()) return false;
@@ -381,7 +381,7 @@ bool FixOmsAdapter::reconnect_with_backoff() {
     }
     seq_num_++;
     reconnect_attempts_ = 0;
-    std::cerr << "[FixOmsAdapter] reconnected successfully\n";
+    spdlog::info("[FixOmsAdapter] reconnected successfully");
     return true;
 }
 
@@ -391,7 +391,7 @@ void FixOmsAdapter::send_sequence_reset() {
     if (sent == static_cast<decltype(sent)>(msg.size())) {
         seq_num_ = 1;
     } else {
-        std::cerr << "[fix_oms] send_sequence_reset failed\n";
+        spdlog::warn("[fix_oms] send_sequence_reset failed");
     }
 }
 
@@ -409,7 +409,7 @@ void FixOmsAdapter::send_resend_request(int begin_seq, int end_seq) {
     if (sent == static_cast<decltype(sent)>(msg.size())) {
         seq_num_++;
     } else {
-        std::cerr << "[fix_oms] send_resend_request failed\n";
+        spdlog::warn("[fix_oms] send_resend_request failed");
     }
 }
 
@@ -442,7 +442,7 @@ void FixOmsAdapter::reader_thread() {
         ssize_t n = recv(sockfd_, chunk,
                          static_cast<int>(sizeof(chunk) - 1), 0);
         if (n <= 0) {
-            std::cerr << "[FixOmsAdapter] recv failed, reconnecting\n";
+            spdlog::warn("[FixOmsAdapter] recv failed, reconnecting");
             if (reconnect_with_backoff()) {
                 last_heartbeat = std::chrono::steady_clock::now();
                 buf.clear();
@@ -478,7 +478,7 @@ void FixOmsAdapter::reader_thread() {
             ssize_t hb_sent = ::send(sockfd_, hb.c_str(),
                                      static_cast<int>(hb.size()), 0);
             if (hb_sent != static_cast<ssize_t>(hb.size())) {
-                std::cerr << "[FixOmsAdapter] heartbeat send failed, reconnecting\n";
+                spdlog::warn("[FixOmsAdapter] heartbeat send failed, reconnecting");
                 if (reconnect_with_backoff()) {
                     last_heartbeat = std::chrono::steady_clock::now();
                     buf.clear();

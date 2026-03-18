@@ -20,8 +20,8 @@
 #endif
 
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 #include <cstring>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
@@ -117,7 +117,7 @@ bool LLMStreamClient::open_socket() {
     addrinfo* res = nullptr;
     int gai_err = getaddrinfo(config_.host.c_str(), port_str.c_str(), &hints, &res);
     if (gai_err != 0) {
-        std::cerr << "[stream] getaddrinfo failed: " << gai_strerror(gai_err) << "\n";
+        spdlog::error("[stream] getaddrinfo failed: {}", gai_strerror(gai_err));
         return false;
     }
 
@@ -137,7 +137,7 @@ bool LLMStreamClient::open_socket() {
         }
 #ifdef _WIN32
         int wsaerr = WSAGetLastError();
-        std::cerr << "[stream] connect() failed WSA error " << wsaerr << "\n";
+        spdlog::debug("[stream] connect() failed WSA error {}", wsaerr);
         closesocket(fd);
 #else
         ::close(fd);
@@ -184,7 +184,7 @@ bool LLMStreamClient::tls_handshake() {
         unsigned long err = ERR_get_error();
         char err_buf[256];
         ERR_error_string_n(err, err_buf, sizeof(err_buf));
-        std::cerr << "[stream] SSL_connect failed: " << err_buf << "\n";
+        spdlog::error("[stream] SSL_connect failed: {}", err_buf);
         SSL_free(ssl);
         ssl_ = nullptr;
         return false;
@@ -350,11 +350,14 @@ void LLMStreamClient::reader_thread() {
             buf.append(chunk, static_cast<size_t>(n));
 
             if (config_.debug_raw) {
-                std::cerr.write(chunk, n);
-                std::cerr.flush();
+                // debug_raw intentionally writes raw bytes to stderr for diagnostic use.
+                // This is the only acceptable stderr use in library code: it is
+                // gated behind an explicit debug flag and never fires in production.
+                std::fwrite(chunk, 1, static_cast<size_t>(n), stderr);
+                std::fflush(stderr);
                 auto elapsed = std::chrono::steady_clock::now() - debug_start;
                 if (elapsed >= std::chrono::seconds(3)) {
-                    std::cerr << "\n[debug-raw] 3s dump complete — exiting\n";
+                    spdlog::debug("[debug-raw] 3s dump complete — stopping");
                     running_ = false;
                     break;
                 }
@@ -372,18 +375,16 @@ void LLMStreamClient::reader_thread() {
                 if (status_start != std::string::npos) {
                     int status_code = std::stoi(headers.substr(status_start + 1, 3));
                     if (status_code == 401 || status_code == 403) {
-                        std::cerr << "[llm_client] HTTP " << status_code
-                                  << " — check API key; stopping\n";
+                        spdlog::error("[llm_client] HTTP {} — check API key; stopping", status_code);
                         running_ = false;
                         break;
                     } else if (status_code == 429) {
-                        std::cerr << "[llm_client] HTTP 429 rate-limited; backing off\n";
+                        spdlog::warn("[llm_client] HTTP 429 rate-limited; backing off");
                         close_socket();
                         std::this_thread::sleep_for(std::chrono::seconds(10));
                         continue;
                     } else if (status_code < 200 || status_code >= 300) {
-                        std::cerr << "[llm_client] HTTP " << status_code
-                                  << " error; retrying\n";
+                        spdlog::warn("[llm_client] HTTP {} error; retrying", status_code);
                         close_socket();
                         std::this_thread::sleep_for(std::chrono::seconds(2));
                         continue;
@@ -418,9 +419,9 @@ void LLMStreamClient::reader_thread() {
                     std::string token = parse_sse_delta(payload);
                     if (!token.empty() && token_cb_) {
                         try { token_cb_(token); } catch (const std::exception& e) {
-                            std::cerr << "[stream] token_cb_ threw: " << e.what() << "\n";
+                            spdlog::error("[stream] token_cb_ threw: {}", e.what());
                         } catch (...) {
-                            std::cerr << "[stream] token_cb_ threw unknown exception\n";
+                            spdlog::error("[stream] token_cb_ threw unknown exception");
                         }
                     }
                 }

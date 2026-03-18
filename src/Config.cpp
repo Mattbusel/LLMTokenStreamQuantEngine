@@ -3,7 +3,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 namespace llmquant {
 
@@ -12,7 +12,7 @@ bool Config::load_from_file(const std::string& filepath) {
         YAML::Node yaml = YAML::LoadFile(filepath);
         return load_from_yaml_string(YAML::Dump(yaml));
     } catch (const YAML::Exception& e) {
-        std::cerr << "Failed to load config file " << filepath << ": " << e.what() << std::endl;
+        spdlog::error("Failed to load config file {}: {}", filepath, e.what());
         set_defaults();
         return false;
     }
@@ -75,7 +75,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             tr.signal_cooldown_us < 0 ||
             lat.target_latency_us <= 0 || lat.sample_window == 0 ||
             log.flush_interval_ms <= 0) {
-            std::cerr << "Config validation failed: one or more fields out of range\n";
+            spdlog::error("Config validation failed: one or more fields out of range");
             set_defaults();
             return false;
         }
@@ -86,7 +86,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
         }
         return true;
     } catch (const YAML::Exception& e) {
-        std::cerr << "Failed to parse YAML config: " << e.what() << std::endl;
+        spdlog::error("Failed to parse YAML config: {}", e.what());
         set_defaults();
         return false;
     }
@@ -126,12 +126,12 @@ bool Config::save_to_file(const std::string& filepath) const {
 
     std::ofstream f(filepath);
     if (!f.is_open()) {
-        std::cerr << "[config] Failed to open '" << filepath << "' for writing\n";
+        spdlog::error("[config] Failed to open '{}' for writing", filepath);
         return false;
     }
     f << yaml;
     if (!f.good()) {
-        std::cerr << "[config] Write error for '" << filepath << "'\n";
+        spdlog::error("[config] Write error for '{}'", filepath);
         return false;
     }
     return true;

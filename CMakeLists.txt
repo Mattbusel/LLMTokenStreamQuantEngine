@@ -9,19 +9,64 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ---------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------
+option(LLMQUANT_ENABLE_ASAN   "Build with AddressSanitizer + UBSan (Debug only)"  OFF)
+option(LLMQUANT_WARNINGS_AS_ERRORS "Treat all compiler warnings as errors"        ON)
+option(LLMQUANT_ENABLE_CLANG_TIDY  "Run clang-tidy on library sources"            OFF)
+
+# ---------------------------------------------------------------------------
 # Compiler flags
 # ---------------------------------------------------------------------------
 if(MSVC)
-    add_compile_options(/W4 /WX)
+    set(_warn_flags /W4)
+    if(LLMQUANT_WARNINGS_AS_ERRORS)
+        list(APPEND _warn_flags /WX)
+    endif()
+    add_compile_options(${_warn_flags})
     # Do NOT set CMAKE_CXX_FLAGS_RELEASE / CMAKE_CXX_FLAGS_DEBUG here — that
     # would overwrite CMake's default /MD CRT linkage flag, causing a CRT
     # mismatch with pre-built spdlog and yaml-cpp packages.  Per-target
     # optimisation flags are added via target_compile_options below instead.
 else()
-    add_compile_options(-Wall -Wextra -Werror)
+    set(_warn_flags -Wall -Wextra)
+    if(LLMQUANT_WARNINGS_AS_ERRORS)
+        list(APPEND _warn_flags -Werror)
+    endif()
+    add_compile_options(${_warn_flags})
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -ffast-math")
-    set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0 -fsanitize=address,undefined")
+    if(LLMQUANT_ENABLE_ASAN)
+        set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer")
+    else()
+        set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0")
+    endif()
 endif()
+
+# ---------------------------------------------------------------------------
+# clang-tidy integration (optional)
+# ---------------------------------------------------------------------------
+if(LLMQUANT_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy clang-tidy-14 clang-tidy-15 clang-tidy-16)
+    if(CLANG_TIDY_EXE)
+        set(CMAKE_CXX_CLANG_TIDY
+            "${CLANG_TIDY_EXE}"
+            "--extra-arg=-std=c++20"
+            "--warnings-as-errors="
+        )
+        message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
+    else()
+        message(WARNING "LLMQUANT_ENABLE_CLANG_TIDY requested but clang-tidy not found")
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# Generated version header
+# ---------------------------------------------------------------------------
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/llmquant_version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/llmquant_version.h"
+    @ONLY
+)
 
 # ---------------------------------------------------------------------------
 # Dependencies
@@ -61,7 +106,11 @@ add_library(llmquant STATIC
     src/PrometheusExporter.cpp
 )
 
-target_include_directories(llmquant PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(llmquant
+    PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/include
+)
 
 # MSVC optimisation flags: appended to the target rather than overriding
 # CMAKE_CXX_FLAGS_RELEASE so that CMake's default /MD CRT linkage is preserved.
@@ -120,6 +169,12 @@ install(TARGETS llmquant LLMTokenStreamQuantEngine
 )
 
 install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+    PATTERN "*.h.in" EXCLUDE
+)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/include/llmquant_version.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 

@@ -12,7 +12,7 @@
 #endif
 
 #include <cstring>
-#include <iostream>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <stdexcept>
 
@@ -214,7 +214,7 @@ bool RestOmsAdapter::parse_position(const std::string& body,
             try {
                 int code = std::stoi(code_str);
                 if (code < 200 || code >= 300) {
-                    std::cerr << "[rest_oms] HTTP error status: " << code << "\n";
+                    spdlog::warn("[rest_oms] HTTP error status: {}", code);
                     return false;
                 }
             } catch (...) {

@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
 
@@ -267,8 +268,8 @@ void Deduplicator::start_background_purge(int interval_s) {
     if (auto* ip = dynamic_cast<InProcessDeduplicator*>(backend_.get())) {
         ip->start_background_purge(interval_s);
     } else {
-        std::cerr << "[dedup] start_background_purge: backend is not InProcessDeduplicator; "
-                     "purge not started. Redis TTL handles expiry server-side.\n";
+        spdlog::info("[dedup] start_background_purge: backend is not InProcessDeduplicator; "
+                     "purge not started. Redis TTL handles expiry server-side.");
     }
 }
 

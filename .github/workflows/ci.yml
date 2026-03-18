@@ -38,7 +38,8 @@ jobs:
             clang-14 \
             clang-format-14 \
             clang-tidy-14 \
-            cppcheck
+            cppcheck \
+            valgrind
 
       - name: Select compiler
         run: |
@@ -65,7 +66,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_C_COMPILER="$CC" \
             -DCMAKE_CXX_COMPILER="$CXX" \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=ON \
+            -DLLMQUANT_ENABLE_ASAN=${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }}
 
       - name: Build
         run: cmake --build build --parallel
@@ -98,6 +101,42 @@ jobs:
             src/ \
             2>&1 | tee cppcheck-report.txt
 
+      # -----------------------------------------------------------------------
+      # AddressSanitizer run (Debug builds only)
+      # -----------------------------------------------------------------------
+      - name: AddressSanitizer / UBSan test run
+        if: matrix.build_type == 'Debug'
+        run: |
+          # ASAN is baked into the Debug binary via -fsanitize=address,undefined
+          # (set by LLMQUANT_ENABLE_ASAN=ON above for non-MSVC Debug builds).
+          # ctest already ran the tests; this step re-runs with full ASAN options
+          # and explicit leak-detection to catch any latent issues.
+          export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1:check_initialization_order=1"
+          export UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
+          ctest --test-dir build \
+            --output-on-failure \
+            --parallel 1 \
+            2>&1 | tee asan-report.txt
+
+      # -----------------------------------------------------------------------
+      # Valgrind memcheck (GCC Release only — no ASAN instrumentation)
+      # -----------------------------------------------------------------------
+      - name: Valgrind memcheck
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Release'
+        run: |
+          # Run the unit-test binary under valgrind.
+          # --error-exitcode=1 turns any error into a non-zero exit so CI fails.
+          valgrind \
+            --tool=memcheck \
+            --error-exitcode=1 \
+            --leak-check=full \
+            --show-leak-kinds=definite,indirect \
+            --track-origins=yes \
+            --suppressions=/usr/lib/valgrind/default.supp \
+            build/tests/tests \
+            --gtest_filter="-*Performance*:*Bench*:*bench*" \
+            2>&1 | tee valgrind-report.txt
+
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -107,6 +146,8 @@ jobs:
             build/Testing/
             clang-tidy-report.txt
             cppcheck-report.txt
+            asan-report.txt
+            valgrind-report.txt
 
   # ---------------------------------------------------------------------------
   # clang-format formatting gate
@@ -136,14 +177,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Doxygen
+      - name: Install Doxygen and Graphviz
         run: sudo apt-get update -qq && sudo apt-get install -y doxygen graphviz
+
+      - name: Configure (needed to generate llmquant_version.h)
+        run: |
+          cmake -B build_docs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
 
       - name: Build docs
         run: doxygen docs/Doxyfile
+
+      - name: Verify HTML output exists
+        run: test -f docs/api/html/index.html
 
       - name: Upload docs artifact
         uses: actions/upload-artifact@v4
         with:
           name: api-docs
-          path: docs/html/
+          path: docs/api/html/
+
+  # ---------------------------------------------------------------------------
+  # Windows build (MSVC, Release + Debug)
+  # ---------------------------------------------------------------------------
+  build-windows:
+    name: "Windows (MSVC, ${{ matrix.build_type }})"
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg dependencies
+        run: |
+          vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl --triplet x64-windows
+
+      - name: CMake configure
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DLLMQUANT_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir build `
+            -C ${{ matrix.build_type }} `
+            --output-on-failure `
+            --parallel 4

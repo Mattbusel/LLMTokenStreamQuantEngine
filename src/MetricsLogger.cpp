@@ -1,7 +1,6 @@
 #include "MetricsLogger.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 
 namespace llmquant {
@@ -30,7 +29,8 @@ void MetricsLogger::initialize_loggers() {
             file_logger_->set_pattern("[%H:%M:%S.%f] %v");
             file_logger_->flush_on(spdlog::level::info);
         } catch (const spdlog::spdlog_ex& ex) {
-            std::cerr << "[warn] MetricsLogger: file logger skipped: " << ex.what() << "\n";
+            // Cannot use file logger to report its own failure; use spdlog default sink.
+            spdlog::warn("[MetricsLogger] file logger skipped: {}", ex.what());
             file_logger_.reset();
         }
     }
@@ -44,7 +44,7 @@ void MetricsLogger::initialize_loggers() {
             console_logger_ = spdlog::stdout_color_mt(name);
             console_logger_->set_pattern("[%H:%M:%S.%f] %v");
         } catch (const spdlog::spdlog_ex& ex) {
-            std::cerr << "[warn] MetricsLogger: console logger skipped: " << ex.what() << "\n";
+            spdlog::warn("[MetricsLogger] console logger skipped: {}", ex.what());
             console_logger_.reset();
         }
     }
