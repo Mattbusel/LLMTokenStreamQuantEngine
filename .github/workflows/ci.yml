@@ -59,6 +59,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}-
 
+      - name: Set ASAN flag
+        run: |
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then
+            echo "ASAN_FLAG=ON" >> "$GITHUB_ENV"
+          else
+            echo "ASAN_FLAG=OFF" >> "$GITHUB_ENV"
+          fi
+
       - name: CMake configure
         run: |
           cmake -B build \
@@ -68,7 +76,7 @@ jobs:
             -DCMAKE_CXX_COMPILER="$CXX" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLMQUANT_WARNINGS_AS_ERRORS=ON \
-            -DLLMQUANT_ENABLE_ASAN=${{ matrix.build_type == 'Debug' && 'ON' || 'OFF' }}
+            -DLLMQUANT_ENABLE_ASAN="$ASAN_FLAG"
 
       - name: Build
         run: cmake --build build --parallel
