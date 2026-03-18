@@ -25,8 +25,8 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          # Install LLVM 17 repo for clang-17 on Ubuntu 24.04
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 17
+          # Install LLVM 18 repo for clang-18 on Ubuntu 24.04
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 18
           sudo apt-get install -y \
             build-essential \
             cmake \
@@ -38,17 +38,17 @@ jobs:
             libgmock-dev \
             nlohmann-json3-dev \
             libssl-dev \
-            clang-17 \
-            clang-format-17 \
-            clang-tidy-17 \
+            clang-18 \
+            clang-format-18 \
+            clang-tidy-18 \
             cppcheck \
             valgrind
 
       - name: Select compiler
         run: |
           if [ "${{ matrix.compiler }}" = "clang" ]; then
-            echo "CC=clang-17"    >> "$GITHUB_ENV"
-            echo "CXX=clang++-17" >> "$GITHUB_ENV"
+            echo "CC=clang-18"    >> "$GITHUB_ENV"
+            echo "CXX=clang++-18" >> "$GITHUB_ENV"
           else
             echo "CC=gcc"  >> "$GITHUB_ENV"
             echo "CXX=g++" >> "$GITHUB_ENV"
@@ -93,7 +93,7 @@ jobs:
       - name: clang-tidy static analysis
         if: matrix.compiler == 'clang' && matrix.build_type == 'Release'
         run: |
-          find src -name '*.cpp' | xargs clang-tidy-17 \
+          find src -name '*.cpp' | xargs clang-tidy-18 \
             -p build \
             --warnings-as-errors='' \
             --extra-arg=-std=c++20 \
@@ -173,14 +173,15 @@ jobs:
 
       - name: Install clang-format
         run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 17
-          sudo apt-get install -y clang-format-17
+          sudo apt-get update -qq
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s 18
+          sudo apt-get install -y clang-format-18
 
       - name: Check formatting
         run: |
           find src include tests \
             \( -name '*.cpp' -o -name '*.h' \) \
-            | xargs clang-format-17 --dry-run --Werror
+            | xargs clang-format-18 --dry-run --Werror
           echo "All source files are correctly formatted."
 
   # ---------------------------------------------------------------------------
@@ -248,6 +249,7 @@ jobs:
       - name: Install vcpkg dependencies
         run: |
           & "$env:VCPKG_ROOT\vcpkg" install spdlog yaml-cpp gtest nlohmann-json openssl --triplet x64-windows
+          # hiredis is optional (find_package QUIET) — omitted to avoid Windows build timeouts
 
       - name: CMake configure
         run: |
