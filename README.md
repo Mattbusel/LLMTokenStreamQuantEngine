@@ -190,16 +190,33 @@ scrape_configs:
 
 ---
 
-## Architecture Notes
+## Architecture
 
-- No exceptions in hot path. All error surfaces return `bool` or `Result`-style values.
+### Subsystems
+
+| Subsystem | File(s) | Responsibility |
+|-----------|---------|---------------|
+| `LLMStreamClient` | `src/LLMStreamClient.cpp` | Zero-dependency TLS client. Opens a raw TCP socket to `api.openai.com:443`, negotiates TLS via OpenSSL, streams SSE `data:` lines, and invokes the token callback for each `choices[0].delta.content` field. Reconnects automatically after `[DONE]`. |
+| `Deduplicator` | `src/Deduplicator.cpp` | FNV-1a hash deduplication with a configurable TTL window. Optional Redis backend (compile with `LLMQUANT_REDIS_ENABLED`) for cross-process dedup. |
+| `LLMAdapter` | `src/LLMAdapter.cpp` | Maps normalised token strings to `SemanticWeight` structs via a pre-built `unordered_map`. Provides an SSE2 SIMD path (`map_sequence_simd`) for batch scoring. |
+| `TradeSignalEngine` | `src/TradeSignalEngine.cpp` | Accumulates `directional_bias` and `volatility_score` with exponential decay. Emits a `TradeSignal` when the cooldown has elapsed (realtime) or on every token (backtest). Lock-free CAS loops on `std::atomic<double>` accumulators. |
+| `RiskManager` | `src/RiskManager.cpp` | Five-gate cascade: magnitude, confidence, rate-limit, drawdown, position/PnL. Signals that fail any gate are blocked, counted, and surfaced via an alert callback. |
+| `LatencyController` | `src/LatencyController.cpp` | Lock-free P50/P95/P99 percentile tracking. Computes a composite back-pressure signal using Welford online variance; applies an exponential backoff multiplier under high pressure. |
+| `MetricsLogger` | `src/MetricsLogger.cpp` | spdlog-backed structured logging. Supports CSV and NDJSON output with a configurable flush interval. |
+| `Config` | `src/Config.cpp` | YAML file loading and saving with range validation. Spawns a background file-watcher thread for hot-reload; invokes an `on_reload` callback with the new `SystemConfig`. |
+| `PrometheusExporter` | `src/PrometheusExporter.cpp` | Lightweight HTTP server exposing `/metrics` on port 9100. Snapshots metrics once per second on the monitoring loop; the scrape thread returns the cached string without touching any hot-path state. |
+| OMS adapters | `src/MockOmsAdapter.cpp`, `RestOmsAdapter.cpp`, `FixOmsAdapter.cpp` | Pluggable `OmsAdapter` implementations. Mock cycles through deterministic positions; REST polls `GET /position`; FIX parses ExecutionReport (35=8) and PositionReport (35=AP) messages. |
+
+### Key Design Decisions
+
+- No exceptions in the hot path. All error surfaces return `bool` or a `Result`-style value.
 - Single background thread per stream. The reader loop owns its socket and reconnects on EOF.
-- Per-request TLS reconnect. OpenAI closes after `[DONE]`; client reopens cleanly.
-- `SSL_CTX` reused across reconnects. Only the per-connection `SSL*` is torn down.
-- Windows CA store injection. vcpkg OpenSSL has no CA bundle; system ROOT certs loaded via `CertOpenSystemStore` and `d2i_X509` at startup.
-- Welford online variance. Semantic pressure tracked without storing sample history.
+- Per-request TLS reconnect. OpenAI closes the connection after `[DONE]`; the client reopens cleanly. `SSL_CTX` is reused across reconnects; only the per-connection `SSL*` is torn down.
+- Windows CA store injection. The vcpkg OpenSSL build has no CA bundle; system ROOT certificates are loaded via `CertOpenSystemStore` and `d2i_X509` at startup.
+- Welford online variance. Semantic pressure is tracked without storing the full sample history.
+- Prometheus snapshot decoupling. The monitoring loop builds the metrics string once per second; the scrape thread never contends with `LatencyController` or `TradeSignalEngine`.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed description of each subsystem.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed description of each subsystem including lock ordering, the risk gate cascade rationale, and the SIMD aggregation path.
 
 ---
 

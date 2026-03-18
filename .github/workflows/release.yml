@@ -49,7 +49,7 @@ jobs:
             --parallel 4
 
       - name: Generate API documentation
-        run: doxygen Doxyfile
+        run: doxygen docs/Doxyfile
 
       - name: Create release archive
         run: |

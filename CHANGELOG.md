@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Nothing yet.
+
+### Changed
+- Nothing yet.
+
+### Fixed
+- Nothing yet.
+
 ---
 
 ## [1.1.0] - 2026-03-17
@@ -102,3 +111,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 1,491 tests across unit, integration, property-invariant, and chaos suites.
 - `config.yaml` with hot-reload support.
 - `--stream`, `--no-color`, `--debug-raw`, `--oms` CLI flags.
+
+---
+
+[Unreleased]: https://github.com/Mattbusel/LLMTokenStreamQuantEngine/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Mattbusel/LLMTokenStreamQuantEngine/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.0.0
