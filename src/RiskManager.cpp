@@ -173,30 +173,4 @@ RiskManager::PositionState RiskManager::get_position() const {
     return position_;
 }
 
-bool RiskManager::check_and_notify_position(const TradeSignal& signal) {
-    double projected = position_.net_position + signal.delta_bias_shift;
-    double limit     = position_.position_limit;
-
-    // Hard position breach — block the signal.
-    if (std::abs(projected) > limit) {
-        if (oms_cb_) { try { oms_cb_("position_limit_breached", position_, signal); } catch (...) {} }
-        return false;
-    }
-
-    // PnL breach — checked before soft-warn so that at most one callback fires
-    // per evaluate() call.  PnL breach is a hard block and takes priority over
-    // the soft position-approach warning.
-    if (position_.pnl < position_.pnl_limit) {
-        if (oms_cb_) { try { oms_cb_("pnl_limit_breached", position_, signal); } catch (...) {} }
-        return false;
-    }
-
-    // Soft position warning — fires but does NOT block the signal.
-    if (std::abs(projected) > limit * config_.position_warn_fraction) {
-        if (oms_cb_) { try { oms_cb_("position_limit_approaching", position_, signal); } catch (...) {} }
-    }
-
-    return true;
-}
-
 } // namespace llmquant

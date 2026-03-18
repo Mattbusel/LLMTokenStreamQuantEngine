@@ -65,8 +65,14 @@ void MetricsLogger::log_token_received(const std::string& token, uint64_t sequen
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
         oss << timestamp << ",TOKEN_RECEIVED," << token << "," << sequence_id << ",,,,,";
-        
+
         if (file_logger_) file_logger_->info(oss.str());
+        if (console_logger_) console_logger_->info("Token received: \"{}\"", token);
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"token_received","token":"{}","sequence_id":{},"timestamp":{}}})",
+                token, sequence_id, timestamp);
         if (console_logger_) console_logger_->info("Token received: \"{}\"", token);
     }
 }
@@ -81,8 +87,16 @@ void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_
         std::ostringstream oss;
         oss << timestamp << ",SIGNAL_GENERATED,,," << std::fixed << std::setprecision(3)
             << bias << "," << volatility << "," << latency_us << ",,";
-        
+
         if (file_logger_) file_logger_->info(oss.str());
+        if (console_logger_) {
+            console_logger_->info("Mapped signal: BIAS {:+.3f} | Volatility {:+.3f}", bias, volatility);
+        }
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"signal_generated","bias":{:.3f},"volatility":{:.3f},"latency_us":{},"timestamp":{}}})",
+                bias, volatility, latency_us, timestamp);
         if (console_logger_) {
             console_logger_->info("Mapped signal: BIAS {:+.3f} | Volatility {:+.3f}", bias, volatility);
         }
@@ -90,27 +104,37 @@ void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_
 }
 
 void MetricsLogger::log_latency_measurement(uint64_t latency_us) {
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+
     if (config_.format == OutputFormat::CSV) {
-        auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-        
         std::ostringstream oss;
         oss << timestamp << ",LATENCY_MEASUREMENT,,,,,," << latency_us << ",,";
-        
+
         if (file_logger_) file_logger_->info(oss.str());
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"latency_measurement","latency_us":{},"timestamp":{}}})",
+                latency_us, timestamp);
     }
 }
 
 void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    
+
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
         oss << timestamp << ",SYSTEM_STATS,,,,,,," << std::fixed << std::setprecision(1)
             << (memory_usage / 1024 / 1024) << "," << cpu_usage;
-        
+
         if (file_logger_) file_logger_->info(oss.str());
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"system_stats","memory_mb":{:.1f},"cpu_pct":{:.1f},"timestamp":{}}})",
+                static_cast<double>(memory_usage) / 1024.0 / 1024.0, cpu_usage, timestamp);
     }
 }
 
@@ -127,6 +151,13 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
             console_logger_->warn("Risk rejection: {} bias={:+.3f} conf={:.3f}", reason, bias, confidence);
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"risk_rejection","reason":"{}","bias":{:.3f},"confidence":{:.3f},"timestamp":{}}})",
+                reason, bias, confidence, timestamp);
+        if (console_logger_)
+            console_logger_->warn("Risk rejection: {} bias={:+.3f} conf={:.3f}", reason, bias, confidence);
     }
 }
 
@@ -139,6 +170,8 @@ void MetricsLogger::log_performance_summary() {
 }
 
 void MetricsLogger::flush() {
+    // spdlog's internal mutex makes this safe to call concurrently with the
+    // background flush timer. Redundant flushes are a no-op at the OS level.
     if (file_logger_) file_logger_->flush();
     if (console_logger_) console_logger_->flush();
 }

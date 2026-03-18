@@ -112,6 +112,7 @@ private:
     std::atomic<bool> running_{false};
     std::thread       thread_;
     int               sockfd_{-1};
+    bool              wsa_initialized_{false};  ///< True iff WSAStartup succeeded (Windows only).
     std::atomic<uint64_t> update_count_{0};
     std::atomic<uint64_t> error_count_{0};
 };

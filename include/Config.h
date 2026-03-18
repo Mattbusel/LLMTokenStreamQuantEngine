@@ -47,8 +47,8 @@ struct LatencyConfig {
 struct LoggingConfig {
     /// Path to the output log file.
     std::string log_file_path{"metrics.log"};
-    /// Output serialisation format: "csv" or "json".
-    std::string format{"csv"};
+    /// Output serialisation format: "CSV" or "JSON" (stored uppercase).
+    std::string format{"CSV"};
     /// When true a coloured console sink is attached in addition to the file sink.
     bool enable_console{true};
     /// How often the logger should flush buffered entries to disk, in milliseconds.
@@ -95,11 +95,15 @@ public:
     /// `true` on success, `false` if parsing fails (defaults are applied).
     bool load_from_yaml_string(const std::string& yaml_content);
 
-    /// Serialise the current configuration to a YAML file on disk.
+    /// Save current config to YAML file. Returns false on write error.
     ///
     /// # Arguments
     /// * `filepath` — Destination path; the file is created or overwritten.
-    void save_to_file(const std::string& filepath) const;
+    ///
+    /// # Returns
+    /// `true` on success, `false` if the file could not be opened or a write
+    /// error occurred.
+    bool save_to_file(const std::string& filepath) const;
 
     /// Reset all fields to their compiled-in defaults.
     void set_defaults();

@@ -29,14 +29,14 @@ static constexpr char SOH = '\x01';
 FixOmsAdapter::FixOmsAdapter(Config config) : config_(std::move(config)) {
 #ifdef _WIN32
     WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
+    wsa_initialized_ = (WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
 #endif
 }
 
 FixOmsAdapter::~FixOmsAdapter() {
     stop();
 #ifdef _WIN32
-    WSACleanup();
+    if (wsa_initialized_) WSACleanup();
 #endif
 }
 
@@ -271,8 +271,36 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
         if (ns_it != fields.end()) {
             try { expected_inbound_seq_ = std::stoi(ns_it->second); } catch (...) {}
         }
+    } else if (msg_type == "2") {
+        // ResendRequest: the counterparty wants messages we cannot replay.
+        // Respond with a SequenceReset-GapFill (35=4, 123=Y) covering the
+        // requested range so the session can resume without a full disconnect.
+        auto begin_it = fields.find(7);   // BeginSeqNo
+        auto end_it   = fields.find(16);  // EndSeqNo
+        if (begin_it != fields.end()) {
+            try {
+                int begin = std::stoi(begin_it->second);
+                // EndSeqNo=0 means "to current" — use our next outbound seq.
+                int new_seq = (end_it != fields.end() && end_it->second != "0")
+                              ? std::stoi(end_it->second) + 1
+                              : seq_num_;
+                std::ostringstream body;
+                body << "35=4"  << SOH
+                     << "49=" << config_.sender_comp_id << SOH
+                     << "56=" << config_.target_comp_id << SOH
+                     << "34=" << begin << SOH
+                     << "52=" << fix_utctime() << SOH
+                     << "36=" << new_seq << SOH
+                     << "123=Y" << SOH;  // GapFillFlag=Y
+                std::string msg = fix_message(body.str());
+                auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
+                if (sent != static_cast<decltype(sent)>(msg.size())) {
+                    std::cerr << "[fix_oms] handle_message: inline send failed\n";
+                }
+            } catch (...) {}
+        }
     }
-    // Logon (A), Heartbeat (0), ResendRequest (2), and other types accepted silently.
+    // Logon (A), Heartbeat (0), and other types accepted silently.
 }
 
 // ---------------------------------------------------------------------------

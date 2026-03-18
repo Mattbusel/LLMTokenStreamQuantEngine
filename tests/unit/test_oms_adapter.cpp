@@ -5,6 +5,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -281,4 +283,195 @@ TEST(OmsAdapterTest, test_rest_oms_update_count_zero_on_bad_endpoint) {
 
     EXPECT_EQ(adapter.update_count(), 0u)
         << "update_count must remain 0 when no valid responses are received";
+}
+
+// ===========================================================================
+// parse_position() tests — accessed via a testable subclass that promotes
+// the private static method to public.
+// ===========================================================================
+
+namespace {
+
+class TestableRestOmsAdapter : public RestOmsAdapter {
+public:
+    explicit TestableRestOmsAdapter(RestOmsAdapter::Config cfg)
+        : RestOmsAdapter(std::move(cfg)) {}
+
+    bool test_parse_position(const std::string& body,
+                              RiskManager::PositionState& out) {
+        return parse_position(body, out);
+    }
+};
+
+static RestOmsAdapter::Config make_rest_config() {
+    RestOmsAdapter::Config cfg;
+    cfg.host          = "127.0.0.1";
+    cfg.port          = 19998;   // nothing listening here
+    cfg.poll_interval = std::chrono::milliseconds{500};
+    return cfg;
+}
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Test 13: Valid HTTP 200 response with all required JSON fields succeeds.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_valid_http200) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        "\r\n"
+        "{\"net_position\":0.35,\"position_limit\":1.0,"
+        "\"pnl\":-1.23,\"pnl_limit\":-10.0}";
+
+    RiskManager::PositionState out{};
+    bool ok = adapter.test_parse_position(response, out);
+
+    EXPECT_TRUE(ok) << "Valid HTTP 200 with all fields must parse successfully";
+    EXPECT_DOUBLE_EQ(out.net_position,   0.35);
+    EXPECT_DOUBLE_EQ(out.position_limit, 1.0);
+    EXPECT_DOUBLE_EQ(out.pnl,           -1.23);
+    EXPECT_DOUBLE_EQ(out.pnl_limit,    -10.0);
+}
+
+// ---------------------------------------------------------------------------
+// Test 14: HTTP 404 response returns false.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_http404_returns_false) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    const std::string response =
+        "HTTP/1.1 404 Not Found\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n";
+
+    RiskManager::PositionState out{};
+    EXPECT_FALSE(adapter.test_parse_position(response, out))
+        << "HTTP 404 must cause parse_position() to return false";
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: HTTP 503 response returns false.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_http503_returns_false) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    const std::string response =
+        "HTTP/1.1 503 Service Unavailable\r\n"
+        "\r\n";
+
+    RiskManager::PositionState out{};
+    EXPECT_FALSE(adapter.test_parse_position(response, out))
+        << "HTTP 503 must cause parse_position() to return false";
+}
+
+// ---------------------------------------------------------------------------
+// Test 16: Malformed JSON (not valid JSON at all) returns false.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_malformed_json_returns_false) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "\r\n"
+        "this is not json {{{{";
+
+    RiskManager::PositionState out{};
+    EXPECT_FALSE(adapter.test_parse_position(response, out))
+        << "Malformed JSON body must cause parse_position() to return false";
+}
+
+// ---------------------------------------------------------------------------
+// Test 17: JSON that is otherwise valid but missing one required field
+//          ("pnl_limit") returns false.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_missing_field_returns_false) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    // "pnl_limit" is omitted.
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "\r\n"
+        "{\"net_position\":0.1,\"position_limit\":1.0,\"pnl\":0.5}";
+
+    RiskManager::PositionState out{};
+    EXPECT_FALSE(adapter.test_parse_position(response, out))
+        << "JSON missing pnl_limit must cause parse_position() to return false";
+}
+
+// ---------------------------------------------------------------------------
+// Test 18: Bare JSON body (no HTTP headers at all) is accepted when all
+//          required fields are present.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_bare_json_no_headers) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    const std::string body =
+        "{\"net_position\":-0.5,\"position_limit\":2.0,"
+        "\"pnl\":3.14,\"pnl_limit\":-50.0}";
+
+    RiskManager::PositionState out{};
+    bool ok = adapter.test_parse_position(body, out);
+
+    EXPECT_TRUE(ok) << "Bare JSON without HTTP headers must parse successfully";
+    EXPECT_DOUBLE_EQ(out.net_position,   -0.5);
+    EXPECT_DOUBLE_EQ(out.position_limit,  2.0);
+    EXPECT_DOUBLE_EQ(out.pnl,             3.14);
+    EXPECT_DOUBLE_EQ(out.pnl_limit,     -50.0);
+}
+
+// ---------------------------------------------------------------------------
+// Test 19: Chunked transfer encoding is decoded before parsing.
+//          A single chunk containing the JSON payload must be parsed correctly.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_chunked_body_decoded) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+
+    // The JSON body we want to decode.
+    const std::string json_body =
+        "{\"net_position\":0.9,\"position_limit\":1.0,"
+        "\"pnl\":0.0,\"pnl_limit\":-10.0}";
+
+    // Encode as a single chunked block: hex size CRLF data CRLF 0 CRLF CRLF
+    std::ostringstream chunked;
+    chunked << std::hex << json_body.size() << "\r\n"
+            << json_body << "\r\n"
+            << "0\r\n\r\n";
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        + chunked.str();
+
+    RiskManager::PositionState out{};
+    bool ok = adapter.test_parse_position(response, out);
+
+    EXPECT_TRUE(ok) << "Chunked-encoded response with valid JSON must parse successfully";
+    EXPECT_DOUBLE_EQ(out.net_position,   0.9);
+    EXPECT_DOUBLE_EQ(out.position_limit, 1.0);
+    EXPECT_DOUBLE_EQ(out.pnl,           0.0);
+    EXPECT_DOUBLE_EQ(out.pnl_limit,    -10.0);
+}
+
+// ---------------------------------------------------------------------------
+// Test 20: description() for RestOmsAdapter contains the path and poll
+//          interval in addition to host and port.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_rest_description_contains_path_and_interval) {
+    RestOmsAdapter::Config cfg;
+    cfg.host          = "10.0.0.1";
+    cfg.port          = 8080;
+    cfg.path          = "/api/v1/positions";
+    cfg.poll_interval = std::chrono::milliseconds{250};
+
+    RestOmsAdapter adapter(cfg);
+    std::string desc = adapter.description();
+
+    EXPECT_NE(desc.find("/api/v1/positions"), std::string::npos)
+        << "description() must contain the configured path";
+    EXPECT_NE(desc.find("250"), std::string::npos)
+        << "description() must contain the poll interval in milliseconds";
 }

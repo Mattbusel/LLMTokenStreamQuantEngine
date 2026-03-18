@@ -117,5 +117,28 @@ TEST(MetricsLoggerTest, test_metrics_logger_log_latency_measurement_does_not_thr
     std::remove(path.c_str());
 }
 
+// ---------------------------------------------------------------------------
+// New: inaccessible log path must not crash (improvement #17)
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_metrics_logger_inaccessible_path_does_not_crash) {
+    // On most systems, writing to a path under /nonexistent/ will fail.
+    // The logger must not throw or crash; it should silently degrade.
+    MetricsLogger::Config cfg;
+    cfg.log_file_path         = "/nonexistent/directory/llmquant_should_fail.log";
+    cfg.format                = MetricsLogger::OutputFormat::CSV;
+    cfg.enable_console_output = false;
+    cfg.flush_interval        = std::chrono::milliseconds(100);
+
+    // Construction itself must not throw.
+    ASSERT_NO_THROW({
+        MetricsLogger logger(cfg);
+        // Basic operations must not crash even with an inaccessible file.
+        logger.log_token_received("crash", 1);
+        logger.log_signal_generated(0.5, 0.3, 10);
+        logger.flush();
+    });
+}
+
 } // namespace
 } // namespace llmquant

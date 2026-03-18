@@ -172,7 +172,8 @@ private:
 
     std::atomic<uint64_t> messages_parsed_{0};
 
-    int reconnect_attempts_{0};
+    int  reconnect_attempts_{0};
+    bool wsa_initialized_{false};  ///< True iff WSAStartup succeeded (Windows only).
     static constexpr int kMaxReconnectBackoffSeconds = 60;
 };
 

@@ -1,4 +1,6 @@
 #include "Config.h"
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -54,6 +56,10 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             auto log = yaml["logging"];
             if (log["log_file_path"]) tmp.logging.log_file_path = log["log_file_path"].as<std::string>();
             if (log["format"]) tmp.logging.format = log["format"].as<std::string>();
+            // Normalise format to uppercase so comparisons in main.cpp are case-insensitive.
+            auto& fmt = tmp.logging.format;
+            std::transform(fmt.begin(), fmt.end(), fmt.begin(),
+                           [](unsigned char c){ return std::toupper(c); });
             if (log["enable_console"]) tmp.logging.enable_console = log["enable_console"].as<bool>();
             if (log["flush_interval_ms"]) tmp.logging.flush_interval_ms = log["flush_interval_ms"].as<int>();
         }
@@ -86,7 +92,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
     }
 }
 
-void Config::save_to_file(const std::string& filepath) const {
+bool Config::save_to_file(const std::string& filepath) const {
     SystemConfig snap;
     {
         std::lock_guard<std::mutex> lk(config_mutex_);
@@ -100,26 +106,35 @@ void Config::save_to_file(const std::string& filepath) const {
     yaml["token_stream"]["token_interval_ms"] = config_.token_stream.token_interval_ms;
     yaml["token_stream"]["buffer_size"] = config_.token_stream.buffer_size;
     yaml["token_stream"]["use_memory_stream"] = config_.token_stream.use_memory_stream;
-    
+
     // Trading
     yaml["trading"]["bias_sensitivity"] = config_.trading.bias_sensitivity;
     yaml["trading"]["volatility_sensitivity"] = config_.trading.volatility_sensitivity;
     yaml["trading"]["signal_decay_rate"] = config_.trading.signal_decay_rate;
     yaml["trading"]["signal_cooldown_us"] = config_.trading.signal_cooldown_us;
-    
+
     // Latency
     yaml["latency"]["target_latency_us"] = config_.latency.target_latency_us;
     yaml["latency"]["sample_window"] = config_.latency.sample_window;
     yaml["latency"]["enable_profiling"] = config_.latency.enable_profiling;
-    
+
     // Logging
     yaml["logging"]["log_file_path"] = config_.logging.log_file_path;
     yaml["logging"]["format"] = config_.logging.format;
     yaml["logging"]["enable_console"] = config_.logging.enable_console;
     yaml["logging"]["flush_interval_ms"] = config_.logging.flush_interval_ms;
-    
-    std::ofstream file(filepath);
-    file << yaml;
+
+    std::ofstream f(filepath);
+    if (!f.is_open()) {
+        std::cerr << "[config] Failed to open '" << filepath << "' for writing\n";
+        return false;
+    }
+    f << yaml;
+    if (!f.good()) {
+        std::cerr << "[config] Write error for '" << filepath << "'\n";
+        return false;
+    }
+    return true;
 }
 
 void Config::set_defaults() {

@@ -41,6 +41,12 @@ public:
     /// Construct an adapter pre-loaded with the built-in default token dictionary.
     LLMAdapter();
 
+    // LLMAdapter is non-copyable and non-movable due to atomic members.
+    LLMAdapter(const LLMAdapter&) = delete;
+    LLMAdapter& operator=(const LLMAdapter&) = delete;
+    LLMAdapter(LLMAdapter&&) = delete;
+    LLMAdapter& operator=(LLMAdapter&&) = delete;
+
     /// Look up the SemanticWeight for a single token.
     ///
     /// # Arguments

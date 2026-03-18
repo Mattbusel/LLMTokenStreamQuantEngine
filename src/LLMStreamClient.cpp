@@ -221,10 +221,20 @@ std::string LLMStreamClient::build_request_body() const {
 }
 
 std::string LLMStreamClient::build_http_request(const std::string& body) const {
+    // Sanitise API key — reject CR/LF to prevent header injection.
+    auto sanitise_header_value = [](const std::string& val) -> std::string {
+        std::string out;
+        out.reserve(val.size());
+        for (char c : val) {
+            if (c != '\r' && c != '\n') out += c;
+        }
+        return out;
+    };
+
     std::ostringstream oss;
     oss << "POST /v1/chat/completions HTTP/1.1\r\n"
         << "Host: " << config_.host << "\r\n"
-        << "Authorization: Bearer " << config_.api_key << "\r\n"
+        << "Authorization: Bearer " << sanitise_header_value(config_.api_key) << "\r\n"
         << "Content-Type: application/json\r\n"
         << "Content-Length: " << body.size() << "\r\n"
         << "Accept: text/event-stream\r\n"
@@ -274,13 +284,19 @@ static bool send_all(int sockfd, void* ssl, bool use_tls,
     return true;
 }
 
-// Returns true if `s` is a valid hex chunk-size token (possibly with extensions).
+// Returns true if `s` is a valid chunked transfer-encoding size line.
+// Per RFC 7230, a chunk-size line is one or more hex digits optionally followed
+// by ";chunk-extension".  Only the hex part (before the first ';') is validated;
+// the extension is accepted as-is.  A line of only semicolons is rejected because
+// there must be at least one hex digit before any ';'.
 static bool is_chunk_size_line(const std::string& s) {
     if (s.empty()) return false;
-    for (char c : s) {
-        if (!std::isxdigit(static_cast<unsigned char>(c)) && c != ';') return false;
-    }
-    return true;
+    // Isolate the hex digits — everything from the first ';' onward is extension.
+    size_t ext = s.find(';');
+    const std::string hex_part = (ext != std::string::npos) ? s.substr(0, ext) : s;
+    if (hex_part.empty()) return false;
+    return std::all_of(hex_part.begin(), hex_part.end(),
+                       [](unsigned char c) { return std::isxdigit(c); });
 }
 
 void LLMStreamClient::reader_thread() {
@@ -345,6 +361,30 @@ void LLMStreamClient::reader_thread() {
                 if (hdr_end == std::string::npos) continue;
                 // Check for chunked transfer encoding in the header block.
                 std::string headers = buf.substr(0, hdr_end);
+
+                // Parse HTTP status line: "HTTP/1.1 200 OK"
+                size_t status_start = headers.find(' ');
+                if (status_start != std::string::npos) {
+                    int status_code = std::stoi(headers.substr(status_start + 1, 3));
+                    if (status_code == 401 || status_code == 403) {
+                        std::cerr << "[llm_client] HTTP " << status_code
+                                  << " — check API key; stopping\n";
+                        running_ = false;
+                        break;
+                    } else if (status_code == 429) {
+                        std::cerr << "[llm_client] HTTP 429 rate-limited; backing off\n";
+                        close_socket();
+                        std::this_thread::sleep_for(std::chrono::seconds(10));
+                        continue;
+                    } else if (status_code < 200 || status_code >= 300) {
+                        std::cerr << "[llm_client] HTTP " << status_code
+                                  << " error; retrying\n";
+                        close_socket();
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        continue;
+                    }
+                }
+
                 // Case-insensitive search for Transfer-Encoding: chunked
                 std::string hdrs_lower = headers;
                 for (char& c : hdrs_lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -371,7 +411,13 @@ void LLMStreamClient::reader_thread() {
                     std::string payload = line.substr(6);
                     if (payload == "[DONE]") { stream_done = true; break; }
                     std::string token = parse_sse_delta(payload);
-                    if (!token.empty() && token_cb_) token_cb_(token);
+                    if (!token.empty() && token_cb_) {
+                        try { token_cb_(token); } catch (const std::exception& e) {
+                            std::cerr << "[stream] token_cb_ threw: " << e.what() << "\n";
+                        } catch (...) {
+                            std::cerr << "[stream] token_cb_ threw unknown exception\n";
+                        }
+                    }
                 }
             }
             buf = buf.substr(start);

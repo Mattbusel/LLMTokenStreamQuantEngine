@@ -13,8 +13,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ---------------------------------------------------------------------------
 if(MSVC)
     add_compile_options(/W4 /WX)
-    set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG   "/Od /Zi")
+    # Do NOT set CMAKE_CXX_FLAGS_RELEASE / CMAKE_CXX_FLAGS_DEBUG here — that
+    # would overwrite CMake's default /MD CRT linkage flag, causing a CRT
+    # mismatch with pre-built spdlog and yaml-cpp packages.  Per-target
+    # optimisation flags are added via target_compile_options below instead.
 else()
     add_compile_options(-Wall -Wextra -Werror)
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -ffast-math")
@@ -60,6 +62,15 @@ add_library(llmquant STATIC
 )
 
 target_include_directories(llmquant PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+# MSVC optimisation flags: appended to the target rather than overriding
+# CMAKE_CXX_FLAGS_RELEASE so that CMake's default /MD CRT linkage is preserved.
+if(MSVC)
+    target_compile_options(llmquant PRIVATE
+        $<$<CONFIG:Release>:/O2 /DNDEBUG>
+        $<$<CONFIG:Debug>:/Od /Zi /RTC1>
+    )
+endif()
 
 target_link_libraries(llmquant
     PUBLIC

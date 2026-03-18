@@ -124,26 +124,32 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_no_callback_increments_supp
 }
 
 TEST(TradeSignalEngineTest, test_trade_signal_engine_decay_reduces_accumulated_signal_over_time) {
-    // With decay = 0.0 each token completely erases the previous accumulation.
-    TradeSignalEngine engine(make_config(1.0, 1.0, 0.0 /*full decay*/, 0));
+    // With decay = 0.95 the accumulator shrinks toward zero when only neutral
+    // (zero-contribution) tokens arrive after an initial large weight.
+    TradeSignalEngine engine(make_config(1.0, 1.0, 0.95 /*decay*/, 0));
     engine.set_backtest_mode(true);
 
     std::vector<TradeSignal> signals;
     engine.set_signal_callback([&signals](const TradeSignal& s) { signals.push_back(s); });
 
-    // First token: accumulate something.
+    // First token: accumulate a strong directional bias.
     SemanticWeight large{0.9, 0.9, 0.5, 0.9};
     engine.process_semantic_weight(large);
 
-    // Second token: neutral (zero directional bias, low confidence).
-    SemanticWeight neutral{0.0, 0.5, 0.1, 0.0};
+    // Subsequent neutral tokens: zero contribution, so the accumulator decays
+    // by the factor 0.95 on each call — |bias| must strictly decrease each time.
+    SemanticWeight neutral{0.0, 0.0, 0.0, 0.0};
+    engine.process_semantic_weight(neutral);
+    engine.process_semantic_weight(neutral);
     engine.process_semantic_weight(neutral);
 
-    ASSERT_GE(signals.size(), 2u);
-    // With decay = 0.0, the second signal must have |bias| <= |first signal bias|
-    // because the accumulator is wiped each tick.
-    EXPECT_LE(std::abs(signals[1].delta_bias_shift),
-              std::abs(signals[0].delta_bias_shift) + 1e-9);
+    ASSERT_GE(signals.size(), 4u);
+    // Each neutral token must reduce |delta_bias_shift| compared to the previous.
+    for (std::size_t i = 1; i < signals.size(); ++i) {
+        EXPECT_LT(std::abs(signals[i].delta_bias_shift),
+                  std::abs(signals[i - 1].delta_bias_shift) + 1e-9)
+            << "decay must reduce |bias| on each neutral token (step " << i << ")";
+    }
 }
 
 TEST(TradeSignalEngineTest, test_trade_signal_engine_emitted_signal_has_nonzero_timestamp_ns) {

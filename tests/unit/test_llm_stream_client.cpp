@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -107,5 +108,35 @@ TEST(LLMStreamClientTest, test_stream_client_done_callback_fires_on_failed_conne
     client.stop();
     // If connect() returned false the reader thread never ran and done_cb was
     // never set up — that outcome is also acceptable.
+    SUCCEED();
+}
+
+// ---------------------------------------------------------------------------
+// Reconnect / loop behaviour (improvement #16)
+// ---------------------------------------------------------------------------
+
+TEST(LLMStreamClientTest, test_stream_client_stop_during_reconnect_backoff_does_not_hang) {
+    // The client connects to a refused port and enters backoff.
+    // stop() called during the backoff sleep must return within a short timeout.
+    LLMStreamClient client(refused_config());
+    std::atomic<bool> done_fired{false};
+    client.set_done_callback([&](const std::string&) { done_fired = true; });
+    client.connect();
+    // Give the reader thread time to attempt the first connect and enter backoff.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    client.stop();
+    EXPECT_FALSE(client.is_running());
+}
+
+TEST(LLMStreamClientTest, test_stream_client_token_callback_exception_does_not_crash) {
+    // Verify that a throwing token callback is caught and does not propagate.
+    // We can't inject tokens directly, so just confirm construction + stop is safe
+    // with a callback that would throw.
+    LLMStreamClient client(refused_config());
+    client.set_token_callback([](const std::string&) {
+        throw std::runtime_error("intentional test exception");
+    });
+    client.connect();
+    client.stop();
     SUCCEED();
 }

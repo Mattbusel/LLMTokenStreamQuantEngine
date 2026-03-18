@@ -139,10 +139,6 @@ private:
     void update_drawdown(const TradeSignal& signal);
     void fire_alert(const std::string& reason, const TradeSignal& signal);
 
-    /// Check position limits and fire OMS callbacks if thresholds are crossed.
-    /// Must be called with mutex_ held.
-    bool check_and_notify_position(const TradeSignal& signal);
-
     Config        config_;
     AlertCallback alert_cb_;
     OmsCallback   oms_cb_;

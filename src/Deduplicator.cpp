@@ -91,9 +91,14 @@ void InProcessDeduplicator::start_background_purge(int interval_s) {
     bool expected = false;
     if (!purge_running_.compare_exchange_strong(expected, true)) return;
     purge_thread_ = std::thread([this, interval_s] {
+        int elapsed = 0;
         while (purge_running_.load()) {
-            std::this_thread::sleep_for(std::chrono::seconds(interval_s));
-            if (purge_running_.load()) purge_expired();
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            elapsed += 200;
+            if (elapsed >= interval_s * 1000) {
+                elapsed = 0;
+                if (purge_running_.load()) purge_expired();
+            }
         }
     });
 }
@@ -261,6 +266,9 @@ void Deduplicator::purge_expired() { backend_->purge_expired(); }
 void Deduplicator::start_background_purge(int interval_s) {
     if (auto* ip = dynamic_cast<InProcessDeduplicator*>(backend_.get())) {
         ip->start_background_purge(interval_s);
+    } else {
+        std::cerr << "[dedup] start_background_purge: backend is not InProcessDeduplicator; "
+                     "purge not started. Redis TTL handles expiry server-side.\n";
     }
 }
 

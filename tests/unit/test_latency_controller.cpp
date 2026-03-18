@@ -196,5 +196,48 @@ TEST(LatencyControllerTest, test_latency_controller_backoff_resets_below_low_thr
         << "Backoff must reset to 1.0 when composite pressure < 0.5";
 }
 
+// ---------------------------------------------------------------------------
+// New: guard against end_measurement() before start_measurement() (impr. #10)
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_end_measurement_before_start_does_not_record) {
+    LatencyController lc(make_config());
+    // Calling end_measurement() before start_measurement() on the same thread
+    // must not record any sample (the active guard prevents it).
+    lc.end_measurement();
+    auto stats = lc.get_stats();
+    EXPECT_EQ(stats.measurements, 0u)
+        << "end_measurement() before start_measurement() must not record a sample";
+}
+
+// ---------------------------------------------------------------------------
+// New: concurrent hot-reload does not crash ongoing get_config calls (impr. #15)
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_concurrent_record_and_get_stats_is_safe) {
+    // Spin two threads: one records latency, one reads stats concurrently.
+    LatencyController lc(make_config(true, 200));
+    std::atomic<bool> stop{false};
+
+    std::thread writer([&]() {
+        for (int i = 0; !stop.load() && i < 500; ++i) {
+            lc.record_latency(std::chrono::microseconds(i + 1));
+        }
+    });
+
+    std::thread reader([&]() {
+        for (int i = 0; !stop.load() && i < 100; ++i) {
+            (void)lc.get_stats();
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    });
+
+    writer.join();
+    stop = true;
+    reader.join();
+    // No assertion — just must not crash or deadlock.
+    SUCCEED();
+}
+
 } // namespace
 } // namespace llmquant

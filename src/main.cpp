@@ -18,6 +18,9 @@
 #include <chrono>
 #include <csignal>
 #include <atomic>
+#include <cstdlib>
+#include <mutex>
+#include <sstream>
 
 using namespace llmquant;
 
@@ -40,9 +43,10 @@ int main(int argc, char* argv[]) {
     std::string oms_address;
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
-        if (arg == "--stream" && i + 1 < argc) {
-            stream_mode    = true;
-            stream_api_key = argv[++i];
+        if (arg == "--stream") {
+            stream_mode = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-')
+                stream_api_key = argv[++i];  // explicit key provided on CLI
         } else if (arg == "--no-color") {
             no_color = true;
         } else if (arg == "--debug-raw") {
@@ -50,6 +54,13 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         }
+    }
+
+    // API key security: fall back to LLMQUANT_API_KEY env var if not given on CLI.
+    // Never echo the key value into logs or the banner.
+    if (stream_api_key.empty()) {
+        if (const char* env_key = std::getenv("LLMQUANT_API_KEY"))
+            stream_api_key = env_key;
     }
 
     // Colour helpers — emit empty string when --no-color is active.
@@ -110,6 +121,10 @@ int main(int argc, char* argv[]) {
     std::atomic<double>   sentiment_variance_accum{0.0};
     std::atomic<double>   sentiment_mean_accum{0.0};
     std::atomic<uint64_t> variance_n{0};
+    // Protects the three Welford variables as a unit: both the token-callback
+    // update and the monitoring-loop reset must hold this mutex so they are
+    // never interleaved, which would silently corrupt the variance estimate.
+    std::mutex            variance_mutex;
 
     LLMAdapter llm_adapter;
 
@@ -192,19 +207,25 @@ int main(int argc, char* argv[]) {
         token_count_window++;
 
         // Welford online variance for semantic pressure.
-        double s = weight.sentiment_score;
-        uint64_t n = variance_n.fetch_add(1) + 1;
-        double mean = sentiment_mean_accum.load();
-        double delta = s - mean;
-        sentiment_mean_accum.store(mean + delta / static_cast<double>(n));
-        double delta2 = s - sentiment_mean_accum.load();
-        double var = sentiment_variance_accum.load();
-        sentiment_variance_accum.store(var + delta * delta2);
+        // The mutex ensures this three-variable update is never interleaved
+        // with the periodic reset in the monitoring loop.
+        double current_variance = 0.0;
+        {
+            std::lock_guard<std::mutex> lk(variance_mutex);
+            double s = weight.sentiment_score;
+            uint64_t n = variance_n.fetch_add(1) + 1;
+            double mean = sentiment_mean_accum.load();
+            double delta = s - mean;
+            sentiment_mean_accum.store(mean + delta / static_cast<double>(n));
+            double delta2 = s - sentiment_mean_accum.load();
+            double var = sentiment_variance_accum.load();
+            sentiment_variance_accum.store(var + delta * delta2);
+            current_variance = (n > 1)
+                ? (sentiment_variance_accum.load() / static_cast<double>(n - 1))
+                : 0.0;
+        }
 
         // Update pressure (semantic only; ingestion + queue updated in monitoring loop).
-        double current_variance = (n > 1)
-            ? (sentiment_variance_accum.load() / static_cast<double>(n - 1))
-            : 0.0;
         latency_ctrl.update_semantic_pressure(current_variance);
     };
 
@@ -324,32 +345,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Prometheus metrics endpoint on port 9100.
+    // The snapshot is built once per second in the monitoring loop so the
+    // scrape thread never contends with the hot path for latency stats.
+    std::string prom_snapshot;
+    std::mutex  prom_snapshot_mutex;
+
     llmquant::PrometheusExporter prom_exporter({.port = 9100});
     prom_exporter.set_metrics_callback([&]() -> std::string {
-        auto& es      = trade_engine.get_stats();
-        auto& rs      = risk_mgr.get_stats();
-        auto  latency = latency_ctrl.get_stats();
-        std::ostringstream out;
-        out << "# HELP llmquant_signals_generated_total Total trade signals generated\n"
-            << "# TYPE llmquant_signals_generated_total counter\n"
-            << "llmquant_signals_generated_total " << es.signals_generated.load() << "\n"
-            << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
-            << "# TYPE llmquant_signals_blocked_total counter\n"
-            << "llmquant_signals_blocked_total "
-            << (rs.signals_blocked_magnitude.load()
-              + rs.signals_blocked_confidence.load()
-              + rs.signals_blocked_rate.load()
-              + rs.signals_blocked_drawdown.load()
-              + rs.signals_blocked_position.load()) << "\n"
-            << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
-            << "# TYPE llmquant_latency_p99_us gauge\n"
-            << "llmquant_latency_p99_us " << latency.p99_latency.count() << "\n"
-            << "# HELP llmquant_latency_avg_us Average token-to-signal latency in microseconds\n"
-            << "# TYPE llmquant_latency_avg_us gauge\n"
-            << "llmquant_latency_avg_us " << latency.avg_latency.count() << "\n";
-        return out.str();
+        std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
+        return prom_snapshot;
     });
-    prom_exporter.start();
+    if (!prom_exporter.start()) {
+        std::cerr << "[warn] PrometheusExporter failed to bind on port 9100\n";
+    }
 
     // Main monitoring loop — prints a rolling stats bar every second.
     uint64_t last_tick = 0;
@@ -367,7 +375,7 @@ int main(int argc, char* argv[]) {
         latency_ctrl.update_ingestion_pressure(static_cast<double>(tps), max_tps);
 
         // Queue pressure via suppressed-signal count.
-        auto& eng_stats = trade_engine.get_stats();
+        auto eng_stats = trade_engine.get_stats();  // snapshot, not reference
         latency_ctrl.update_queue_pressure(eng_stats.signals_suppressed.load(), 1024);
 
         double backoff = latency_ctrl.get_backoff_multiplier();
@@ -387,6 +395,53 @@ int main(int argc, char* argv[]) {
                                     ? static_cast<uint64_t>(variance_n.load())
                                     : token_sim.get_stats().tokens_emitted.load();
 
+        // Saturating addition for the BLOCK counter — prevent silent wrap-around.
+        const auto& rs = risk_mgr.get_stats();
+        uint64_t blocked = eng_stats.signals_suppressed.load();
+        auto sat_add = [](uint64_t a, uint64_t b) -> uint64_t {
+            return (a > UINT64_MAX - b) ? UINT64_MAX : a + b;
+        };
+        blocked = sat_add(blocked, rs.signals_blocked_magnitude.load());
+        blocked = sat_add(blocked, rs.signals_blocked_confidence.load());
+        blocked = sat_add(blocked, rs.signals_blocked_rate.load());
+        blocked = sat_add(blocked, rs.signals_blocked_drawdown.load());
+        blocked = sat_add(blocked, rs.signals_blocked_position.load());
+
+        // Welford periodic reset: avoid precision loss after many samples.
+        // After 1M tokens the accumulated sum-of-squares is reset to avoid
+        // catastrophic cancellation in the variance estimate.
+        // The mutex ensures the three stores are never interleaved with the
+        // Welford update running in the token callback.
+        {
+            std::lock_guard<std::mutex> lk(variance_mutex);
+            if (variance_n.load() > 1000000) {
+                variance_n.store(0);
+                sentiment_mean_accum.store(0.0);
+                sentiment_variance_accum.store(0.0);
+            }
+        }
+
+        // Update Prometheus snapshot (read once per second from the monitoring
+        // thread; the scrape callback returns this cached string without
+        // acquiring any latency-path locks).
+        {
+            std::ostringstream snap;
+            snap << "# HELP llmquant_signals_generated_total Total trade signals generated\n"
+                 << "# TYPE llmquant_signals_generated_total counter\n"
+                 << "llmquant_signals_generated_total " << eng_stats.signals_generated.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
+                 << "# TYPE llmquant_signals_blocked_total counter\n"
+                 << "llmquant_signals_blocked_total " << blocked << "\n"
+                 << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
+                 << "# TYPE llmquant_latency_p99_us gauge\n"
+                 << "llmquant_latency_p99_us " << p99 << "\n"
+                 << "# HELP llmquant_latency_avg_us Average token-to-signal latency in microseconds\n"
+                 << "# TYPE llmquant_latency_avg_us gauge\n"
+                 << "llmquant_latency_avg_us " << stats.avg_latency.count() << "\n";
+            std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
+            prom_snapshot = snap.str();
+        }
+
         // Overwrite the stats line in-place.
         std::cout << "\n  -- STATS "
                   << " TPS:"   << std::setw(4) << tps
@@ -400,12 +455,7 @@ int main(int argc, char* argv[]) {
                   << "  BKOF:" << std::setprecision(1) << backoff << "x"
                   << "  DEDUP:" << dedup_backend->total_duplicates()
                   << "  SIG-PASS:" << eng_stats.signals_generated.load()
-                  << "  BLOCK:"   << (eng_stats.signals_suppressed.load()
-                                      + risk_mgr.get_stats().signals_blocked_magnitude.load()
-                                      + risk_mgr.get_stats().signals_blocked_confidence.load()
-                                      + risk_mgr.get_stats().signals_blocked_rate.load()
-                                      + risk_mgr.get_stats().signals_blocked_drawdown.load()
-                                      + risk_mgr.get_stats().signals_blocked_position.load())
+                  << "  BLOCK:"   << blocked
                   << std::flush;
 
         // Alert if P99 exceeds budget.
@@ -427,12 +477,18 @@ int main(int argc, char* argv[]) {
     std::cout << "  ---------------------------------------------------------\n";
     std::cout << "  Tokens processed : " << variance_n.load() << "\n";
     std::cout << "  Signals emitted  : " << trade_engine.get_stats().signals_generated.load() << "\n";
-    std::cout << "  Signals blocked  : "
-              << (risk_mgr.get_stats().signals_blocked_magnitude.load()
-                  + risk_mgr.get_stats().signals_blocked_confidence.load()
-                  + risk_mgr.get_stats().signals_blocked_rate.load()
-                  + risk_mgr.get_stats().signals_blocked_drawdown.load()
-                  + risk_mgr.get_stats().signals_blocked_position.load()) << "\n";
+    {
+        const auto& frs = risk_mgr.get_stats();
+        auto fsat = [](uint64_t a, uint64_t b) -> uint64_t {
+            return (a > UINT64_MAX - b) ? UINT64_MAX : a + b;
+        };
+        uint64_t fblocked = frs.signals_blocked_magnitude.load();
+        fblocked = fsat(fblocked, frs.signals_blocked_confidence.load());
+        fblocked = fsat(fblocked, frs.signals_blocked_rate.load());
+        fblocked = fsat(fblocked, frs.signals_blocked_drawdown.load());
+        fblocked = fsat(fblocked, frs.signals_blocked_position.load());
+        std::cout << "  Signals blocked  : " << fblocked << "\n";
+    }
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
     std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
     std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";

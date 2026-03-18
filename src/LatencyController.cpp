@@ -10,10 +10,13 @@ LatencyController::LatencyController(const Config& config) : config_(config) {
 }
 
 void LatencyController::start_measurement() {
-    latency_measurement_start_ = std::chrono::high_resolution_clock::now();
+    latency_measurement_start_  = std::chrono::high_resolution_clock::now();
+    latency_measurement_active_ = true;
 }
 
 void LatencyController::end_measurement() {
+    if (!latency_measurement_active_) return;  // Called before start_measurement — ignore.
+    latency_measurement_active_ = false;
     auto end = std::chrono::high_resolution_clock::now();
     auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - latency_measurement_start_);
     record_latency(latency);
@@ -169,7 +172,8 @@ LatencyController::PressureState LatencyController::get_pressure() const {
 }
 
 double LatencyController::get_backoff_multiplier() const {
-    return backoff_multiplier_.load();
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    return backoff_multiplier_;  // Protected by pressure_mutex_.
 }
 
 void LatencyController::recompute_composite() {
@@ -179,12 +183,12 @@ void LatencyController::recompute_composite() {
     pressure_.composite = c;
 
     // Exponential backoff: ramps from 1x to 5x as composite exceeds 0.8.
+    // backoff_multiplier_ is a plain double protected by pressure_mutex_,
+    // which all callers of recompute_composite() hold before entering here.
     if (c >= 0.8) {
-        double current = backoff_multiplier_.load();
-        double next = std::min(current * 1.5, 5.0);
-        backoff_multiplier_.store(next);
+        backoff_multiplier_ = std::min(backoff_multiplier_ * 1.5, 5.0);
     } else if (c < 0.5) {
-        backoff_multiplier_.store(1.0);
+        backoff_multiplier_ = 1.0;
     }
 }
 

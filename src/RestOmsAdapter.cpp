@@ -25,14 +25,14 @@ namespace llmquant {
 RestOmsAdapter::RestOmsAdapter(Config config) : config_(std::move(config)) {
 #ifdef _WIN32
     WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
+    wsa_initialized_ = (WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
 #endif
 }
 
 RestOmsAdapter::~RestOmsAdapter() {
     stop();
 #ifdef _WIN32
-    WSACleanup();
+    if (wsa_initialized_) WSACleanup();
 #endif
 }
 
@@ -135,11 +135,21 @@ void RestOmsAdapter::close_socket() {
 // ---------------------------------------------------------------------------
 
 std::string RestOmsAdapter::build_request() const {
+    // Sanitise API key — reject CR/LF to prevent header injection.
+    auto sanitise_header_value = [](const std::string& val) -> std::string {
+        std::string out;
+        out.reserve(val.size());
+        for (char c : val) {
+            if (c != '\r' && c != '\n') out += c;
+        }
+        return out;
+    };
+
     std::ostringstream oss;
     oss << "GET " << config_.path << " HTTP/1.1\r\n"
         << "Host: " << config_.host << "\r\n";
     if (!config_.api_key.empty()) {
-        oss << "Authorization: Bearer " << config_.api_key << "\r\n";
+        oss << "Authorization: Bearer " << sanitise_header_value(config_.api_key) << "\r\n";
     }
     oss << "Accept: application/json\r\n"
         << "Connection: close\r\n\r\n";
@@ -218,6 +228,38 @@ bool RestOmsAdapter::parse_position(const std::string& body,
     std::string json = (json_start != std::string::npos)
                        ? body.substr(json_start + 4)
                        : body;
+
+    // Decode chunked transfer encoding if present (hex-size CRLF data CRLF ...).
+    // Detect cheaply: first line must be a hex number followed by CRLF.
+    {
+        size_t first_crlf = json.find("\r\n");
+        if (first_crlf != std::string::npos && first_crlf > 0) {
+            std::string maybe_hex = json.substr(0, first_crlf);
+            bool all_hex = !maybe_hex.empty();
+            for (char c : maybe_hex)
+                if (!std::isxdigit(static_cast<unsigned char>(c))) { all_hex = false; break; }
+            if (all_hex) {
+                // Reassemble chunked body.
+                std::string decoded;
+                size_t pos = 0;
+                while (pos < json.size()) {
+                    size_t end_of_size = json.find("\r\n", pos);
+                    if (end_of_size == std::string::npos) break;
+                    size_t chunk_size = 0;
+                    try { chunk_size = std::stoul(json.substr(pos, end_of_size - pos), nullptr, 16); }
+                    catch (...) { break; }
+                    // Guard against malformed/malicious chunk sizes.
+                    constexpr size_t kMaxChunkSize = 1024 * 1024;  // 1 MB sanity limit
+                    if (chunk_size == 0 || chunk_size > kMaxChunkSize) break;
+                    size_t data_start = end_of_size + 2;
+                    if (chunk_size > json.size() - data_start) break;
+                    decoded.append(json, data_start, chunk_size);
+                    pos = data_start + chunk_size + 2;  // skip trailing CRLF
+                }
+                if (!decoded.empty()) json = std::move(decoded);
+            }
+        }
+    }
 
     bool ok = true;
     ok &= extract_double(json, "net_position",   out.net_position);

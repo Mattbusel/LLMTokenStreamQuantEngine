@@ -115,8 +115,8 @@ public:
     /// * `enabled` — true to enable backtest (every-token) mode.
     void set_backtest_mode(bool enabled);
 
-    /// Return a const reference to the live statistics struct.
-    const Stats& get_stats() const { return stats_; }
+    /// Return a copy of the current signal statistics. Thread-safe snapshot.
+    Stats get_stats() const { return stats_; }
 
     /// Register an OutputSink to receive all emitted signals.
     ///

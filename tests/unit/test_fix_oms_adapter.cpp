@@ -273,3 +273,134 @@ TEST(FixOmsAdapterTest, test_set_position_callback_can_be_overwritten) {
 
     SUCCEED();
 }
+
+// ===========================================================================
+// Parsing logic tests — using a testable subclass to expose private helpers.
+// ===========================================================================
+
+namespace {
+
+/// Subclass that promotes the private static/const helpers to public so the
+/// test suite can invoke them without a running FIX session.
+class TestableFixOmsAdapter : public FixOmsAdapter {
+public:
+    explicit TestableFixOmsAdapter(FixOmsAdapter::Config cfg)
+        : FixOmsAdapter(std::move(cfg)) {}
+
+    // Expose private static helpers.
+    std::string pub_fix_checksum(const std::string& msg) const {
+        return fix_checksum(msg);
+    }
+    std::string pub_fix_message(const std::string& body) const {
+        return fix_message(body);
+    }
+};
+
+} // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// Test 15: fix_checksum("") produces "000".
+//          The sum of zero bytes mod 256 is 0, formatted as three digits.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_checksum_empty_string) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    EXPECT_EQ(adapter.pub_fix_checksum(""), "000")
+        << "Checksum of empty string must be \"000\"";
+}
+
+// ---------------------------------------------------------------------------
+// Test 16: fix_checksum("ABC") — ASCII 65+66+67 = 198 mod 256 = 198.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_checksum_known_value) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    // 'A'=65, 'B'=66, 'C'=67  ->  sum=198, mod 256=198  -> "198"
+    EXPECT_EQ(adapter.pub_fix_checksum("ABC"), "198")
+        << "Checksum of \"ABC\" must be \"198\"";
+}
+
+// ---------------------------------------------------------------------------
+// Test 17: fix_checksum wraps correctly at the 256 boundary.
+//          Build a string whose byte sum is exactly 256 — expect "000".
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_checksum_wraps_at_256) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    // Two bytes of value 128 sum to 256, mod 256 == 0.
+    std::string s(2, static_cast<char>(128));
+    EXPECT_EQ(adapter.pub_fix_checksum(s), "000")
+        << "Checksum must wrap to 0 when byte sum equals 256";
+}
+
+// ---------------------------------------------------------------------------
+// Test 18: fix_checksum output is always exactly 3 characters wide.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_checksum_always_three_digits) {
+    TestableFixOmsAdapter adapter(make_test_config());
+
+    // Values that produce 1-digit, 2-digit, and 3-digit checksums before
+    // zero-padding: single byte 0x01 -> "001", 0x09 -> "009", 0xFF -> "255".
+    EXPECT_EQ(adapter.pub_fix_checksum(std::string(1, '\x01')).size(), 3u);
+    EXPECT_EQ(adapter.pub_fix_checksum(std::string(1, '\x09')).size(), 3u);
+    EXPECT_EQ(adapter.pub_fix_checksum(std::string(1, '\xff')).size(), 3u);
+}
+
+// ---------------------------------------------------------------------------
+// Test 19: fix_message() wraps a body and appends the checksum tag "10=".
+//          The resulting message must contain "10=" followed by three digits
+//          and a SOH terminator.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_message_contains_checksum_tag) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    std::string body = "35=0\x01""49=TEST\x01""56=BROKER\x01";
+    std::string msg  = adapter.pub_fix_message(body);
+
+    // Must begin with BeginString.
+    EXPECT_EQ(msg.substr(0, 9), "8=FIX.4.2")
+        << "fix_message() must start with BeginString 8=FIX.4.2";
+
+    // Must contain the checksum delimiter.
+    EXPECT_NE(msg.find("10="), std::string::npos)
+        << "fix_message() must include the checksum tag 10=";
+
+    // Last character must be SOH (the checksum tag terminator).
+    EXPECT_EQ(static_cast<unsigned char>(msg.back()), 0x01u)
+        << "fix_message() must end with a SOH byte";
+}
+
+// ---------------------------------------------------------------------------
+// Test 20: fix_message() BodyLength tag (9=) equals body.size() + 7.
+//          The spec says BodyLength counts from the first byte after tag 9's
+//          SOH through the end of the checksum tag "10=XXX\x01" (7 bytes).
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_message_body_length_correct) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    std::string body = "35=A\x01""49=S\x01""56=T\x01";
+    std::string msg  = adapter.pub_fix_message(body);
+
+    // Locate "9=" tag and extract the numeric value.
+    size_t tag9_pos = msg.find("9=");
+    ASSERT_NE(tag9_pos, std::string::npos) << "BodyLength tag 9= not found";
+    size_t val_start = tag9_pos + 2;
+    size_t soh_pos   = msg.find('\x01', val_start);
+    ASSERT_NE(soh_pos, std::string::npos);
+    int body_length = std::stoi(msg.substr(val_start, soh_pos - val_start));
+
+    EXPECT_EQ(static_cast<size_t>(body_length), body.size() + 7u)
+        << "BodyLength must equal body.size() + 7 (checksum tag width)";
+}
+
+// ---------------------------------------------------------------------------
+// Test 21: description() for FixOmsAdapter contains "FIX" and the arrow
+//          notation "SenderCompID->TargetCompID".
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_description_format) {
+    FixOmsAdapter::Config cfg = make_test_config();
+    cfg.sender_comp_id = "QUANT";
+    cfg.target_comp_id = "PRIME";
+    FixOmsAdapter adapter(cfg);
+
+    std::string desc = adapter.description();
+    EXPECT_NE(desc.find("FIX"), std::string::npos)
+        << "description() must mention FIX";
+    EXPECT_NE(desc.find("QUANT->PRIME"), std::string::npos)
+        << "description() must show SenderCompID->TargetCompID";
+}

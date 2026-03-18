@@ -110,7 +110,7 @@ TEST(ConfigTest, test_config_save_to_file_roundtrip_preserves_values) {
 
     Config original;
     original.load_from_yaml_string(kValidYaml);
-    original.save_to_file(tmp_path);
+    ASSERT_TRUE(original.save_to_file(tmp_path));
 
     Config reloaded;
     bool ok = reloaded.load_from_file(tmp_path);
@@ -245,6 +245,49 @@ TEST(ConfigTest, test_config_negative_bias_sensitivity_returns_false) {
     bool ok = cfg.load_from_yaml_string("trading:\n  bias_sensitivity: -1.0\n");
     EXPECT_FALSE(ok);
     EXPECT_DOUBLE_EQ(cfg.get_config().trading.bias_sensitivity, 1.0);
+}
+
+// ---------------------------------------------------------------------------
+// New: concurrent hot-reload + get_config is safe (improvement #15)
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_concurrent_hot_reload_and_get_config_is_safe) {
+    const std::string tmp_path = "/tmp/llmquant_test_concurrent_hotreload.yaml";
+    {
+        std::ofstream f(tmp_path);
+        f << "trading:\n  bias_sensitivity: 1.0\n";
+    }
+
+    Config cfg;
+    cfg.load_from_file(tmp_path);
+    cfg.start_watching(tmp_path, [](const SystemConfig&) {}, /*poll_interval_ms=*/50);
+
+    std::atomic<bool> stop_readers{false};
+
+    // Spawn a reader thread that continuously calls get_config().
+    std::thread reader([&]() {
+        while (!stop_readers.load()) {
+            volatile double v = cfg.get_config().trading.bias_sensitivity;
+            (void)v;
+        }
+    });
+
+    // Write to the file several times to trigger hot-reloads.
+    for (int i = 1; i <= 5; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        std::ofstream f(tmp_path);
+        f << "trading:\n  bias_sensitivity: " << static_cast<double>(i) << "\n";
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    stop_readers = true;
+    reader.join();
+
+    cfg.stop_watching();
+    std::remove(tmp_path.c_str());
+
+    // No assertion on values — just verifying no crash or deadlock.
+    SUCCEED();
 }
 
 } // namespace

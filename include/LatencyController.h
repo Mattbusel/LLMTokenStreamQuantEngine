@@ -143,7 +143,7 @@ private:
 
     mutable std::mutex pressure_mutex_;
     PressureState pressure_;
-    std::atomic<double> backoff_multiplier_{1.0};
+    double backoff_multiplier_{1.0};  ///< Protected by pressure_mutex_.
 
     /// Recompute the composite pressure and update the backoff multiplier.
     /// Must be called with pressure_mutex_ held.
@@ -155,5 +155,10 @@ private:
 /// non-static data members in C++.
 inline thread_local std::chrono::high_resolution_clock::time_point
     latency_measurement_start_;
+
+/// Guard flag: true only between a paired start_measurement / end_measurement.
+/// Prevents end_measurement() from recording a garbage value if called before
+/// start_measurement() on a given thread.
+inline thread_local bool latency_measurement_active_ = false;
 
 } // namespace llmquant
