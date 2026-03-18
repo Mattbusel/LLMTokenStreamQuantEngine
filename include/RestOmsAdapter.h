@@ -107,6 +107,20 @@ public:
      */
     uint64_t error_count() const { return error_count_.load(); }
 
+protected:
+    /**
+     * @brief Parse a minimal JSON position object from an HTTP response.
+     *
+     * Exposed as protected so test subclasses can invoke it directly
+     * without requiring a live HTTP connection.
+     *
+     * @param body Full HTTP response (including headers) or bare JSON.
+     * @param out  Output parameter populated on success.
+     * @return false if any required field is missing or malformed.
+     */
+    static bool parse_position(const std::string& body,
+                               RiskManager::PositionState& out);
+
 private:
     /** @brief Main loop executed on the poller thread. */
     void poller_thread();
@@ -127,16 +141,6 @@ private:
      * @return Formatted HTTP/1.1 GET request.
      */
     std::string build_request() const;
-
-    /**
-     * @brief Parse a minimal JSON position object from an HTTP response.
-     *
-     * @param body Full HTTP response (including headers) or bare JSON.
-     * @param out  Output parameter populated on success.
-     * @return false if any required field is missing or malformed.
-     */
-    static bool parse_position(const std::string& body,
-                               RiskManager::PositionState& out);
 
     Config            config_;
     PositionCallback  callback_;

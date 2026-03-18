@@ -67,7 +67,7 @@ TEST(ConfigTest, test_config_load_from_yaml_string_valid_yaml_parses_all_fields)
 
     // logging
     EXPECT_EQ(sc.logging.log_file_path,      "/var/log/engine.log");
-    EXPECT_EQ(sc.logging.format,             "json");
+    EXPECT_EQ(sc.logging.format,             "JSON");  // Config normalises format to uppercase.
     EXPECT_FALSE(sc.logging.enable_console);
     EXPECT_EQ(sc.logging.flush_interval_ms, 50);
 }
@@ -88,8 +88,8 @@ TEST(ConfigTest, test_config_load_from_yaml_string_missing_fields_uses_defaults)
     EXPECT_EQ(sc.token_stream.token_interval_ms, 10);
     EXPECT_EQ(sc.token_stream.buffer_size,       1024u);
 
-    // Logging defaults
-    EXPECT_EQ(sc.logging.format, "csv");
+    // Logging defaults: format is stored uppercase by Config::set_defaults().
+    EXPECT_EQ(sc.logging.format, "CSV");
 }
 
 TEST(ConfigTest, test_config_load_from_file_nonexistent_file_returns_false_and_sets_defaults) {
@@ -161,7 +161,7 @@ TEST(ConfigTest, test_config_get_config_returns_correct_defaults) {
 
     // logging defaults
     EXPECT_EQ(sc.logging.log_file_path,      "metrics.log");
-    EXPECT_EQ(sc.logging.format,             "csv");
+    EXPECT_EQ(sc.logging.format,             "CSV");  // Default is uppercase in LoggingConfig.
     EXPECT_TRUE(sc.logging.enable_console);
     EXPECT_EQ(sc.logging.flush_interval_ms, 100);
 }

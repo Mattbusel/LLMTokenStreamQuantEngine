@@ -82,6 +82,28 @@ public:
      */
     uint64_t messages_parsed() const { return messages_parsed_.load(); }
 
+protected:
+    /**
+     * @brief Compute the FIX 4.2 checksum for a message body string.
+     *
+     * Exposed as protected so test subclasses can verify checksum logic
+     * without a live FIX session.
+     *
+     * @param msg The raw FIX message body (all tags before tag 10).
+     * @return Three-character zero-padded checksum string (e.g. "042").
+     */
+    static std::string fix_checksum(const std::string& msg);
+
+    /**
+     * @brief Wrap a partial FIX message body with BeginString/BodyLength/CheckSum.
+     *
+     * Exposed as protected so test subclasses can verify message framing.
+     *
+     * @param body Partial FIX message body (tags 35 onward, without tags 8/9/10).
+     * @return Complete framed FIX message string.
+     */
+    std::string fix_message(const std::string& body) const;
+
 private:
     void reader_thread();
     bool reconnect_with_backoff();
@@ -94,8 +116,6 @@ private:
     std::string build_heartbeat() const;
     std::string build_resend_request(int begin_seq) const;
     std::string build_sequence_reset(int new_seq_num) const;
-    std::string fix_message(const std::string& body) const;
-    static std::string fix_checksum(const std::string& msg);
 
     using FixFields = std::map<int, std::string>;
     static FixFields parse_fix(const std::string& raw);
