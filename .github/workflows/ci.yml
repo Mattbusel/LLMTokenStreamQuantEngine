@@ -31,6 +31,7 @@ jobs:
             ninja-build \
             libspdlog-dev \
             libyaml-cpp-dev \
+            libhiredis-dev \
             libgtest-dev \
             libgmock-dev \
             nlohmann-json3-dev \
@@ -69,7 +70,7 @@ jobs:
 
       - name: CMake configure
         run: |
-          cmake -B build \
+          cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCMAKE_C_COMPILER="$CC" \
@@ -83,17 +84,19 @@ jobs:
 
       - name: Run tests (ctest)
         run: |
-          ctest --test-dir build \
+          cd build && ctest \
             --output-on-failure \
             --parallel 4
 
       - name: clang-tidy static analysis
         if: matrix.compiler == 'clang' && matrix.build_type == 'Release'
         run: |
-          find src include -name '*.cpp' | xargs clang-tidy-14 \
+          find src -name '*.cpp' | xargs clang-tidy-14 \
             -p build \
             --warnings-as-errors='' \
             --extra-arg=-std=c++20 \
+            --extra-arg=-Iinclude \
+            --extra-arg=-I${{ github.workspace }}/include \
             2>&1 | tee clang-tidy-report.txt
           echo "clang-tidy completed"
 
@@ -121,13 +124,13 @@ jobs:
           # and explicit leak-detection to catch any latent issues.
           export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1:check_initialization_order=1"
           export UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
-          ctest --test-dir build \
+          cd build && ctest \
             --output-on-failure \
             --parallel 1 \
-            2>&1 | tee asan-report.txt
+            2>&1 | tee ../asan-report.txt
 
       # -----------------------------------------------------------------------
-      # Valgrind memcheck (GCC Release only — no ASAN instrumentation)
+      # Valgrind memcheck (GCC Release only — Linux only, no ASAN instrumentation)
       # -----------------------------------------------------------------------
       - name: Valgrind memcheck
         if: matrix.compiler == 'gcc' && matrix.build_type == 'Release'
@@ -185,12 +188,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Doxygen and Graphviz
-        run: sudo apt-get update -qq && sudo apt-get install -y doxygen graphviz
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libhiredis-dev \
+            libgtest-dev \
+            libgmock-dev \
+            nlohmann-json3-dev \
+            libssl-dev \
+            doxygen \
+            graphviz
 
       - name: Configure (needed to generate llmquant_version.h)
         run: |
-          cmake -B build_docs \
+          cmake -S . -B build_docs \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
 
@@ -222,11 +238,11 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl --triplet x64-windows
+          vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl hiredis --triplet x64-windows
 
       - name: CMake configure
         run: |
-          cmake -B build `
+          cmake -S . -B build `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
             -DLLMQUANT_WARNINGS_AS_ERRORS=ON
@@ -236,7 +252,7 @@ jobs:
 
       - name: Run tests
         run: |
-          ctest --test-dir build `
+          cd build && ctest `
             -C ${{ matrix.build_type }} `
             --output-on-failure `
             --parallel 4
