@@ -1,6 +1,7 @@
 # Doxyfile for LLMTokenStreamQuantEngine
 # Generate HTML API documentation with: doxygen docs/Doxyfile
-# Output will be written to docs/api/
+# Output will be written to docs/api/html/index.html
+# CMake build target: cmake --build build --target docs
 
 #---------------------------------------------------------------------------
 # Project metadata
@@ -9,22 +10,33 @@
 PROJECT_NAME           = LLMTokenStreamQuantEngine
 PROJECT_NUMBER         = 1.1.0
 PROJECT_BRIEF          = "Real-time LLM token stream ingestion, semantic signal extraction, and risk-gated trade signal generation."
+PROJECT_LOGO           =
 
 #---------------------------------------------------------------------------
 # Input
 #---------------------------------------------------------------------------
 
-INPUT                  = src/ include/
+INPUT                  = src/ include/ README.md docs/ARCHITECTURE.md
 RECURSIVE              = YES
-FILE_PATTERNS          = *.h *.hpp *.cpp
+FILE_PATTERNS          = *.h *.hpp *.cpp *.md
+USE_MDFILE_AS_MAINPAGE = README.md
+EXCLUDE_PATTERNS       = */build/* */.git/*
 
 #---------------------------------------------------------------------------
-# Extraction
+# Extraction — document everything in public headers
 #---------------------------------------------------------------------------
 
 EXTRACT_ALL            = YES
 EXTRACT_PRIVATE        = NO
 EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+JAVADOC_AUTOBRIEF      = NO
+QT_AUTOBRIEF           = NO
+MULTILINE_CPP_IS_BRIEF = NO
+ALWAYS_DETAILED_SEC    = YES
+INLINE_INHERITED_MEMB  = YES
 
 #---------------------------------------------------------------------------
 # Output
@@ -33,9 +45,15 @@ EXTRACT_STATIC         = YES
 OUTPUT_DIRECTORY       = docs/api
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+GENERATE_XML           = NO
 HTML_OUTPUT            = html
 HTML_FILE_EXTENSION    = .html
 HTML_COLORSTYLE        = AUTO_DARK
+HTML_TIMESTAMP         = YES
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
 
 #---------------------------------------------------------------------------
 # Source browsing
@@ -46,34 +64,50 @@ INLINE_SOURCES         = NO
 STRIP_CODE_COMMENTS    = NO
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
+VERBATIM_HEADERS       = YES
 
 #---------------------------------------------------------------------------
-# Preprocessor
+# Preprocessor — expand optional feature macros so all code is documented
 #---------------------------------------------------------------------------
 
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = NO
 PREDEFINED             = LLMQUANT_TLS_ENABLED \
-                         LLMQUANT_REDIS_ENABLED
+                         LLMQUANT_REDIS_ENABLED \
+                         _WIN32
 
 #---------------------------------------------------------------------------
-# Diagrams (requires Graphviz dot)
+# Diagrams (requires Graphviz dot — set HAVE_DOT=YES when Graphviz is present)
 #---------------------------------------------------------------------------
 
-HAVE_DOT               = NO
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+DOT_TRANSPARENT        = YES
 CLASS_DIAGRAMS         = YES
 COLLABORATION_GRAPH    = YES
 INCLUDE_GRAPH          = YES
 INCLUDED_BY_GRAPH      = YES
 CALL_GRAPH             = NO
 CALLER_GRAPH           = NO
+DIRECTORY_GRAPH        = YES
+DOT_GRAPH_MAX_NODES    = 100
 
 #---------------------------------------------------------------------------
-# Warnings
+# Warnings — surface undocumented public API as warnings (CI-friendly)
 #---------------------------------------------------------------------------
 
 QUIET                  = NO
 WARNINGS               = YES
 WARN_IF_UNDOCUMENTED   = YES
 WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES
+WARN_LOGFILE           = docs/api/doxygen-warnings.txt
+
+#---------------------------------------------------------------------------
+# Alphabetical index and search
+#---------------------------------------------------------------------------
+
+ALPHABETICAL_INDEX     = YES
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
