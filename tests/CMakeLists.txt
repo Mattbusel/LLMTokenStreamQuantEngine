@@ -20,6 +20,7 @@ add_executable(tests
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
     integration/test_full_pipeline.cpp
+    integration/test_pipeline_integration.cpp
     performance/bench_hot_path.cpp
 )
 
@@ -34,7 +35,7 @@ add_test(NAME unit_tests
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 
 add_test(NAME integration_tests
-    COMMAND tests --gtest_filter="*pipeline*:*Pipeline*:*chaos*:*Chaos*:*OmsPipeline*:*FullPipeline5Stage*"
+    COMMAND tests --gtest_filter="*pipeline*:*Pipeline*:*chaos*:*Chaos*:*OmsPipeline*:*FullPipeline5Stage*:*PipelineIntegration*"
 )
 set_tests_properties(integration_tests PROPERTIES LABELS "integration")
 

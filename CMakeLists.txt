@@ -172,8 +172,12 @@ add_subdirectory(tests)
 
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
+# fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
+# fuzz_token_stream); tests/fuzz/ contains the original pipeline harnesses.
 # ---------------------------------------------------------------------------
 if(LLMQUANT_ENABLE_FUZZING)
+    add_subdirectory(fuzz)
+
     foreach(_fuzz_src fuzz_deduplicator fuzz_pipeline)
         add_executable(${_fuzz_src} tests/fuzz/${_fuzz_src}.cpp)
         target_include_directories(${_fuzz_src} PRIVATE ${CMAKE_SOURCE_DIR}/include)
