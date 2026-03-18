@@ -9,6 +9,46 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- `CMakeLists.txt`: replaced deprecated `yaml-cpp` link target with
+  `yaml-cpp::yaml-cpp` to silence CMake deprecation warnings from yaml-cpp 0.8+.
+- `CMakeLists.txt`: replaced absolute `${CMAKE_SOURCE_DIR}/include` and
+  `${CMAKE_CURRENT_BINARY_DIR}/include` in `target_include_directories` with
+  generator expressions (`$<BUILD_INTERFACE:...>` / `$<INSTALL_INTERFACE:...>`)
+  to fix the CMake install target error
+  ("INTERFACE_INCLUDE_DIRECTORIES contains path prefixed in source directory").
+- `src/FixOmsAdapter.cpp`: added `#define NOMINMAX` before `<winsock2.h>` on
+  Windows to prevent the `min`/`max` macro collision that caused
+  `std::min(1 << n, kMax)` to fail to compile under MSVC (`C2589`/`C2059`).
+- `include/TradeSignalEngine.h` (`Stats`): added explicit copy constructor and
+  copy assignment operator so `get_stats()` can return the struct by value on
+  MSVC, where the compiler rejects implicit copy of `std::atomic` members.
+- `include/RestOmsAdapter.h`: moved `parse_position` from `private` to
+  `protected` so `TestableRestOmsAdapter` in the test suite can call it via
+  subclassing without a compile error (`C2248`).
+- `include/FixOmsAdapter.h`: moved `fix_checksum` and `fix_message` from
+  `private` to `protected` so `TestableFixOmsAdapter` in the test suite can
+  call them via subclassing without a compile error (`C2248`).
+- `src/TradeSignalEngine.cpp`: initialised `last_signal_time_` to the epoch
+  (default-constructed `time_point{}`) rather than `now()`, so the very first
+  token processed always fires a signal regardless of the configured cooldown.
+  Previously the constructor-time `now()` meant the cooldown was already active
+  at construction, causing the first emission to be silently dropped.
+- `tests/unit/test_config.cpp`: corrected three test assertions that expected
+  lowercase `"json"` / `"csv"` for `SystemConfig::logging.format`; the
+  `Config` implementation normalises the value to uppercase at parse time, so
+  the correct expected values are `"JSON"` and `"CSV"`.
+- `tests/unit/test_network_error_paths.cpp` (`realtime_cooldown_suppresses_rapid_signals`):
+  corrected assertion to match the fixed engine behaviour — `emitted == 1` and
+  `signals_suppressed == 0` (suppressed counts only signals with no callback
+  and no output sinks, not cooldown-dropped ones).
+- `tests/unit/test_network_error_paths.cpp` (`bind_blocker_socket`): on Windows,
+  the blocker socket now uses `SO_EXCLUSIVEADDRUSE` and binds to `INADDR_ANY`
+  so that a subsequent `SO_REUSEADDR` bind by `PrometheusExporter` is correctly
+  rejected; previously both sockets used `SO_REUSEADDR` on loopback, which
+  Windows permits (unlike POSIX), causing the port-conflict test to pass when
+  it should have failed.
+
 ### Added
 - `include/llmquant_version.h.in` — CMake-generated version header exposing
   `LLMQUANT_VERSION`, `LLMQUANT_VERSION_MAJOR/MINOR/PATCH`, and

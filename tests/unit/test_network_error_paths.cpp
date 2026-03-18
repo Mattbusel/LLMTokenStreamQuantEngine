@@ -125,7 +125,7 @@ static int bind_blocker_socket(uint16_t port) {
     sockaddr_in addr{};
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(port);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
 #ifdef _WIN32
