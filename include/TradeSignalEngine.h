@@ -158,7 +158,7 @@ public:
      *
      * @return Copy of the current Stats struct.
      */
-    Stats get_stats() const { return stats_; }
+    Stats get_stats() const noexcept { return stats_; }
 
     /**
      * @brief Register an OutputSink to receive all emitted signals.

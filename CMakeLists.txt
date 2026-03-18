@@ -11,9 +11,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------
-option(LLMQUANT_ENABLE_ASAN   "Build with AddressSanitizer + UBSan (Debug only)"  OFF)
+option(LLMQUANT_ENABLE_ASAN     "Build with AddressSanitizer + UBSan (Debug only)"  OFF)
 option(LLMQUANT_WARNINGS_AS_ERRORS "Treat all compiler warnings as errors"        ON)
 option(LLMQUANT_ENABLE_CLANG_TIDY  "Run clang-tidy on library sources"            OFF)
+option(LLMQUANT_ENABLE_FUZZING  "Build libFuzzer targets (requires clang + -fsanitize=fuzzer)" OFF)
+option(LLMQUANT_ENABLE_COVERAGE "Build with gcov/lcov coverage instrumentation"   OFF)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -151,10 +153,38 @@ add_executable(LLMTokenStreamQuantEngine src/main.cpp)
 target_link_libraries(LLMTokenStreamQuantEngine PRIVATE llmquant)
 
 # ---------------------------------------------------------------------------
+# Coverage instrumentation (GCC/Clang, requires LLMQUANT_ENABLE_COVERAGE=ON)
+# ---------------------------------------------------------------------------
+if(LLMQUANT_ENABLE_COVERAGE)
+    if(MSVC)
+        message(WARNING "Coverage instrumentation is not supported with MSVC; ignoring LLMQUANT_ENABLE_COVERAGE")
+    else()
+        target_compile_options(llmquant PUBLIC --coverage -O0 -g)
+        target_link_options(llmquant PUBLIC --coverage)
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 enable_testing()
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
+# ---------------------------------------------------------------------------
+if(LLMQUANT_ENABLE_FUZZING)
+    foreach(_fuzz_src fuzz_deduplicator fuzz_pipeline)
+        add_executable(${_fuzz_src} tests/fuzz/${_fuzz_src}.cpp)
+        target_include_directories(${_fuzz_src} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_link_libraries(${_fuzz_src} PRIVATE llmquant)
+        # -fsanitize=fuzzer provides the LLVMFuzzerRunDriver main() and the
+        # coverage-guided mutation engine.  Address + UB sanitisers are layered
+        # on top to detect memory errors during fuzzing.
+        target_compile_options(${_fuzz_src} PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_link_options(   ${_fuzz_src} PRIVATE -fsanitize=fuzzer,address,undefined)
+    endforeach()
+endif()
 
 # ---------------------------------------------------------------------------
 # Install targets and package config (library consumers)

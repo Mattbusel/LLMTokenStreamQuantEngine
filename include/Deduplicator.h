@@ -38,7 +38,7 @@ struct DedupKey {
      * @return A DedupKey with the computed hash.
      */
     static DedupKey from_token(const std::string& token,
-                               const std::string& context = "");
+                               const std::string& context = "") noexcept;
 
     /**
      * @brief Equality comparison operator.
@@ -160,14 +160,14 @@ public:
      *
      * @return Duplicate hit count.
      */
-    uint64_t total_duplicates() const { return total_duplicates_.load(); }
+    uint64_t total_duplicates() const noexcept { return total_duplicates_.load(); }
 
     /**
      * @brief Return the total number of novel keys registered since construction.
      *
      * @return Novel registration count.
      */
-    uint64_t total_novel() const { return total_novel_.load(); }
+    uint64_t total_novel() const noexcept { return total_novel_.load(); }
 
     /**
      * @brief Start a background thread that calls purge_expired() every interval_s seconds.
@@ -265,7 +265,7 @@ public:
      *
      * @return The redis_url string passed to the constructor.
      */
-    const std::string& redis_url() const { return redis_url_; }
+    const std::string& redis_url() const noexcept { return redis_url_; }
 
     /**
      * @brief Returns true if a live Redis connection is active.

@@ -168,7 +168,7 @@ public:
      *
      * @return Const reference to the internal Stats struct.
      */
-    const Stats& get_stats() const { return stats_; }
+    const Stats& get_stats() const noexcept { return stats_; }
 
 private:
     bool check_magnitude(const TradeSignal& signal);

@@ -16,7 +16,7 @@ namespace llmquant {
 // DedupKey
 // ---------------------------------------------------------------------------
 
-DedupKey DedupKey::from_token(const std::string& token, const std::string& context) {
+DedupKey DedupKey::from_token(const std::string& token, const std::string& context) noexcept {
     // Deterministic key: FNV-1a 64-bit hash of "token|context".
     // Store the raw integer to avoid double-hashing a hex string.
     // For production, replace with SHA-256 if collision resistance

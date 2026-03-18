@@ -1,0 +1,199 @@
+name: Coverage and Integration Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Full 5-stage pipeline integration tests + gcov/lcov coverage report
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: "Coverage (GCC, Debug + --coverage)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libhiredis-dev \
+            libgtest-dev \
+            libgmock-dev \
+            nlohmann-json3-dev \
+            libssl-dev \
+            lcov \
+            gcovr
+
+      - name: Configure with coverage instrumentation
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF \
+            -DLLMQUANT_ENABLE_ASAN=OFF \
+            -DLLMQUANT_ENABLE_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # -----------------------------------------------------------------------
+      # Run all tests with output so failures are visible in the workflow log.
+      # The integration label covers the full 5-stage pipeline tests.
+      # -----------------------------------------------------------------------
+      - name: Run unit tests
+        run: |
+          cd build && ctest \
+            -L unit \
+            --output-on-failure \
+            --parallel 4
+
+      - name: Run integration tests (full 5-stage pipeline)
+        run: |
+          cd build && ctest \
+            -L integration \
+            --output-on-failure \
+            --parallel 1
+
+      - name: Run all tests (final gate)
+        run: |
+          cd build && ctest \
+            --output-on-failure \
+            --parallel 4
+
+      # -----------------------------------------------------------------------
+      # Collect coverage data and generate HTML + Cobertura XML reports.
+      # -----------------------------------------------------------------------
+      - name: Collect gcov data
+        run: |
+          lcov \
+            --capture \
+            --directory build \
+            --output-file coverage_raw.info \
+            --ignore-errors mismatch
+
+      - name: Strip system and test headers from coverage
+        run: |
+          lcov \
+            --remove coverage_raw.info \
+              '/usr/*' \
+              '*/tests/*' \
+              '*/googletest/*' \
+              '*/spdlog/*' \
+              '*/yaml-cpp/*' \
+              '*/nlohmann/*' \
+            --output-file coverage.info \
+            --ignore-errors unused
+
+      - name: Generate HTML report
+        run: |
+          genhtml \
+            coverage.info \
+            --output-directory coverage_html \
+            --title "LLMTokenStreamQuantEngine coverage" \
+            --show-details \
+            --legend
+
+      - name: Generate Cobertura XML (for PR annotations)
+        run: |
+          gcovr \
+            --root . \
+            --filter 'src/' \
+            --filter 'include/' \
+            --exclude-directories tests \
+            --xml-pretty \
+            --output coverage.xml
+
+      - name: Print coverage summary
+        run: |
+          lcov --summary coverage.info 2>&1 | tee coverage_summary.txt
+          echo ""
+          echo "--- Line coverage by file ---"
+          lcov --list coverage.info 2>&1 | head -60
+
+      - name: Upload coverage HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage_html/
+
+      - name: Upload Cobertura XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+      - name: Upload raw lcov data (for diff coverage tools)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage.info
+
+  # ---------------------------------------------------------------------------
+  # LibFuzzer smoke run (clang only, 30-second budget per target)
+  # Validates that fuzz targets compile and do not immediately crash.
+  # ---------------------------------------------------------------------------
+  fuzz-smoke:
+    name: "LibFuzzer smoke (clang, 30 s per target)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libhiredis-dev \
+            libgtest-dev \
+            libgmock-dev \
+            nlohmann-json3-dev \
+            libssl-dev
+
+      - name: Configure with fuzzing enabled
+        run: |
+          cmake -S . -B build-fuzz \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link,address,undefined" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined" \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF \
+            -DLLMQUANT_ENABLE_ASAN=OFF \
+            -DLLMQUANT_ENABLE_FUZZING=ON
+
+      - name: Build fuzz targets
+        run: cmake --build build-fuzz --target fuzz_deduplicator fuzz_pipeline --parallel
+
+      - name: Smoke-run fuzz_deduplicator (30 s)
+        run: |
+          build-fuzz/fuzz_deduplicator \
+            -max_total_time=30 \
+            -max_len=256 \
+            -print_final_stats=1 \
+            2>&1 | tail -20
+
+      - name: Smoke-run fuzz_pipeline (30 s)
+        run: |
+          build-fuzz/fuzz_pipeline \
+            -max_total_time=30 \
+            -max_len=512 \
+            -print_final_stats=1 \
+            2>&1 | tail -20
