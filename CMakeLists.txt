@@ -105,3 +105,60 @@ target_link_libraries(LLMTokenStreamQuantEngine PRIVATE llmquant)
 # ---------------------------------------------------------------------------
 enable_testing()
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# Install targets and package config (library consumers)
+# ---------------------------------------------------------------------------
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS llmquant LLMTokenStreamQuantEngine
+    EXPORT llmquantTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT llmquantTargets
+    FILE llmquantTargets.cmake
+    NAMESPACE llmquant::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/llmquant
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/llmquantConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/llmquantConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/llmquant
+)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/llmquantConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/llmquantConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/llmquantConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/llmquant
+)
+
+# ---------------------------------------------------------------------------
+# Docs (optional — requires Doxygen)
+# ---------------------------------------------------------------------------
+# To generate HTML API documentation:
+#   cmake --build build --target docs
+# Output is written to docs/api/html/index.html
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/docs/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating API documentation with Doxygen"
+        VERBATIM
+    )
+endif()

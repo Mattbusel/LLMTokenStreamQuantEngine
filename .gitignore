@@ -1,4 +1,6 @@
 build/
+.claude/
+docs/api/
 *.log
 *.obj
 *.exe

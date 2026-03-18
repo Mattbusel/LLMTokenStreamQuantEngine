@@ -1,0 +1,79 @@
+# Doxyfile for LLMTokenStreamQuantEngine
+# Generate HTML API documentation with: doxygen docs/Doxyfile
+# Output will be written to docs/api/
+
+#---------------------------------------------------------------------------
+# Project metadata
+#---------------------------------------------------------------------------
+
+PROJECT_NAME           = LLMTokenStreamQuantEngine
+PROJECT_NUMBER         = 1.0.0
+PROJECT_BRIEF          = "Real-time LLM token stream ingestion, semantic signal extraction, and risk-gated trade signal generation."
+
+#---------------------------------------------------------------------------
+# Input
+#---------------------------------------------------------------------------
+
+INPUT                  = src/ include/
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp *.cpp
+
+#---------------------------------------------------------------------------
+# Extraction
+#---------------------------------------------------------------------------
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+#---------------------------------------------------------------------------
+# Output
+#---------------------------------------------------------------------------
+
+OUTPUT_DIRECTORY       = docs/api
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+HTML_FILE_EXTENSION    = .html
+HTML_COLORSTYLE        = AUTO_DARK
+
+#---------------------------------------------------------------------------
+# Source browsing
+#---------------------------------------------------------------------------
+
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+#---------------------------------------------------------------------------
+# Preprocessor
+#---------------------------------------------------------------------------
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+PREDEFINED             = LLMQUANT_TLS_ENABLED \
+                         LLMQUANT_REDIS_ENABLED
+
+#---------------------------------------------------------------------------
+# Diagrams (requires Graphviz dot)
+#---------------------------------------------------------------------------
+
+HAVE_DOT               = NO
+CLASS_DIAGRAMS         = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+#---------------------------------------------------------------------------
+# Warnings
+#---------------------------------------------------------------------------
+
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES

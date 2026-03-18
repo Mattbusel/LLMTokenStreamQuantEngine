@@ -13,16 +13,20 @@ namespace llmquant { class MetricsLogger; }
 
 namespace llmquant {
 
-/// Production risk management layer that gates TradeSignals before emission.
-///
-/// Enforces position limits, drawdown guards, signal magnitude caps, and a
-/// per-second signal rate limit. Signals that breach any threshold are
-/// suppressed and counted; breaches are surfaced via an optional alert callback.
-///
-/// Thread safety: all public methods are safe to call concurrently.
+/**
+ * @brief Production risk management layer that gates TradeSignals before emission.
+ *
+ * Enforces position limits, drawdown guards, signal magnitude caps, and a
+ * per-second signal rate limit. Signals that breach any threshold are
+ * suppressed and counted; breaches are surfaced via an optional alert callback.
+ *
+ * Thread safety: all public methods are safe to call concurrently.
+ */
 class RiskManager {
 public:
-    /// Construction-time risk parameters.
+    /**
+     * @brief Construction-time risk parameters.
+     */
     struct Config {
         /// Maximum absolute value of delta_bias_shift in a single signal.
         double max_bias_magnitude{1.0};
@@ -51,7 +55,9 @@ public:
         double position_warn_fraction{0.8};
     };
 
-    /// Current position state reported to the risk manager by the OMS.
+    /**
+     * @brief Current position state reported to the risk manager by the OMS.
+     */
     struct PositionState {
         double net_position{0.0};    ///< Current net position (positive = long, negative = short).
         double position_limit{1.0};  ///< Maximum allowed absolute position.
@@ -59,12 +65,20 @@ public:
         double pnl_limit{-10.0};     ///< Maximum tolerated loss (negative number).
     };
 
-    /// OMS notification callback: fired when position limits are approached or breached.
+    /**
+     * @brief OMS notification callback fired when position limits are approached or breached.
+     *
+     * @param event  Human-readable event name (e.g. "position_limit_approach").
+     * @param state  Current position snapshot at the time of the event.
+     * @param signal The TradeSignal that triggered the check.
+     */
     using OmsCallback = std::function<void(const std::string& event,
                                            const PositionState& state,
                                            const TradeSignal& signal)>;
 
-    /// Live statistics updated by the risk manager.
+    /**
+     * @brief Live statistics updated atomically by the risk manager.
+     */
     struct Stats {
         std::atomic<uint64_t> signals_passed{0};
         std::atomic<uint64_t> signals_blocked_magnitude{0};
@@ -74,61 +88,86 @@ public:
         std::atomic<uint64_t> signals_blocked_position{0};
     };
 
-    /// Alert callback type: invoked synchronously when a signal is blocked.
+    /**
+     * @brief Alert callback type: invoked synchronously when a signal is blocked.
+     *
+     * @param reason Human-readable rejection reason.
+     * @param signal The rejected TradeSignal.
+     */
     using AlertCallback = std::function<void(const std::string& reason, const TradeSignal&)>;
 
-    /// Construct a RiskManager with the given parameters.
+    /**
+     * @brief Construct a RiskManager with the given parameters.
+     *
+     * @param config Risk thresholds and window configuration.
+     */
     explicit RiskManager(const Config& config);
 
-    /// Evaluate a signal against all risk rules.
-    ///
-    /// # Returns
-    /// `true` if the signal passes all checks and should be emitted.
-    /// `false` if the signal is blocked (stats updated, alert fired).
-    ///
-    /// NOTE: evaluate() holds an internal mutex for its entire execution,
-    /// including any alert_cb_ invocations on rejected signal paths.
-    /// Alert callbacks MUST NOT call evaluate(), get_position(), or any other
-    /// RiskManager method, or a deadlock will result.  For complex alert handling
-    /// (e.g. network I/O), dispatch alerts to a separate queue from the callback.
+    /**
+     * @brief Evaluate a signal against all risk rules.
+     *
+     * NOTE: evaluate() holds an internal mutex for its entire execution,
+     * including any alert_cb_ invocations on rejected signal paths.
+     * Alert callbacks MUST NOT call evaluate(), get_position(), or any other
+     * RiskManager method, or a deadlock will result.  For complex alert handling
+     * (e.g. network I/O), dispatch alerts to a separate queue from the callback.
+     *
+     * @param signal The TradeSignal to evaluate.
+     * @return true if the signal passes all checks and should be emitted;
+     *         false if the signal is blocked (stats updated, alert fired).
+     */
     bool evaluate(const TradeSignal& signal);
 
-    /// Register a callback to be invoked when a signal is blocked.
-    ///
-    /// # Arguments
-    /// * `cb` — Callable matching AlertCallback; stored by value.
+    /**
+     * @brief Register a callback to be invoked when a signal is blocked.
+     *
+     * @param cb Callable matching AlertCallback; stored by value.
+     */
     void set_alert_callback(AlertCallback cb);
 
-    /// Update the current position state from the OMS.
-    ///
-    /// Thread-safe. Called by the OMS adapter on each fill or position update.
-    ///
-    /// # Arguments
-    /// * `state` — Latest position snapshot from the order management system.
+    /**
+     * @brief Update the current position state from the OMS.
+     *
+     * Thread-safe. Called by the OMS adapter on each fill or position update.
+     *
+     * @param state Latest position snapshot from the order management system.
+     */
     void update_position(const PositionState& state);
 
-    /// Register a callback for OMS events (limit-approach, limit-breach, pnl-alert).
-    ///
-    /// # Arguments
-    /// * `cb` — Callable matching OmsCallback; stored by value.
+    /**
+     * @brief Register a callback for OMS events (limit-approach, limit-breach, pnl-alert).
+     *
+     * @param cb Callable matching OmsCallback; stored by value.
+     */
     void set_oms_callback(OmsCallback cb);
 
-    /// Return the most recently reported position state.
-    ///
-    /// Thread-safe (acquires mutex_).
+    /**
+     * @brief Return the most recently reported position state.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Copy of the most recently reported PositionState.
+     */
     PositionState get_position() const;
 
-    /// Attach a MetricsLogger for structured rejection logging.
-    ///
-    /// # Arguments
-    /// * `logger` — Pointer to an active MetricsLogger; must outlive this
-    ///              RiskManager. Pass nullptr to disable (default).
+    /**
+     * @brief Attach a MetricsLogger for structured rejection logging.
+     *
+     * @param logger Pointer to an active MetricsLogger; must outlive this
+     *               RiskManager. Pass nullptr to disable (default).
+     */
     void set_metrics_logger(MetricsLogger* logger);
 
-    /// Reset the drawdown accumulator and rate-limit window.
+    /**
+     * @brief Reset the drawdown accumulator and rate-limit window.
+     */
     void reset();
 
-    /// Return a read-only reference to live statistics.
+    /**
+     * @brief Return a read-only reference to live statistics.
+     *
+     * @return Const reference to the internal Stats struct.
+     */
     const Stats& get_stats() const { return stats_; }
 
 private:

@@ -13,29 +13,36 @@
 
 namespace llmquant {
 
-/// Streams tokens from an OpenAI-compatible chat completions endpoint.
-///
-/// Connects over TCP to `host:port`, sends an HTTP/1.1 POST with
-/// `"stream": true`, and forwards each content delta token to the registered
-/// callback as it arrives. The connection runs on a background thread; call
-/// stop() to terminate it cleanly.
-///
-/// This is a zero-dependency implementation using POSIX sockets (no libcurl,
-/// no Boost.Asio).  It handles chunked Transfer-Encoding by accumulating raw
-/// bytes and scanning for SSE `data:` lines.
-///
-/// Thread safety: connect/stop may be called from any thread. The token
-/// callback is invoked from the background reader thread.
+/**
+ * @brief Streams tokens from an OpenAI-compatible chat completions endpoint.
+ *
+ * Connects over TCP to `host:port`, sends an HTTP/1.1 POST with
+ * `"stream": true`, and forwards each content delta token to the registered
+ * callback as it arrives.  The connection runs on a background thread; call
+ * stop() to terminate it cleanly.
+ *
+ * This is a zero-dependency implementation using POSIX sockets (no libcurl,
+ * no Boost.Asio).  It handles chunked Transfer-Encoding by accumulating raw
+ * bytes and scanning for SSE `data:` lines.
+ *
+ * Thread safety: connect/stop may be called from any thread. The token
+ * callback is invoked from the background reader thread.
+ */
 class LLMStreamClient {
 public:
     /// Called once per decoded token delta.
     using TokenCallback = std::function<void(const std::string& token)>;
 
-    /// Called when the stream ends (EOF or error).
-    /// `error` is empty on clean EOF, non-empty on error.
+    /**
+     * @brief Called when the stream ends (EOF or error).
+     *
+     * `error` is empty on clean EOF, non-empty on socket or protocol error.
+     */
     using DoneCallback = std::function<void(const std::string& error)>;
 
-    /// Connection parameters.
+    /**
+     * @brief Connection parameters for LLMStreamClient.
+     */
     struct Config {
         std::string host{"api.openai.com"};
         uint16_t    port{443};
@@ -63,51 +70,68 @@ public:
         bool use_keep_alive{false};
     };
 
-    /// Construct a streaming client with the given connection parameters.
+    /**
+     * @brief Construct a streaming client with the given connection parameters.
+     *
+     * @param config Connection, authentication, and behaviour configuration.
+     */
     explicit LLMStreamClient(Config config);
 
-    /// Stop the background reader thread and release the socket.
+    /**
+     * @brief Stop the background reader thread and release the socket.
+     */
     ~LLMStreamClient();
 
-    /// Register the token callback (must be set before connect()).
-    ///
-    /// # Arguments
-    /// * `cb` — Callable invoked once per decoded content delta token.
+    /**
+     * @brief Register the token callback (must be set before connect()).
+     *
+     * @param cb Callable invoked once per decoded content delta token.
+     */
     void set_token_callback(TokenCallback cb);
 
-    /// Register the done callback.
-    ///
-    /// # Arguments
-    /// * `cb` — Callable invoked when the stream ends; `error` is empty on
-    ///          clean EOF, non-empty on socket or protocol error.
+    /**
+     * @brief Register the done callback.
+     *
+     * @param cb Callable invoked when the stream ends; `error` is empty on
+     *           clean EOF, non-empty on socket or protocol error.
+     */
     void set_done_callback(DoneCallback cb);
 
-    /// Open the TCP connection and start the background reader thread.
-    ///
-    /// Returns false immediately if already connected or if the socket
-    /// cannot be opened (hostname resolution failure, refused connection, etc.).
-    ///
-    /// # Returns
-    /// `true` if the socket was opened and the reader thread was started.
-    /// `false` if already running or the connection could not be established.
+    /**
+     * @brief Open the TCP connection and start the background reader thread.
+     *
+     * Returns false immediately if already connected or if the socket
+     * cannot be opened (hostname resolution failure, refused connection, etc.).
+     *
+     * @return true if the socket was opened and the reader thread was started;
+     *         false if already running or the connection could not be established.
+     */
     bool connect();
 
-    /// Signal the background thread to stop and block until it exits.
-    ///
-    /// Safe to call multiple times and safe to call before connect().
+    /**
+     * @brief Signal the background thread to stop and block until it exits.
+     *
+     * Safe to call multiple times and safe to call before connect().
+     */
     void stop();
 
-    /// Returns true if the background reader thread is active.
+    /**
+     * @brief Returns true if the background reader thread is active.
+     *
+     * @return true while the reader thread is running.
+     */
     bool is_running() const { return running_.load(); }
 
-    /// Parse one SSE `data:` line and extract the token delta.
-    ///
-    /// Exposed as public static for unit testing of the parsing logic without
-    /// a live server.  Returns empty string if the line is not a content delta
-    /// or if the content field is absent or empty in the JSON payload.
-    ///
-    /// # Arguments
-    /// * `data_line` — Raw text following the "data: " SSE prefix.
+    /**
+     * @brief Parse one SSE `data:` line and extract the token delta.
+     *
+     * Exposed as public static for unit testing of the parsing logic without
+     * a live server.  Returns empty string if the line is not a content delta
+     * or if the content field is absent or empty in the JSON payload.
+     *
+     * @param data_line Raw text following the "data: " SSE prefix.
+     * @return The extracted token string, or empty if no delta is present.
+     */
     static std::string parse_sse_delta(const std::string& data_line);
 
 private:
@@ -116,37 +140,51 @@ private:
     void close_socket();
 
 #ifdef LLMQUANT_TLS_ENABLED
-    /// Perform the TLS handshake on the already-connected TCP socket.
-    ///
-    /// # Returns
-    /// `true` if the handshake succeeded and the TLS session is ready.
-    /// `false` if SSL_connect failed; the socket is left open for the caller
-    /// to close.
+    /**
+     * @brief Perform the TLS handshake on the already-connected TCP socket.
+     *
+     * @return true if the handshake succeeded and the TLS session is ready;
+     *         false if SSL_connect failed (socket is left open for the caller to close).
+     */
     bool tls_handshake();
 
-    /// Gracefully shut down and free the active TLS session and SSL_CTX.
+    /**
+     * @brief Gracefully shut down and free the active TLS session and SSL_CTX.
+     */
     void tls_close();
 
-    /// Send `len` bytes from `buf` over TLS.
-    ///
-    /// # Returns
-    /// Number of bytes written, or a negative value on error.
+    /**
+     * @brief Send `len` bytes from `buf` over TLS.
+     *
+     * @param buf Pointer to the data to send.
+     * @param len Number of bytes to send.
+     * @return Number of bytes written, or a negative value on error.
+     */
     ssize_t tls_send(const char* buf, size_t len);
 
-    /// Receive up to `len` bytes from the TLS session into `buf`.
-    ///
-    /// # Returns
-    /// Number of bytes read, or a non-positive value on EOF / error.
+    /**
+     * @brief Receive up to `len` bytes from the TLS session into `buf`.
+     *
+     * @param buf Destination buffer.
+     * @param len Maximum number of bytes to receive.
+     * @return Number of bytes read, or a non-positive value on EOF / error.
+     */
     ssize_t tls_recv(char* buf, size_t len);
 #endif
 
-    /// Build the JSON request body for the streaming completions call.
+    /**
+     * @brief Build the JSON request body for the streaming completions call.
+     *
+     * @return Serialised JSON string suitable for the HTTP POST body.
+     */
     std::string build_request_body() const;
 
-    /// Build the full HTTP/1.1 POST request string.
-    ///
-    /// # Arguments
-    /// * `body` — JSON request body produced by build_request_body().
+    /**
+     * @brief Build the full HTTP/1.1 POST request string.
+     *
+     * @param body JSON request body produced by build_request_body().
+     * @return Complete HTTP request string ready for transmission.
+     */
     std::string build_http_request(const std::string& body) const;
 
     Config          config_;

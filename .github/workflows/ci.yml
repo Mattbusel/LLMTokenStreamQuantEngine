@@ -1,21 +1,149 @@
 name: CI
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # Linux build and test (GCC + Clang, Release + Debug)
+  # ---------------------------------------------------------------------------
+  build-linux:
+    name: "Linux (${{ matrix.compiler }}, ${{ matrix.build_type }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libspdlog-dev \
+            libyaml-cpp-dev \
+            libgtest-dev \
+            libgmock-dev \
+            nlohmann-json3-dev \
+            libssl-dev \
+            clang-14 \
+            clang-format-14 \
+            clang-tidy-14 \
+            cppcheck
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang-14"    >> "$GITHUB_ENV"
+            echo "CXX=clang++-14" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc"  >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Cache CMake build artifacts
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'include/**', 'tests/**') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}-
+
+      - name: CMake configure
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests (ctest)
+        run: |
+          ctest --test-dir build \
+            --output-on-failure \
+            --parallel 4
+
+      - name: clang-tidy static analysis
+        if: matrix.compiler == 'clang' && matrix.build_type == 'Release'
+        run: |
+          find src include -name '*.cpp' | xargs clang-tidy-14 \
+            -p build \
+            --warnings-as-errors='' \
+            --extra-arg=-std=c++20 \
+            2>&1 | tee clang-tidy-report.txt
+          echo "clang-tidy completed"
+
+      - name: cppcheck static analysis
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Release'
+        run: |
+          cppcheck \
+            --enable=warning,performance,portability \
+            --std=c++20 \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            -I include \
+            src/ \
+            2>&1 | tee cppcheck-report.txt
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.compiler }}-${{ matrix.build_type }}
+          path: |
+            build/Testing/
+            clang-tidy-report.txt
+            cppcheck-report.txt
+
+  # ---------------------------------------------------------------------------
+  # clang-format formatting gate
+  # ---------------------------------------------------------------------------
+  format-check:
+    name: "clang-format check"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
+
+      - name: Install clang-format
+        run: sudo apt-get update -qq && sudo apt-get install -y clang-format-14
+
+      - name: Check formatting
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libspdlog-dev libyaml-cpp-dev libgtest-dev
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        run: cmake --build build --parallel
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+          find src include tests \
+            \( -name '*.cpp' -o -name '*.h' \) \
+            | xargs clang-format-14 --dry-run --Werror
+          echo "All source files are correctly formatted."
+
+  # ---------------------------------------------------------------------------
+  # Doxygen documentation build
+  # ---------------------------------------------------------------------------
+  docs:
+    name: "Doxygen API docs"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: sudo apt-get update -qq && sudo apt-get install -y doxygen graphviz
+
+      - name: Build docs
+        run: doxygen Doxyfile
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-docs
+          path: docs/html/

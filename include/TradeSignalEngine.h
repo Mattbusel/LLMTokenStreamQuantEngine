@@ -12,11 +12,13 @@
 
 namespace llmquant {
 
-/// A quantitative trade signal derived from one or more semantic weights.
-///
-/// Both a high-resolution chrono timestamp and a nanosecond integer timestamp
-/// are provided: the chrono field is used for latency arithmetic inside the
-/// engine; the integer field is used for serialisation and cross-process IPC.
+/**
+ * @brief A quantitative trade signal derived from one or more semantic weights.
+ *
+ * Both a high-resolution chrono timestamp and a nanosecond integer timestamp
+ * are provided: the chrono field is used for latency arithmetic inside the
+ * engine; the integer field is used for serialisation and cross-process IPC.
+ */
 struct TradeSignal {
     /// Nanoseconds since the Unix epoch at signal emission time.
     uint64_t timestamp_ns{0};
@@ -46,23 +48,29 @@ struct TradeSignal {
     double strategy_weight{0.0};
 };
 
-/// Callback invoked once per emitted TradeSignal on the engine's calling thread.
+/**
+ * @brief Callback invoked once per emitted TradeSignal on the engine's calling thread.
+ */
 using TradeSignalCallback = std::function<void(const TradeSignal&)>;
 
-/// Converts a stream of SemanticWeights into TradeSignals.
-///
-/// Incoming weights are accumulated with an exponential decay, then a signal
-/// is emitted when the cooldown period has elapsed (realtime mode) or on every
-/// token (backtest mode).
-///
-/// Thread safety: process_semantic_weight() is NOT thread-safe; all calls
-/// must arrive from the same thread.  last_signal_time_ is not protected by
-/// any lock and must be read and written only from the same thread.
-/// get_stats() is always safe (atomic reads).  set_* configuration methods
-/// must not be called concurrently with process_semantic_weight().
+/**
+ * @brief Converts a stream of SemanticWeights into TradeSignals.
+ *
+ * Incoming weights are accumulated with an exponential decay, then a signal
+ * is emitted when the cooldown period has elapsed (realtime mode) or on every
+ * token (backtest mode).
+ *
+ * Thread safety: process_semantic_weight() is NOT thread-safe; all calls
+ * must arrive from the same thread.  last_signal_time_ is not protected by
+ * any lock and must be read and written only from the same thread.
+ * get_stats() is always safe (atomic reads).  set_* configuration methods
+ * must not be called concurrently with process_semantic_weight().
+ */
 class TradeSignalEngine {
 public:
-    /// Construction-time parameters for the engine.
+    /**
+     * @brief Construction-time parameters for the engine.
+     */
     struct Config {
         /// Scale factor applied to the directional_bias component.
         double bias_sensitivity{1.0};
@@ -74,60 +82,79 @@ public:
         std::chrono::microseconds signal_cooldown{std::chrono::microseconds{1000}};
     };
 
-    /// Live statistics updated by the engine.
+    /**
+     * @brief Live statistics updated atomically by the engine.
+     */
     struct Stats {
         std::atomic<uint64_t> signals_generated{0};
         std::atomic<uint64_t> signals_suppressed{0};
         std::atomic<double>   avg_signal_strength{0.0};
     };
 
-    /// Construct the engine with the given configuration.
+    /**
+     * @brief Construct the engine with the given configuration.
+     *
+     * @param config Scale factors, decay rate, and signal cooldown parameters.
+     */
     explicit TradeSignalEngine(const Config& config);
 
-    /// Process a SemanticWeight and potentially emit a TradeSignal.
-    ///
-    /// The weight is scaled by the configured sensitivities, added to the
-    /// decayed accumulators, and — if the cooldown has elapsed — a signal
-    /// is emitted via the registered callback.
-    ///
-    /// # Arguments
-    /// * `weight` — Normalised SemanticWeight from LLMAdapter.
+    /**
+     * @brief Process a SemanticWeight and potentially emit a TradeSignal.
+     *
+     * The weight is scaled by the configured sensitivities, added to the
+     * decayed accumulators, and — if the cooldown has elapsed — a signal
+     * is emitted via the registered callback.
+     *
+     * @param weight Normalised SemanticWeight produced by LLMAdapter.
+     */
     void process_semantic_weight(const SemanticWeight& weight);
 
-    /// Register the callback invoked when a signal is emitted.
-    ///
-    /// # Arguments
-    /// * `callback` — Callable matching TradeSignalCallback; stored by value.
+    /**
+     * @brief Register the callback invoked when a signal is emitted.
+     *
+     * @param callback Callable matching TradeSignalCallback; stored by value.
+     */
     void set_signal_callback(TradeSignalCallback callback);
 
-    /// Enable or disable realtime mode.
-    ///
-    /// In realtime mode signals are rate-limited by signal_cooldown.
-    /// In backtest mode every token produces a signal.
-    ///
-    /// # Arguments
-    /// * `enabled` — true to enable realtime mode.
+    /**
+     * @brief Enable or disable realtime mode.
+     *
+     * In realtime mode signals are rate-limited by signal_cooldown.
+     * In backtest mode every token produces a signal.
+     *
+     * @param enabled true to enable realtime mode.
+     */
     void set_realtime_mode(bool enabled);
 
-    /// Convenience wrapper: set_backtest_mode(true) == set_realtime_mode(false).
-    ///
-    /// # Arguments
-    /// * `enabled` — true to enable backtest (every-token) mode.
+    /**
+     * @brief Convenience wrapper: set_backtest_mode(true) == set_realtime_mode(false).
+     *
+     * @param enabled true to enable backtest (every-token) mode.
+     */
     void set_backtest_mode(bool enabled);
 
-    /// Return a copy of the current signal statistics. Thread-safe snapshot.
+    /**
+     * @brief Return a copy of the current signal statistics.
+     *
+     * Thread-safe atomic snapshot.
+     *
+     * @return Copy of the current Stats struct.
+     */
     Stats get_stats() const { return stats_; }
 
-    /// Register an OutputSink to receive all emitted signals.
-    ///
-    /// The sink is called synchronously inside emit_signal() after the
-    /// user callback.  Multiple sinks can be added; all receive every signal.
-    ///
-    /// # Arguments
-    /// * `sink` — Shared pointer to an OutputSink implementation.
+    /**
+     * @brief Register an OutputSink to receive all emitted signals.
+     *
+     * The sink is called synchronously inside emit_signal() after the
+     * user callback.  Multiple sinks can be added; all receive every signal.
+     *
+     * @param sink Shared pointer to an OutputSink implementation.
+     */
     void add_output_sink(std::shared_ptr<OutputSink> sink);
 
-    /// Remove all registered output sinks.
+    /**
+     * @brief Remove all registered output sinks.
+     */
     void clear_output_sinks();
 
 private:
