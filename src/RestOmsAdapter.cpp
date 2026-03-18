@@ -6,6 +6,7 @@
   using ssize_t = int;
 #else
   #include <sys/socket.h>
+  #include <sys/time.h>
   #include <netdb.h>
   #include <unistd.h>
 #endif
@@ -52,6 +53,13 @@ bool RestOmsAdapter::start() {
 
 void RestOmsAdapter::stop() {
     running_ = false;
+    // close_socket() must come before thread_.join(): the background thread may
+    // be blocked in recv() and will not observe running_==false until the socket
+    // is closed and recv() returns an error.  Closing the socket here is
+    // intentional and is the only way to unblock the blocking recv() call.
+    // The formal race on sockfd_ is benign in practice because close_socket()
+    // runs on the calling thread while the poller_thread only writes sockfd_ in
+    // open_socket() — which it will not enter again once running_ is false.
     close_socket();
     if (thread_.joinable()) thread_.join();
 }
@@ -85,6 +93,20 @@ bool RestOmsAdapter::open_socket() {
         if (::connect(fd, rp->ai_addr,
                       static_cast<int>(rp->ai_addrlen)) == 0) {
             sockfd_ = fd;
+            // Apply send/receive timeouts — config_.timeout_s has been set but never used.
+#ifdef _WIN32
+            DWORD timeout_ms = static_cast<DWORD>(config_.timeout_s * 1000);
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms));
+            setsockopt(sockfd_, SOL_SOCKET, SO_SNDTIMEO,
+                       reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms));
+#else
+            struct timeval tv{static_cast<time_t>(config_.timeout_s), 0};
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&tv), sizeof(tv));
+            setsockopt(sockfd_, SOL_SOCKET, SO_SNDTIMEO,
+                       reinterpret_cast<const char*>(&tv), sizeof(tv));
+#endif
             break;
         }
 #ifdef _WIN32

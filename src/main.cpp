@@ -37,6 +37,7 @@ int main(int argc, char* argv[]) {
     std::string stream_api_key;
     bool        no_color       = false;
     bool        debug_raw      = false;
+    std::string oms_address;
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--stream" && i + 1 < argc) {
@@ -46,6 +47,8 @@ int main(int argc, char* argv[]) {
             no_color = true;
         } else if (arg == "--debug-raw") {
             debug_raw = true;
+        } else if (arg == "--oms" && i + 1 < argc) {
+            oms_address = argv[++i];
         }
     }
 
@@ -70,7 +73,7 @@ int main(int argc, char* argv[]) {
     if (!config_loaded) {
         std::cout << "Using default configuration" << std::endl;
         // No config file: fall back to in-memory token stream so no file I/O required.
-        config.get_mutable_config().token_stream.use_memory_stream = true;
+        config.set_use_memory_stream(true);
     }
 
     config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
@@ -84,6 +87,8 @@ int main(int argc, char* argv[]) {
     auto dedup_backend = std::make_shared<llmquant::InProcessDeduplicator>();
     llmquant::Deduplicator deduplicator(dedup_backend,
         std::chrono::milliseconds(sys_config.token_stream.token_interval_ms * 10));
+    // Prevent unbounded memory growth: purge expired entries every 60 s.
+    dedup_backend->start_background_purge(60);
 
     // Initialize subsystem components.
     MetricsLogger logger({
@@ -130,8 +135,8 @@ int main(int argc, char* argv[]) {
 
     // OMS adapter: use MockOmsAdapter by default; REST if --oms <host:port> is passed.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
-    if (argc > 2 && std::string(argv[2]) == "--oms" && argc > 3) {
-        std::string endpoint(argv[3]);
+    if (!oms_address.empty()) {
+        std::string endpoint = oms_address;
         llmquant::RestOmsAdapter::Config oms_cfg;
         size_t colon = endpoint.find(':');
         if (colon != std::string::npos) {

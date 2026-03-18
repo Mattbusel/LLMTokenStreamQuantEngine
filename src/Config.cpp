@@ -63,7 +63,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
         const auto& tr  = tmp.trading;
         const auto& lat = tmp.latency;
         const auto& log = tmp.logging;
-        if (ts.token_interval_ms <= 0 || ts.buffer_size == 0 ||
+        if (ts.token_interval_ms <= 0 || ts.token_interval_ms > 60000 || ts.buffer_size == 0 ||
             tr.bias_sensitivity <= 0.0 || tr.volatility_sensitivity <= 0.0 ||
             tr.signal_decay_rate <= 0.0 || tr.signal_decay_rate > 1.0 ||
             tr.signal_cooldown_us < 0 ||
@@ -130,8 +130,12 @@ void Config::set_defaults() {
 void Config::start_watching(const std::string& filepath,
                             std::function<void(const SystemConfig&)> on_reload,
                             int poll_interval_ms) {
-    if (watching_.load()) return;
-    watching_ = true;
+    bool expected = false;
+    if (!watching_.compare_exchange_strong(expected, true,
+                                           std::memory_order_acquire,
+                                           std::memory_order_relaxed)) {
+        return;  // Another thread already started the watcher.
+    }
 
     watcher_thread_ = std::thread([this, filepath, on_reload, poll_interval_ms]() {
         namespace fs = std::filesystem;

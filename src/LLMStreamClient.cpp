@@ -92,6 +92,13 @@ bool LLMStreamClient::connect() {
 
 void LLMStreamClient::stop() {
     running_ = false;
+    // close_socket() must come before thread_.join(): the background thread may
+    // be blocked in recv() and will not observe running_==false until the socket
+    // is closed and recv() returns an error.  Closing the socket here is
+    // intentional and is the only way to unblock the blocking recv() call.
+    // The formal race on sockfd_ is benign in practice because close_socket()
+    // runs on the calling thread while the reader_thread only writes sockfd_ in
+    // open_socket() — which it will not enter again once running_ is false.
     close_socket();
     if (thread_.joinable()) thread_.join();
 }

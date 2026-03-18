@@ -95,7 +95,12 @@ void TokenStreamSimulator::stream_worker() {
             callback_(token);
             auto end   = std::chrono::high_resolution_clock::now();
             auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            stats_.avg_latency_us = latency.count();
+            // Welford-style running average for callback latency.
+            uint64_t count = stats_.tokens_emitted.load() + 1;  // +1 because tokens_emitted increments after this
+            double old_avg = static_cast<double>(stats_.avg_latency_us.load());
+            double new_avg = old_avg + (static_cast<double>(latency.count()) - old_avg)
+                             / static_cast<double>(count);
+            stats_.avg_latency_us.store(static_cast<uint64_t>(new_avg));
             stats_.max_latency_us = std::max(stats_.max_latency_us.load(),
                                              static_cast<uint64_t>(latency.count()));
         }

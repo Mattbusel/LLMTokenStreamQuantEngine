@@ -57,6 +57,13 @@ bool FixOmsAdapter::start() {
 
 void FixOmsAdapter::stop() {
     running_ = false;
+    // close_socket() must come before thread_.join(): the background thread may
+    // be blocked in recv() and will not observe running_==false until the socket
+    // is closed and recv() returns an error.  Closing the socket here is
+    // intentional and is the only way to unblock the blocking recv() call.
+    // The formal race on sockfd_ is benign in practice because close_socket()
+    // runs on the calling thread while the reader_thread only writes sockfd_ in
+    // open_socket() — which it will not enter again once running_ is false.
     close_socket();
     if (thread_.joinable()) thread_.join();
 }
@@ -146,9 +153,11 @@ std::string FixOmsAdapter::fix_checksum(const std::string& msg) {
 }
 
 std::string FixOmsAdapter::fix_message(const std::string& body) const {
+    // BodyLength (tag 9) = bytes from start of body through end of checksum tag.
+    // Checksum tag "10=XXX\x01" is always 7 bytes.
+    const size_t body_len = body.size() + 7;
     std::ostringstream header;
-    header << "8=FIX.4.2" << SOH
-           << "9=" << body.size() << SOH;
+    header << "8=FIX.4.2" << SOH << "9=" << body_len << SOH;
     std::string full = header.str() + body;
     full += "10=" + fix_checksum(full) + SOH;
     return full;
@@ -217,7 +226,9 @@ FixOmsAdapter::FixFields FixOmsAdapter::parse_fix(const std::string& raw) {
 
         try {
             int tag = std::stoi(raw.substr(pos, eq - pos));
-            fields[tag] = raw.substr(eq + 1, soh - eq - 1);
+            // Reject out-of-range FIX tags (valid range: 1–9999).
+            if (tag >= 1 && tag <= 9999)
+                fields[tag] = raw.substr(eq + 1, soh - eq - 1);
         } catch (...) {}
 
         pos = soh + 1;
@@ -348,8 +359,12 @@ bool FixOmsAdapter::reconnect_with_backoff() {
 
 void FixOmsAdapter::send_sequence_reset() {
     std::string msg = build_sequence_reset(1);
-    ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
-    seq_num_ = 1;
+    auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
+    if (sent == static_cast<decltype(sent)>(msg.size())) {
+        seq_num_ = 1;
+    } else {
+        std::cerr << "[fix_oms] send_sequence_reset failed\n";
+    }
 }
 
 void FixOmsAdapter::send_resend_request(int begin_seq, int end_seq) {
@@ -362,8 +377,12 @@ void FixOmsAdapter::send_resend_request(int begin_seq, int end_seq) {
          << "7="  << begin_seq << SOH
          << "16=" << end_seq   << SOH;
     std::string msg = fix_message(body.str());
-    ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
-    seq_num_++;
+    auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
+    if (sent == static_cast<decltype(sent)>(msg.size())) {
+        seq_num_++;
+    } else {
+        std::cerr << "[fix_oms] send_resend_request failed\n";
+    }
 }
 
 // ---------------------------------------------------------------------------

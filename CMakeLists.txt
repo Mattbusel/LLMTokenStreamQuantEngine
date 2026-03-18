@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Compiler flags
 # ---------------------------------------------------------------------------
 if(MSVC)
-    add_compile_options(/W3 /WX)
+    add_compile_options(/W4 /WX)
     set(CMAKE_CXX_FLAGS_RELEASE "/O2 /DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG   "/Od /Zi")
 else()

@@ -1,7 +1,9 @@
 #include "Deduplicator.h"
 
+#include <chrono>
 #include <cstdint>
-#include <sstream>
+#include <string>
+#include <thread>
 
 #ifdef LLMQUANT_REDIS_ENABLED
   #include <hiredis/hiredis.h>
@@ -14,20 +16,19 @@ namespace llmquant {
 // ---------------------------------------------------------------------------
 
 DedupKey DedupKey::from_token(const std::string& token, const std::string& context) {
-    // Deterministic key: FNV-1a hash of "token|context".
-    // For production, replace with SHA-256 of token+context if collision
-    // resistance stronger than 64-bit is required.
-    std::string raw = token + "|" + context;
+    // Deterministic key: FNV-1a 64-bit hash of "token|context".
+    // Store the raw integer to avoid double-hashing a hex string.
+    // For production, replace with SHA-256 if collision resistance
+    // stronger than 64-bit is required.
     uint64_t hash = 14695981039346656037ULL;
-    for (unsigned char c : raw) {
-        hash ^= static_cast<uint64_t>(c);
+    auto fnv_byte = [&](unsigned char b) {
+        hash ^= static_cast<uint64_t>(b);
         hash *= 1099511628211ULL;
-    }
-    std::ostringstream oss;
-    oss << std::hex << hash;
-    DedupKey k;
-    k.value = oss.str();
-    return k;
+    };
+    for (unsigned char c : token)  fnv_byte(c);
+    fnv_byte('|');
+    for (unsigned char c : context) fnv_byte(c);
+    return DedupKey{hash};
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,10 @@ DedupKey DedupKey::from_token(const std::string& token, const std::string& conte
 
 DedupResult InProcessDeduplicator::check_and_register(const DedupKey& key,
                                                        std::chrono::milliseconds ttl) {
+    // Clamp TTL to 24 hours to prevent unbounded expiry times.
+    static constexpr auto kMaxTTL = std::chrono::hours(24);
+    if (ttl > kMaxTTL) ttl = std::chrono::duration_cast<std::chrono::milliseconds>(kMaxTTL);
+
     std::lock_guard<std::mutex> lock(mutex_);
     auto now = std::chrono::steady_clock::now();
 
@@ -76,6 +81,26 @@ void InProcessDeduplicator::purge_expired() {
             ++it;
         }
     }
+}
+
+InProcessDeduplicator::~InProcessDeduplicator() {
+    stop_background_purge();
+}
+
+void InProcessDeduplicator::start_background_purge(int interval_s) {
+    bool expected = false;
+    if (!purge_running_.compare_exchange_strong(expected, true)) return;
+    purge_thread_ = std::thread([this, interval_s] {
+        while (purge_running_.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(interval_s));
+            if (purge_running_.load()) purge_expired();
+        }
+    });
+}
+
+void InProcessDeduplicator::stop_background_purge() {
+    purge_running_ = false;
+    if (purge_thread_.joinable()) purge_thread_.join();
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +193,7 @@ DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
         // already existed (duplicate).
         auto* reply = static_cast<redisReply*>(
             redisCommand(ctx, "SET %s \"\" NX EX %lld",
-                         key.value.c_str(), ttl_sec));
+                         std::to_string(key.value).c_str(), ttl_sec));
         if (!reply) {
             // Connection lost — fire disconnect callback then attempt reconnect.
             std::string err_msg = ctx->errstr ? ctx->errstr : "nil reply";
@@ -201,7 +226,7 @@ void RedisDeduplicator::evict(const DedupKey& key) {
     if (redis_connected_) {
         auto* ctx   = static_cast<redisContext*>(redis_ctx_);
         auto* reply = static_cast<redisReply*>(
-            redisCommand(ctx, "DEL %s", key.value.c_str()));
+            redisCommand(ctx, "DEL %s", std::to_string(key.value).c_str()));
         if (reply) freeReplyObject(reply);
     }
 #endif
@@ -232,5 +257,11 @@ void Deduplicator::evict(const std::string& token, const std::string& context) {
 }
 
 void Deduplicator::purge_expired() { backend_->purge_expired(); }
+
+void Deduplicator::start_background_purge(int interval_s) {
+    if (auto* ip = dynamic_cast<InProcessDeduplicator*>(backend_.get())) {
+        ip->start_background_purge(interval_s);
+    }
+}
 
 } // namespace llmquant

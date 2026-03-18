@@ -72,16 +72,19 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             p95_idx = std::min(p95_idx, N - 1);
             p99_idx = std::min(p99_idx, N - 1);
 
-            // nth_element is O(N) average vs O(N log N) for full sort.
+            // Run nth_element for p95 first (smaller index), then p99.
+            // Both use the full range — the standard only guarantees correctness
+            // when the range contains the nth element and all elements that
+            // should be before/after it.
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p95_idx),
+                             samples_copy.end());
+            stats.p95_latency = samples_copy[p95_idx];
+
             std::nth_element(samples_copy.begin(),
                              samples_copy.begin() + static_cast<std::ptrdiff_t>(p99_idx),
                              samples_copy.end());
             stats.p99_latency = samples_copy[p99_idx];
-
-            std::nth_element(samples_copy.begin(),
-                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p95_idx),
-                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p99_idx));
-            stats.p95_latency = samples_copy[p95_idx];
 
             // Calculate jitter (std dev) against the window mean, not global avg
             double window_mean = 0.0;
@@ -94,7 +97,12 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
                 double diff = static_cast<double>(sample.count()) - window_mean;
                 variance += diff * diff;
             }
-            stats.jitter_ms = std::sqrt(variance / samples_copy.size()) / 1000.0;
+            // Divide by N-1 (Bessel's correction for unbiased sample std dev).
+            if (N > 1) {
+                stats.jitter_ms = std::sqrt(variance / static_cast<double>(N - 1)) / 1000.0;
+            } else {
+                stats.jitter_ms = 0.0;
+            }
         }
     }
     

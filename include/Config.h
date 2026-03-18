@@ -109,7 +109,12 @@ public:
         std::lock_guard<std::mutex> lk(config_mutex_);
         return config_;
     }
-    SystemConfig&       get_mutable_config()  { return config_; }
+
+    /// Set use_memory_stream. Thread-safe (acquires config_mutex_).
+    void set_use_memory_stream(bool val) {
+        std::lock_guard<std::mutex> lk(config_mutex_);
+        config_.token_stream.use_memory_stream = val;
+    }
 
     /// Start watching the config file for changes and reload automatically.
     ///

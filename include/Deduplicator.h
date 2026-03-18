@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace llmquant {
@@ -17,10 +18,10 @@ enum class DedupResult {
     Duplicate,  ///< This key was seen recently — skip processing.
 };
 
-/// Key type for deduplication: a hash of token text + optional context string.
+/// Key type for deduplication: a raw FNV-1a 64-bit hash of token text + optional context.
 struct DedupKey {
-    /// Hex-encoded FNV-1a hash of the token and context concatenation.
-    std::string value;
+    /// Raw FNV-1a 64-bit hash of the token and context concatenation.
+    uint64_t value{0};
 
     /// Construct a dedup key from a raw token string and optional context.
     ///
@@ -33,7 +34,7 @@ struct DedupKey {
     static DedupKey from_token(const std::string& token,
                                const std::string& context = "");
 
-    bool operator==(const DedupKey& other) const { return value == other.value; }
+    bool operator==(const DedupKey& other) const noexcept { return value == other.value; }
 };
 
 } // namespace llmquant
@@ -42,7 +43,7 @@ struct DedupKey {
 namespace std {
 template<> struct hash<llmquant::DedupKey> {
     size_t operator()(const llmquant::DedupKey& k) const noexcept {
-        return std::hash<std::string>{}(k.value);
+        return static_cast<size_t>(k.value);
     }
 };
 } // namespace std
@@ -88,13 +89,16 @@ public:
 /// In-process deduplicator backed by an unordered_map with TTL entries.
 ///
 /// Memory usage is bounded by the number of unique keys seen within the
-/// configured TTL window.  purge_expired() should be called periodically
-/// (e.g. once per second) to reclaim memory.
+/// configured TTL window.  Call start_background_purge() to automatically
+/// reclaim memory at a regular interval; the destructor stops the thread.
 ///
 /// Thread safety: all public methods are safe to call concurrently.
 class InProcessDeduplicator : public DeduplicatorBackend {
 public:
     explicit InProcessDeduplicator() = default;
+
+    /// Stop the background purge thread (if running) before destruction.
+    ~InProcessDeduplicator();
 
     /// Check and register a key; see DeduplicatorBackend::check_and_register.
     DedupResult check_and_register(const DedupKey& key,
@@ -115,6 +119,19 @@ public:
     /// Return the total number of novel keys registered since construction.
     uint64_t total_novel() const { return total_novel_.load(); }
 
+    /// Start a background thread that calls purge_expired() every interval_s seconds.
+    ///
+    /// No-op if the thread is already running.
+    ///
+    /// # Arguments
+    /// * `interval_s` — Purge interval in seconds (default: 60).
+    void start_background_purge(int interval_s = 60);
+
+    /// Stop the background purge thread and join it.
+    ///
+    /// Safe to call even if start_background_purge() was never called.
+    void stop_background_purge();
+
 private:
     struct Entry {
         std::chrono::steady_clock::time_point expires_at;
@@ -124,6 +141,9 @@ private:
     std::unordered_map<DedupKey, Entry> table_;
     std::atomic<uint64_t> total_duplicates_{0};
     std::atomic<uint64_t> total_novel_{0};
+
+    std::thread purge_thread_;
+    std::atomic<bool> purge_running_{false};
 };
 
 /// Redis deduplicator with optional live hiredis connection.
@@ -253,6 +273,13 @@ public:
 
     /// Trigger expired-entry purge on the backend.
     void purge_expired();
+
+    /// Start a background purge thread on the backend if it is an
+    /// InProcessDeduplicator.  No-op for other backend types.
+    ///
+    /// # Arguments
+    /// * `interval_s` — Purge interval in seconds (default: 60).
+    void start_background_purge(int interval_s = 60);
 
     /// Return the underlying backend (for stats access).
     ///

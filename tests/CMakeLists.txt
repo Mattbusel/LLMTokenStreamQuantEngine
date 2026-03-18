@@ -11,6 +11,7 @@ add_executable(tests
     unit/test_llm_stream_client.cpp
     unit/test_invariants.cpp
     unit/test_oms_adapter.cpp
+    unit/test_fix_oms_adapter.cpp
     unit/test_prometheus_exporter.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
@@ -24,7 +25,7 @@ target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests
-    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*Prometheus*"
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*"
 )
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 

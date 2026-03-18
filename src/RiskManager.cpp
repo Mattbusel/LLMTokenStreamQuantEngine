@@ -20,42 +20,79 @@ RiskManager::RiskManager(const Config& config)
 }
 
 bool RiskManager::evaluate(const TradeSignal& signal) {
-    // PERF NOTE: mutex_ is held for all five gate evaluations plus the alert
-    // callback on each rejected path.  For high-throughput paths, check_magnitude
-    // and check_confidence could run outside the lock (they only read config_
-    // set at construction).  For now, single lock is safe and correct.
-    std::lock_guard<std::mutex> lock(mutex_);
+    // Collect all callbacks and the reject reason under the lock, then fire
+    // them outside the lock to prevent deadlock if a callback re-enters evaluate().
+    std::string    reject_reason;
+    AlertCallback  alert_cb_copy;
+    OmsCallback    oms_cb_copy;
+    MetricsLogger* logger_copy = nullptr;
+    PositionState  pos_copy;
+    bool hard_breach = false;
+    bool soft_warn   = false;
+    bool pnl_breach  = false;
 
-    if (!check_magnitude(signal)) {
-        stats_.signals_blocked_magnitude++;
-        fire_alert("magnitude_exceeded", signal);
-        return false;
-    }
-    if (!check_confidence(signal)) {
-        stats_.signals_blocked_confidence++;
-        fire_alert("confidence_below_minimum", signal);
-        return false;
-    }
-    if (!check_rate_limit()) {
-        stats_.signals_blocked_rate++;
-        fire_alert("rate_limit_exceeded", signal);
-        return false;
-    }
-    if (!check_drawdown(signal)) {
-        stats_.signals_blocked_drawdown++;
-        fire_alert("drawdown_limit_exceeded", signal);
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!check_magnitude(signal)) {
+            stats_.signals_blocked_magnitude++;
+            reject_reason = "magnitude_exceeded";
+        } else if (!check_confidence(signal)) {
+            stats_.signals_blocked_confidence++;
+            reject_reason = "confidence_below_minimum";
+        } else if (!check_rate_limit()) {
+            stats_.signals_blocked_rate++;
+            reject_reason = "rate_limit_exceeded";
+        } else if (!check_drawdown(signal)) {
+            stats_.signals_blocked_drawdown++;
+            reject_reason = "drawdown_limit_exceeded";
+        } else {
+            double projected = position_.net_position + signal.delta_bias_shift;
+            double limit     = position_.position_limit;
+            if (std::abs(projected) > limit) {
+                hard_breach = true;
+                stats_.signals_blocked_position++;
+                reject_reason = "position_limit";
+            } else {
+                if (std::abs(projected) > limit * config_.position_warn_fraction)
+                    soft_warn = true;
+                if (position_.pnl < position_.pnl_limit) {
+                    pnl_breach = true;
+                    stats_.signals_blocked_position++;
+                    reject_reason = "position_limit";
+                }
+            }
+            if (reject_reason.empty()) {
+                update_drawdown(signal);
+                signals_in_window_++;
+                stats_.signals_passed++;
+            }
+        }
+
+        // Capture pointers so callbacks can be fired outside the lock.
+        if (!reject_reason.empty() || soft_warn) {
+            alert_cb_copy = alert_cb_;
+            oms_cb_copy   = oms_cb_;
+            logger_copy   = logger_;
+            pos_copy      = position_;
+        }
     }
 
-    if (!check_and_notify_position(signal)) {
-        stats_.signals_blocked_position++;
-        fire_alert("position_limit", signal);
-        return false;
+    // Fire OMS callbacks outside the lock.
+    if ((hard_breach || pnl_breach) && oms_cb_copy) {
+        const char* ev = hard_breach ? "position_limit_breached" : "pnl_limit_breached";
+        try { oms_cb_copy(ev, pos_copy, signal); } catch (...) {}
+    }
+    if (soft_warn && oms_cb_copy) {
+        try { oms_cb_copy("position_limit_approaching", pos_copy, signal); } catch (...) {}
     }
 
-    update_drawdown(signal);
-    signals_in_window_++;
-    stats_.signals_passed++;
+    // Fire alert / log callbacks outside the lock.
+    if (!reject_reason.empty()) {
+        if (alert_cb_copy) { try { alert_cb_copy(reject_reason, signal); } catch (...) {} }
+        if (logger_copy)   { logger_copy->log_risk_rejection(reject_reason, signal.delta_bias_shift, signal.confidence); }
+        return false;
+    }
     return true;
 }
 
@@ -140,21 +177,23 @@ bool RiskManager::check_and_notify_position(const TradeSignal& signal) {
     double projected = position_.net_position + signal.delta_bias_shift;
     double limit     = position_.position_limit;
 
-    // Hard breach — block the signal.
+    // Hard position breach — block the signal.
     if (std::abs(projected) > limit) {
         if (oms_cb_) { try { oms_cb_("position_limit_breached", position_, signal); } catch (...) {} }
         return false;
     }
 
-    // Soft warn — fire callback but allow signal through.
-    if (std::abs(projected) > limit * config_.position_warn_fraction) {
-        if (oms_cb_) { try { oms_cb_("position_limit_approaching", position_, signal); } catch (...) {} }
-    }
-
-    // PnL breach — block.
+    // PnL breach — checked before soft-warn so that at most one callback fires
+    // per evaluate() call.  PnL breach is a hard block and takes priority over
+    // the soft position-approach warning.
     if (position_.pnl < position_.pnl_limit) {
         if (oms_cb_) { try { oms_cb_("pnl_limit_breached", position_, signal); } catch (...) {} }
         return false;
+    }
+
+    // Soft position warning — fires but does NOT block the signal.
+    if (std::abs(projected) > limit * config_.position_warn_fraction) {
+        if (oms_cb_) { try { oms_cb_("position_limit_approaching", position_, signal); } catch (...) {} }
     }
 
     return true;

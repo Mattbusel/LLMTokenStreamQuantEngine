@@ -4,6 +4,7 @@
 // Include this header (not OutputSink.h) wherever you need CsvOutputSink,
 // JsonOutputSink, or MemoryOutputSink.
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -45,14 +46,18 @@ public:
     }
 
     void emit(const TradeSignal& sig) override {
+        // Guard against NaN/Inf which are not valid CSV values.
+        auto safe_d = [](double v) -> double {
+            return std::isfinite(v) ? v : 0.0;
+        };
         out_ << sig.timestamp_ns << ","
-             << sig.delta_bias_shift << ","
-             << sig.volatility_adjustment << ","
-             << sig.spread_modifier << ","
-             << sig.confidence << ","
+             << safe_d(sig.delta_bias_shift) << ","
+             << safe_d(sig.volatility_adjustment) << ","
+             << safe_d(sig.spread_modifier) << ","
+             << safe_d(sig.confidence) << ","
              << sig.latency_us << ","
              << sig.strategy_toggle << ","
-             << sig.strategy_weight << "\n";
+             << safe_d(sig.strategy_weight) << "\n";
     }
 
     void flush() override { out_.flush(); }
@@ -77,15 +82,19 @@ public:
     }
 
     void emit(const TradeSignal& sig) override {
+        // Guard against NaN/Inf which are not valid JSON values.
+        auto safe_d = [](double v) -> double {
+            return std::isfinite(v) ? v : 0.0;
+        };
         out_ << "{"
-             << "\"timestamp_ns\":"          << sig.timestamp_ns          << ","
-             << "\"delta_bias_shift\":"       << sig.delta_bias_shift       << ","
-             << "\"volatility_adjustment\":"  << sig.volatility_adjustment  << ","
-             << "\"spread_modifier\":"        << sig.spread_modifier        << ","
-             << "\"confidence\":"             << sig.confidence             << ","
-             << "\"latency_us\":"             << sig.latency_us             << ","
-             << "\"strategy_toggle\":"        << sig.strategy_toggle        << ","
-             << "\"strategy_weight\":"        << sig.strategy_weight
+             << "\"timestamp_ns\":"          << sig.timestamp_ns                      << ","
+             << "\"delta_bias_shift\":"       << safe_d(sig.delta_bias_shift)          << ","
+             << "\"volatility_adjustment\":"  << safe_d(sig.volatility_adjustment)     << ","
+             << "\"spread_modifier\":"        << safe_d(sig.spread_modifier)           << ","
+             << "\"confidence\":"             << safe_d(sig.confidence)                << ","
+             << "\"latency_us\":"             << sig.latency_us                        << ","
+             << "\"strategy_toggle\":"        << sig.strategy_toggle                   << ","
+             << "\"strategy_weight\":"        << safe_d(sig.strategy_weight)
              << "}\n";
     }
 

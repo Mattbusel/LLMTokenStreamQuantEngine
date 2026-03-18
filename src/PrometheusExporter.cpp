@@ -6,6 +6,7 @@
   using ssize_t = int;
 #else
   #include <sys/socket.h>
+  #include <sys/time.h>
   #include <netinet/in.h>
   #include <arpa/inet.h>
   #include <unistd.h>
@@ -99,6 +100,17 @@ void PrometheusExporter::server_thread() {
         int client_fd = static_cast<int>(
             ::accept(listen_fd_, reinterpret_cast<sockaddr*>(&client_addr), &addrlen));
         if (client_fd < 0) break;  // listen socket closed by stop()
+
+        // Set a receive timeout so a slow/misbehaving client cannot hang the server.
+#ifdef _WIN32
+        DWORD timeout_ms = 5000;
+        setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                   reinterpret_cast<const char*>(&timeout_ms), sizeof(timeout_ms));
+#else
+        struct timeval tv{5, 0};  // 5 second timeout
+        setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                   reinterpret_cast<const char*>(&tv), sizeof(tv));
+#endif
 
         // Read and discard HTTP request headers (look for blank line).
         char buf[1024];

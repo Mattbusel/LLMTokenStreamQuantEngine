@@ -158,6 +158,10 @@ private:
     std::atomic<bool> running_{false};
     std::thread       thread_;
     int               sockfd_{-1};
+    // seq_num_ and expected_inbound_seq_ are accessed exclusively from reader_thread()
+    // and the helpers it calls (build_*, send_*, handle_message, reconnect_with_backoff).
+    // They must NOT be accessed from stop(), the constructor (after start()), or any
+    // other thread without adding synchronisation.
     int               seq_num_{1};            ///< Next outbound sequence number.
     int               expected_inbound_seq_{1}; ///< Next expected inbound MsgSeqNum.
 

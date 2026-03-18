@@ -89,7 +89,17 @@ void LLMAdapter::load_sentiment_dictionary(const std::string& filepath) {
 }
 
 void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeight& weight) {
-    token_weights_[token] = weight;
+    // Normalise key to match map_token_to_weight() lookup behaviour:
+    // strip leading/trailing whitespace, then lowercase.
+    std::string key;
+    key.reserve(token.size());
+    size_t start = 0;
+    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) ++start;
+    size_t end = token.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) --end;
+    for (size_t i = start; i < end; ++i)
+        key += static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
+    token_weights_[key] = weight;
 }
 
 // SSE2-only horizontal add: returns [a[0]+a[1], b[0]+b[1]]
