@@ -247,7 +247,7 @@ jobs:
 
       - name: Install vcpkg dependencies
         run: |
-          $env:VCPKG_ROOT/vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl --triplet x64-windows
+          & "$env:VCPKG_ROOT\vcpkg" install spdlog yaml-cpp gtest nlohmann-json openssl --triplet x64-windows
 
       - name: CMake configure
         run: |
