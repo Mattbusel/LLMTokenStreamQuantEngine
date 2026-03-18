@@ -236,15 +236,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
+
       - name: Install vcpkg dependencies
         run: |
-          vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl hiredis --triplet x64-windows
+          $env:VCPKG_ROOT/vcpkg install spdlog yaml-cpp gtest nlohmann-json openssl hiredis --triplet x64-windows
 
       - name: CMake configure
         run: |
           cmake -S . -B build `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DLLMQUANT_WARNINGS_AS_ERRORS=ON
 
       - name: Build
