@@ -10,6 +10,7 @@
 #include "OmsAdapter.h"
 #include "RestOmsAdapter.h"
 #include "MockOmsAdapter.h"
+#include "PrometheusExporter.h"
 #include <iostream>
 #include <iomanip>
 #include <memory>
@@ -125,6 +126,7 @@ int main(int argc, char* argv[]) {
     risk_cfg.max_signals_per_second  = 500;
     risk_cfg.max_drawdown            = 10.0;
     llmquant::RiskManager risk_mgr(risk_cfg);
+    risk_mgr.set_metrics_logger(&logger);
 
     // OMS adapter: use MockOmsAdapter by default; REST if --oms <host:port> is passed.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
@@ -316,6 +318,34 @@ int main(int argc, char* argv[]) {
         token_sim.start();
     }
 
+    // Prometheus metrics endpoint on port 9100.
+    llmquant::PrometheusExporter prom_exporter({.port = 9100});
+    prom_exporter.set_metrics_callback([&]() -> std::string {
+        auto& es      = trade_engine.get_stats();
+        auto& rs      = risk_mgr.get_stats();
+        auto  latency = latency_ctrl.get_stats();
+        std::ostringstream out;
+        out << "# HELP llmquant_signals_generated_total Total trade signals generated\n"
+            << "# TYPE llmquant_signals_generated_total counter\n"
+            << "llmquant_signals_generated_total " << es.signals_generated.load() << "\n"
+            << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
+            << "# TYPE llmquant_signals_blocked_total counter\n"
+            << "llmquant_signals_blocked_total "
+            << (rs.signals_blocked_magnitude.load()
+              + rs.signals_blocked_confidence.load()
+              + rs.signals_blocked_rate.load()
+              + rs.signals_blocked_drawdown.load()
+              + rs.signals_blocked_position.load()) << "\n"
+            << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
+            << "# TYPE llmquant_latency_p99_us gauge\n"
+            << "llmquant_latency_p99_us " << latency.p99_latency.count() << "\n"
+            << "# HELP llmquant_latency_avg_us Average token-to-signal latency in microseconds\n"
+            << "# TYPE llmquant_latency_avg_us gauge\n"
+            << "llmquant_latency_avg_us " << latency.avg_latency.count() << "\n";
+        return out.str();
+    });
+    prom_exporter.start();
+
     // Main monitoring loop — prints a rolling stats bar every second.
     uint64_t last_tick = 0;
     while (g_running) {
@@ -383,6 +413,7 @@ int main(int argc, char* argv[]) {
     token_sim.stop();
     if (stream_client) stream_client->stop();
     oms_adapter->stop();
+    prom_exporter.stop();
     config.stop_watching();
 
     auto final_stats = latency_ctrl.get_stats();

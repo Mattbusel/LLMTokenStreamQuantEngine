@@ -19,9 +19,11 @@
   #include <arpa/inet.h>
 #endif
 
+#include <nlohmann/json.hpp>
 #include <cstring>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 namespace llmquant {
 
@@ -107,6 +109,12 @@ bool LLMStreamClient::open_socket() {
         return false;
     }
 
+    // RAII guard: freeaddrinfo is called on scope exit even if an exception is thrown.
+    struct AddrInfoGuard {
+        addrinfo* p;
+        ~AddrInfoGuard() { if (p) freeaddrinfo(p); }
+    } res_guard{res};
+
     sockfd_ = -1;
     for (addrinfo* rp = res; rp != nullptr; rp = rp->ai_next) {
         int fd = static_cast<int>(socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol));
@@ -123,7 +131,6 @@ bool LLMStreamClient::open_socket() {
         ::close(fd);
 #endif
     }
-    freeaddrinfo(res);
     if (sockfd_ < 0) return false;
 
 #ifdef LLMQUANT_TLS_ENABLED
@@ -194,17 +201,16 @@ ssize_t LLMStreamClient::tls_recv(char* buf, size_t len) {
 #endif
 
 std::string LLMStreamClient::build_request_body() const {
-    // Minimal JSON construction — no external JSON library required.
-    std::ostringstream oss;
-    oss << "{"
-        << "\"model\":\"" << config_.model << "\","
-        << "\"stream\":true,"
-        << "\"max_tokens\":" << config_.max_tokens << ","
-        << "\"messages\":["
-        <<   "{\"role\":\"system\",\"content\":\"" << config_.system_prompt << "\"},"
-        <<   "{\"role\":\"user\",\"content\":\"" << config_.user_prompt << "\"}"
-        << "]}";
-    return oss.str();
+    nlohmann::json body = {
+        {"model",      config_.model},
+        {"stream",     true},
+        {"max_tokens", config_.max_tokens},
+        {"messages",   nlohmann::json::array({
+            {{"role", "system"}, {"content", config_.system_prompt}},
+            {{"role", "user"},   {"content", config_.user_prompt}}
+        })}
+    };
+    return body.dump();
 }
 
 std::string LLMStreamClient::build_http_request(const std::string& body) const {
@@ -215,6 +221,9 @@ std::string LLMStreamClient::build_http_request(const std::string& body) const {
         << "Content-Type: application/json\r\n"
         << "Content-Length: " << body.size() << "\r\n"
         << "Accept: text/event-stream\r\n"
+        // "Connection: close" is intentional for OpenAI — it closes after [DONE].
+        // For local endpoints supporting keep-alive SSE, set config_.use_keep_alive
+        // and replace this header. See LLMStreamClient::Config::use_keep_alive.
         << "Connection: close\r\n"
         << "\r\n"
         << body;
@@ -224,34 +233,12 @@ std::string LLMStreamClient::build_http_request(const std::string& body) const {
 std::string LLMStreamClient::parse_sse_delta(const std::string& data_line) {
     // data_line is the raw text after "data: ".
     // OpenAI SSE format: {"choices":[{"delta":{"content":"<token>"},...},...]}
-    // Scope the search to after "delta": to avoid matching top-level "content".
-    const std::string delta_key = "\"delta\":";
-    size_t delta_pos = data_line.find(delta_key);
-    const std::string search_region = (delta_pos != std::string::npos)
-                                          ? data_line.substr(delta_pos)
-                                          : data_line;
-
-    const std::string needle = "\"content\":\"";
-    size_t pos = search_region.find(needle);
-    if (pos == std::string::npos) return {};
-    // Remap pos back to data_line base (pos is relative to search_region).
-    pos += (delta_pos != std::string::npos ? delta_pos : 0);
-    pos += needle.size();
-    std::string token;
-    while (pos < data_line.size() && data_line[pos] != '"') {
-        if (data_line[pos] == '\\' && pos + 1 < data_line.size()) {
-            ++pos;  // advance past backslash
-            switch (data_line[pos]) {
-                case 'n': token += '\n'; break;
-                case 't': token += '\t'; break;
-                default:  token += data_line[pos]; break;
-            }
-        } else {
-            token += data_line[pos];
-        }
-        ++pos;
+    try {
+        auto j = nlohmann::json::parse(data_line);
+        return j.at("choices").at(0).at("delta").at("content").get<std::string>();
+    } catch (const nlohmann::json::exception&) {
+        return {};
     }
-    return token;
 }
 
 // Send all bytes in request over the active socket (TLS or plain).
@@ -383,6 +370,9 @@ void LLMStreamClient::reader_thread() {
             buf = buf.substr(start);
         }
 
+        // TODO (use_keep_alive): skip close_socket() and reuse the connection
+        // for the next request by resetting parse state and re-sending the request.
+        // Currently always closes; OpenAI closes after [DONE] anyway.
         close_socket();
 
         if (!running_.load()) break;

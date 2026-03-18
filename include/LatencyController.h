@@ -130,14 +130,15 @@ public:
 
 private:
     Config config_;
-    std::chrono::high_resolution_clock::time_point measurement_start_;
 
     std::atomic<uint64_t> total_measurements_{0};
     std::atomic<uint64_t> total_latency_us_{0};
     std::atomic<uint64_t> min_latency_us_{UINT64_MAX};
     std::atomic<uint64_t> max_latency_us_{0};
 
-    std::vector<std::chrono::microseconds> latency_samples_;
+    std::vector<std::chrono::microseconds> latency_samples_;  ///< Ring buffer, size == config_.sample_window.
+    size_t sample_head_{0};    ///< Next write index (wraps at sample_window).
+    size_t sample_count_{0};   ///< Valid entries (saturates at sample_window).
     mutable std::mutex samples_mutex_;
 
     mutable std::mutex pressure_mutex_;
@@ -148,5 +149,11 @@ private:
     /// Must be called with pressure_mutex_ held.
     void recompute_composite();
 };
+
+/// Thread-local start timestamp used by start_measurement / end_measurement.
+/// Declared outside the class because thread_local is not permitted on
+/// non-static data members in C++.
+inline thread_local std::chrono::high_resolution_clock::time_point
+    latency_measurement_start_;
 
 } // namespace llmquant

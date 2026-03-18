@@ -56,9 +56,10 @@ using TradeSignalCallback = std::function<void(const TradeSignal&)>;
 /// token (backtest mode).
 ///
 /// Thread safety: process_semantic_weight() is NOT thread-safe; all calls
-/// must arrive from the same thread.  get_stats() is always safe (atomic
-/// reads).  set_* configuration methods must not be called concurrently with
-/// process_semantic_weight().
+/// must arrive from the same thread.  last_signal_time_ is not protected by
+/// any lock and must be read and written only from the same thread.
+/// get_stats() is always safe (atomic reads).  set_* configuration methods
+/// must not be called concurrently with process_semantic_weight().
 class TradeSignalEngine {
 public:
     /// Construction-time parameters for the engine.
@@ -141,6 +142,10 @@ private:
     /// Last confidence score observed from process_semantic_weight(); used to
     /// populate TradeSignal::confidence on emission.
     std::atomic<double> last_confidence_{0.5};
+    /// Updated by emit_signal() and read by should_emit_signal().  Both are
+    /// called exclusively from the single-threaded process_semantic_weight()
+    /// path (see class-level thread-safety note); no synchronisation is needed.
+    /// Do NOT access this field from any other thread.
     std::chrono::high_resolution_clock::time_point last_signal_time_;
     Stats stats_;
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;

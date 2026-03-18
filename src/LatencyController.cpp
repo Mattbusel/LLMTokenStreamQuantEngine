@@ -5,16 +5,17 @@
 namespace llmquant {
 
 LatencyController::LatencyController(const Config& config) : config_(config) {
-    latency_samples_.reserve(config_.sample_window);
+    // Pre-allocate the ring buffer to its full capacity so writes never reallocate.
+    latency_samples_.assign(config_.sample_window, std::chrono::microseconds{0});
 }
 
 void LatencyController::start_measurement() {
-    measurement_start_ = std::chrono::high_resolution_clock::now();
+    latency_measurement_start_ = std::chrono::high_resolution_clock::now();
 }
 
 void LatencyController::end_measurement() {
     auto end = std::chrono::high_resolution_clock::now();
-    auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - measurement_start_);
+    auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - latency_measurement_start_);
     record_latency(latency);
 }
 
@@ -31,14 +32,12 @@ void LatencyController::record_latency(std::chrono::microseconds latency) {
     uint64_t current_max = max_latency_us_.load();
     while (latency_us > current_max && !max_latency_us_.compare_exchange_weak(current_max, latency_us));
     
-    // Store sample for percentile calculation
+    // Store sample in ring buffer for percentile calculation — O(1) per insert.
     if (config_.enable_profiling) {
         std::lock_guard<std::mutex> lock(samples_mutex_);
-        latency_samples_.push_back(latency);
-        
-        if (latency_samples_.size() > config_.sample_window) {
-            latency_samples_.erase(latency_samples_.begin());
-        }
+        latency_samples_[sample_head_] = latency;
+        sample_head_ = (sample_head_ + 1) % config_.sample_window;
+        if (sample_count_ < config_.sample_window) ++sample_count_;
     }
 }
 
@@ -56,16 +55,33 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
     // Calculate percentiles from samples
     if (config_.enable_profiling) {
         std::lock_guard<std::mutex> lock(samples_mutex_);
-        if (!latency_samples_.empty()) {
-            auto samples_copy = latency_samples_;
-            std::sort(samples_copy.begin(), samples_copy.end());
-            
-            // Percentile indices: ceil(p * N) - 1 (0-based)
-            size_t p95_idx = static_cast<size_t>(std::ceil(samples_copy.size() * 0.95)) - 1;
-            size_t p99_idx = static_cast<size_t>(std::ceil(samples_copy.size() * 0.99)) - 1;
+        if (sample_count_ > 0) {
+            // Reconstruct the valid samples in insertion order from the ring buffer.
+            std::vector<std::chrono::microseconds> samples_copy(sample_count_);
+            for (size_t k = 0; k < sample_count_; ++k) {
+                size_t idx = (sample_head_ + config_.sample_window - sample_count_ + k)
+                             % config_.sample_window;
+                samples_copy[k] = latency_samples_[idx];
+            }
 
-            stats.p95_latency = samples_copy[std::min(p95_idx, samples_copy.size() - 1)];
-            stats.p99_latency = samples_copy[std::min(p99_idx, samples_copy.size() - 1)];
+            size_t N = samples_copy.size();
+            size_t p95_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.95));
+            if (p95_idx > 0) p95_idx--;
+            size_t p99_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.99));
+            if (p99_idx > 0) p99_idx--;
+            p95_idx = std::min(p95_idx, N - 1);
+            p99_idx = std::min(p99_idx, N - 1);
+
+            // nth_element is O(N) average vs O(N log N) for full sort.
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p99_idx),
+                             samples_copy.end());
+            stats.p99_latency = samples_copy[p99_idx];
+
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p95_idx),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p99_idx));
+            stats.p95_latency = samples_copy[p95_idx];
 
             // Calculate jitter (std dev) against the window mean, not global avg
             double window_mean = 0.0;
@@ -90,9 +106,12 @@ void LatencyController::reset_stats() {
     total_latency_us_ = 0;
     min_latency_us_ = UINT64_MAX;
     max_latency_us_ = 0;
-    
+
     std::lock_guard<std::mutex> lock(samples_mutex_);
-    latency_samples_.clear();
+    std::fill(latency_samples_.begin(), latency_samples_.end(),
+              std::chrono::microseconds{0});
+    sample_head_  = 0;
+    sample_count_ = 0;
 }
 
 void LatencyController::profile_token_processing() {

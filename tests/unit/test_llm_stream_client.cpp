@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <string>
 #include <thread>
 
 using namespace llmquant;
@@ -51,6 +52,41 @@ TEST(LLMStreamClientTest, test_stream_client_double_stop_is_safe) {
     client.stop();
     client.stop();  // second stop must not crash or hang
     SUCCEED();
+}
+
+// ---------------------------------------------------------------------------
+// SSE delta parsing tests (improvement 10)
+// ---------------------------------------------------------------------------
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_extracts_content_token) {
+    std::string data = R"({"choices":[{"delta":{"content":"hello"}}]})";
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta(data), "hello");
+}
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_missing_content_returns_empty) {
+    std::string data = R"({"choices":[{"delta":{}}]})";
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta(data), "");
+}
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_malformed_json_returns_empty) {
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta("{bad json{{"), "");
+}
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_empty_choices_returns_empty) {
+    std::string data = R"({"choices":[]})";
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta(data), "");
+}
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_unicode_content_decoded) {
+    // nlohmann/json decodes \u0041 -> 'A'
+    std::string data = R"({"choices":[{"delta":{"content":"\u0041"}}]})";
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta(data), "A");
+}
+
+TEST(LLMStreamClientTest, test_parse_sse_delta_embedded_quotes_in_content) {
+    // Content containing escaped quotes — manual parser would corrupt this.
+    std::string data = R"({"choices":[{"delta":{"content":"say \"hi\""}}]})";
+    EXPECT_EQ(LLMStreamClient::parse_sse_delta(data), "say \"hi\"");
 }
 
 TEST(LLMStreamClientTest, test_stream_client_done_callback_fires_on_failed_connect) {

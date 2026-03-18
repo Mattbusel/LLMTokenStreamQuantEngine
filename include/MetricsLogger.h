@@ -76,6 +76,14 @@ public:
     /// * `cpu_usage`    — Current CPU utilisation as a percentage (0–100).
     void log_system_stats(uint64_t memory_usage, double cpu_usage);
 
+    /// Record a risk gate rejection event.
+    ///
+    /// # Arguments
+    /// * `reason`     — Rejection reason string (e.g. "magnitude_exceeded").
+    /// * `bias`       — delta_bias_shift of the rejected signal.
+    /// * `confidence` — Confidence score of the rejected signal.
+    void log_risk_rejection(const std::string& reason, double bias, double confidence);
+
     /// Write a human-readable performance summary to the console (if enabled).
     void log_performance_summary();
 

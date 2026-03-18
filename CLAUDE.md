@@ -81,23 +81,25 @@ clang-format --dry-run src/*.cpp include/*.h
 | RiskManager | ✓ | ✓ OMS position hooks | ✓ | ✓ |
 | OmsAdapter (abstract) | ✓ | ✓ (interface only) | ✓ | ✓ |
 | RestOmsAdapter | ✓ | ✓ HTTP/1.1 polling | ✓ | ✓ |
-| FixOmsAdapter | ✓ | ✓ FIX 4.2 session reader | ✓ | ✓ |
+| FixOmsAdapter | ✓ | ✓ FIX 4.2 + session recovery | ✓ | ✓ |
 | MockOmsAdapter | ✓ | ✓ deterministic test double | ✓ | ✓ |
+| PrometheusExporter | ✓ | ✓ HTTP /metrics scrape | ✓ | ✓ |
 
 ## What Still Needs Building
-- Production hardening: sequence number reset + ResendRequest in FixOmsAdapter for unattended 24/7 operation
+- Nothing critical — all modules complete. Possible future work: FIX surrogate-pair Unicode in SequenceReset, async alert dispatch to avoid callback re-entrancy deadlock.
 
 ## Non-Obvious Design Decisions
 
 - CMakeLists.txt was originally in include/ — moved to project root for standard
-  CMake layout; the old include/CMakeLists.txt remains for reference only.
+  CMake layout; the old include/CMakeLists.txt has been deleted.
 - TradeSignal includes both `timestamp_ns` (uint64, for serialisation) and
   `timestamp` (chrono, for latency calculation in main).
 - LLMAdapter uses an unordered_map as a token cache — hot path since all
   production tokens hit it after the first lookup.
-- LatencyController keeps a rolling window of samples for percentile
-  calculation; erasing from vector front is O(n) but the window is small
-  (default 1000 samples) so the amortised cost is acceptable.
+- LatencyController uses a fixed-size ring buffer for the sample window — O(1)
+  push with no element shifting. Percentiles use `nth_element` (O(N) average)
+  rather than a full sort. Thread-local `latency_measurement_start_` makes
+  `start/end_measurement` safe to call from multiple threads.
 - OutputSink concrete classes (CsvOutputSink, JsonOutputSink, MemoryOutputSink)
   are implemented inline in OutputSink.h because they are thin wrappers over
   std::ofstream / std::vector with no separate compilation unit needed.

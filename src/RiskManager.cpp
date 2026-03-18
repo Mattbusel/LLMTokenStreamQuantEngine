@@ -1,14 +1,29 @@
 #include "RiskManager.h"
+#include "MetricsLogger.h"
 #include <cmath>
+#include <stdexcept>
 
 namespace llmquant {
 
 RiskManager::RiskManager(const Config& config)
     : config_(config)
     , rate_window_start_(std::chrono::high_resolution_clock::now())
-    , drawdown_window_start_(std::chrono::high_resolution_clock::now()) {}
+    , drawdown_window_start_(std::chrono::high_resolution_clock::now()) {
+    if (config_.max_bias_magnitude < 0.0)
+        throw std::invalid_argument("RiskManager: max_bias_magnitude must be >= 0");
+    if (config_.min_confidence < 0.0 || config_.min_confidence > 1.0)
+        throw std::invalid_argument("RiskManager: min_confidence must be in [0, 1]");
+    if (config_.max_signals_per_second == 0)
+        throw std::invalid_argument("RiskManager: max_signals_per_second must be > 0");
+    if (config_.max_drawdown < 0.0)
+        throw std::invalid_argument("RiskManager: max_drawdown must be >= 0");
+}
 
 bool RiskManager::evaluate(const TradeSignal& signal) {
+    // PERF NOTE: mutex_ is held for all five gate evaluations plus the alert
+    // callback on each rejected path.  For high-throughput paths, check_magnitude
+    // and check_confidence could run outside the lock (they only read config_
+    // set at construction).  For now, single lock is safe and correct.
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!check_magnitude(signal)) {
@@ -92,8 +107,18 @@ void RiskManager::update_drawdown(const TradeSignal& signal) {
     cumulative_bias_ += signal.delta_bias_shift;
 }
 
+void RiskManager::set_metrics_logger(MetricsLogger* logger) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    logger_ = logger;
+}
+
 void RiskManager::fire_alert(const std::string& reason, const TradeSignal& signal) {
-    if (alert_cb_) alert_cb_(reason, signal);
+    if (alert_cb_) {
+        try { alert_cb_(reason, signal); } catch (...) {}
+    }
+    if (logger_) {
+        logger_->log_risk_rejection(reason, signal.delta_bias_shift, signal.confidence);
+    }
 }
 
 void RiskManager::update_position(const PositionState& state) {
@@ -117,18 +142,18 @@ bool RiskManager::check_and_notify_position(const TradeSignal& signal) {
 
     // Hard breach — block the signal.
     if (std::abs(projected) > limit) {
-        if (oms_cb_) oms_cb_("position_limit_breached", position_, signal);
+        if (oms_cb_) { try { oms_cb_("position_limit_breached", position_, signal); } catch (...) {} }
         return false;
     }
 
     // Soft warn — fire callback but allow signal through.
     if (std::abs(projected) > limit * config_.position_warn_fraction) {
-        if (oms_cb_) oms_cb_("position_limit_approaching", position_, signal);
+        if (oms_cb_) { try { oms_cb_("position_limit_approaching", position_, signal); } catch (...) {} }
     }
 
     // PnL breach — block.
     if (position_.pnl < position_.pnl_limit) {
-        if (oms_cb_) oms_cb_("pnl_limit_breached", position_, signal);
+        if (oms_cb_) { try { oms_cb_("pnl_limit_breached", position_, signal); } catch (...) {} }
         return false;
     }
 

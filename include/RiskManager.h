@@ -9,6 +9,8 @@
 #include <vector>
 #include "TradeSignalEngine.h"
 
+namespace llmquant { class MetricsLogger; }
+
 namespace llmquant {
 
 /// Production risk management layer that gates TradeSignals before emission.
@@ -83,6 +85,12 @@ public:
     /// # Returns
     /// `true` if the signal passes all checks and should be emitted.
     /// `false` if the signal is blocked (stats updated, alert fired).
+    ///
+    /// NOTE: evaluate() holds an internal mutex for its entire execution,
+    /// including any alert_cb_ invocations on rejected signal paths.
+    /// Alert callbacks MUST NOT call evaluate(), get_position(), or any other
+    /// RiskManager method, or a deadlock will result.  For complex alert handling
+    /// (e.g. network I/O), dispatch alerts to a separate queue from the callback.
     bool evaluate(const TradeSignal& signal);
 
     /// Register a callback to be invoked when a signal is blocked.
@@ -110,6 +118,13 @@ public:
     /// Thread-safe (acquires mutex_).
     PositionState get_position() const;
 
+    /// Attach a MetricsLogger for structured rejection logging.
+    ///
+    /// # Arguments
+    /// * `logger` — Pointer to an active MetricsLogger; must outlive this
+    ///              RiskManager. Pass nullptr to disable (default).
+    void set_metrics_logger(MetricsLogger* logger);
+
     /// Reset the drawdown accumulator and rate-limit window.
     void reset();
 
@@ -131,6 +146,7 @@ private:
     Config        config_;
     AlertCallback alert_cb_;
     OmsCallback   oms_cb_;
+    MetricsLogger* logger_{nullptr};
     PositionState position_;
     mutable std::mutex mutex_;
 

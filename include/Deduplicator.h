@@ -174,10 +174,24 @@ public:
     /// Always returns false when built without hiredis (stub mode).
     bool is_connected() const;
 
+    /// Callback type invoked when the Redis connection is lost.
+    using DisconnectCallback = std::function<void(const std::string& error)>;
+
+    /// Register a callback invoked once per disconnection event.
+    /// The callback fires from the thread that detected the failure.
+    void set_disconnect_callback(DisconnectCallback cb);
+
+    /// Attempt to re-establish the Redis connection.
+    /// Returns true if reconnect succeeded. No-op stub when built without hiredis.
+    bool try_reconnect();
+
 private:
     std::string redis_url_;
     // Fallback: in-process deduplicator used when Redis is unavailable.
     InProcessDeduplicator inner_;
+
+    DisconnectCallback disconnect_cb_;
+    std::mutex reconnect_mutex_;   ///< Serializes reconnect attempts.
 
 #ifdef LLMQUANT_REDIS_ENABLED
     void* redis_ctx_{nullptr};   ///< redisContext* — opaque to avoid hiredis header leaking.

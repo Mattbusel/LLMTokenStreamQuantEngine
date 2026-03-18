@@ -92,69 +92,69 @@ void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeigh
     token_weights_[token] = weight;
 }
 
+// SSE2-only horizontal add: returns [a[0]+a[1], b[0]+b[1]]
+static inline __m128d sse2_hadd(__m128d a, __m128d b) {
+    return _mm_add_pd(_mm_unpacklo_pd(a, b), _mm_unpackhi_pd(a, b));
+}
+
 SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tokens) const {
     if (tokens.empty()) return SemanticWeight{0.0, 0.0, 0.0, 0.0};
 
-    // Resolve all tokens to weights first (single-token lookup is already O(1)).
     std::vector<SemanticWeight> weights;
     weights.reserve(tokens.size());
     for (const auto& t : tokens) weights.push_back(map_token_to_weight(t));
 
     const size_t n = weights.size();
 
-    // SIMD accumulators: [sentiment*conf, volatility*conf] packed as two doubles.
-    __m128d acc_sv = _mm_setzero_pd();   // sentiment * confidence, volatility * confidence
-    __m128d acc_db = _mm_setzero_pd();   // directional_bias * confidence, confidence
-    __m128d acc_c  = _mm_setzero_pd();   // confidence, confidence (for denominator)
+    // Four confidence-weighted sums packed into two SSE2 registers:
+    //   acc_sv = [ sum(sentiment*conf) , sum(volatility*conf) ]
+    //   acc_dc = [ sum(bias*conf)      , sum(conf)            ]
+    __m128d acc_sv = _mm_setzero_pd();
+    __m128d acc_dc = _mm_setzero_pd();
 
     size_t i = 0;
-    // Process pairs with SSE2.
     for (; i + 1 < n; i += 2) {
         const auto& w0 = weights[i];
         const auto& w1 = weights[i + 1];
 
-        __m128d s  = _mm_set_pd(w1.sentiment_score,   w0.sentiment_score);
-        __m128d v  = _mm_set_pd(w1.volatility_score,  w0.volatility_score);
-        __m128d d  = _mm_set_pd(w1.directional_bias,  w0.directional_bias);
-        __m128d c  = _mm_set_pd(w1.confidence_score,  w0.confidence_score);
+        __m128d c    = _mm_set_pd(w1.confidence_score,  w0.confidence_score);
+        __m128d s    = _mm_set_pd(w1.sentiment_score,   w0.sentiment_score);
+        __m128d v    = _mm_set_pd(w1.volatility_score,  w0.volatility_score);
+        __m128d d    = _mm_set_pd(w1.directional_bias,  w0.directional_bias);
 
-        acc_sv = _mm_add_pd(acc_sv, _mm_mul_pd(s, c));
-        // reuse acc_db second lane for volatility*conf
-        __m128d vc = _mm_mul_pd(v, c);
-        __m128d dc = _mm_mul_pd(d, c);
-        // pack volatility*conf and directional*conf together temporarily
-        acc_db = _mm_add_pd(acc_db, _mm_unpacklo_pd(dc, vc));
-        acc_c  = _mm_add_pd(acc_c,  c);
+        __m128d sc   = _mm_mul_pd(s, c);
+        __m128d vc   = _mm_mul_pd(v, c);
+        __m128d dc_v = _mm_mul_pd(d, c);
+
+        // sse2_hadd sums both lanes: [w0_val+w1_val, ...]
+        acc_sv = _mm_add_pd(acc_sv, sse2_hadd(sc, vc));
+        acc_dc = _mm_add_pd(acc_dc, sse2_hadd(dc_v, c));
     }
 
-    // Horizontal sum the SSE2 registers.
-    double buf_sv[2], buf_db[2], buf_c[2];
+    double buf_sv[2], buf_dc[2];
     _mm_storeu_pd(buf_sv, acc_sv);
-    _mm_storeu_pd(buf_db, acc_db);
-    _mm_storeu_pd(buf_c,  acc_c);
+    _mm_storeu_pd(buf_dc, acc_dc);
 
-    [[maybe_unused]] double sum_s  = buf_sv[0] + buf_sv[1];
-    [[maybe_unused]] double sum_dc = buf_db[0] + buf_db[1];   // directional * conf
-    [[maybe_unused]] double sum_vc = 0.0;                      // volatility  * conf — see below
-    double total_conf = buf_c[0] + buf_c[1];
+    double sum_s = buf_sv[0];
+    double sum_v = buf_sv[1];
+    double sum_d = buf_dc[0];
+    double sum_c = buf_dc[1];
 
-    // The volatility lane is stored in the high double of acc_db after unpacklo;
-    // retrieve from a separate scalar accumulation to keep the code clear.
-    // (Scalar cleanup also handles this for the remainder below.)
+    // Scalar tail for odd n.
+    for (; i < n; ++i) {
+        const auto& w = weights[i];
+        sum_s += w.sentiment_score  * w.confidence_score;
+        sum_v += w.volatility_score * w.confidence_score;
+        sum_d += w.directional_bias * w.confidence_score;
+        sum_c += w.confidence_score;
+    }
 
-    // Scalar cleanup for remainder and volatility accumulation.
-    auto scalar_part = aggregate_scalar(weights, i, n);
-    // Merge scalar part into SIMD totals weighted by their confidence sums.
-    double scalar_conf = scalar_part.confidence_score * static_cast<double>(n - i);
-
-    SemanticWeight result;
-    double grand_conf = total_conf + scalar_conf;
-    if (grand_conf > 0.0) {
-        // For simplicity, re-aggregate the full vector scalar-side and blend.
-        // The SIMD path accelerates the hot loop; correctness comes from scalar.
-        result = aggregate_scalar(weights, 0, n);
-    } else {
-        result = SemanticWeight{0.0, 0.0, 0.0, 0.0};
+    SemanticWeight result{};
+    if (sum_c > 0.0) {
+        result.sentiment_score  = sum_s / sum_c;
+        result.volatility_score = sum_v / sum_c;
+        result.directional_bias = sum_d / sum_c;
+        result.confidence_score = sum_c / static_cast<double>(n);
     }
     return result;
 }

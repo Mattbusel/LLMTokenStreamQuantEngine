@@ -154,7 +154,7 @@ std::string FixOmsAdapter::fix_message(const std::string& body) const {
     return full;
 }
 
-std::string FixOmsAdapter::build_logon() const {
+std::string FixOmsAdapter::build_logon(bool reset_seq) const {
     std::ostringstream body;
     body << "35=A" << SOH
          << "49=" << config_.sender_comp_id << SOH
@@ -163,6 +163,31 @@ std::string FixOmsAdapter::build_logon() const {
          << "52=" << fix_utctime() << SOH
          << "98=0" << SOH   // EncryptMethod=None
          << "108=" << config_.heartbeat_interval_s << SOH;
+    if (reset_seq) body << "141=Y" << SOH;  // ResetSeqNumFlag
+    return fix_message(body.str());
+}
+
+std::string FixOmsAdapter::build_resend_request(int begin_seq) const {
+    std::ostringstream body;
+    body << "35=2" << SOH
+         << "49=" << config_.sender_comp_id << SOH
+         << "56=" << config_.target_comp_id << SOH
+         << "34=" << seq_num_ << SOH
+         << "52=" << fix_utctime() << SOH
+         << "7=" << begin_seq << SOH   // BeginSeqNo
+         << "16=0" << SOH;             // EndSeqNo=0 means "to present"
+    return fix_message(body.str());
+}
+
+std::string FixOmsAdapter::build_sequence_reset(int new_seq_num) const {
+    std::ostringstream body;
+    body << "35=4" << SOH
+         << "49=" << config_.sender_comp_id << SOH
+         << "56=" << config_.target_comp_id << SOH
+         << "34=" << seq_num_ << SOH
+         << "52=" << fix_utctime() << SOH
+         << "36=" << new_seq_num << SOH  // NewSeqNo
+         << "123=N" << SOH;             // GapFillFlag=N (hard reset)
     return fix_message(body.str());
 }
 
@@ -202,6 +227,25 @@ FixOmsAdapter::FixFields FixOmsAdapter::parse_fix(const std::string& raw) {
 
 void FixOmsAdapter::handle_message(const FixFields& fields) {
     messages_parsed_++;
+
+    // --- Sequence number tracking ---
+    auto seq_it = fields.find(34);  // MsgSeqNum
+    if (seq_it != fields.end()) {
+        try {
+            int received_seq = std::stoi(seq_it->second);
+            if (received_seq > expected_inbound_seq_) {
+                // Gap detected: request retransmission of missing messages.
+                send_resend_request(expected_inbound_seq_, received_seq - 1);
+                // Advance expected so we don't re-request on the next message.
+                expected_inbound_seq_ = received_seq + 1;
+            } else if (received_seq == expected_inbound_seq_) {
+                expected_inbound_seq_++;
+            }
+            // received_seq < expected_inbound_seq_: duplicate — skip content processing below.
+            else { return; }
+        } catch (...) {}
+    }
+
     auto it = fields.find(35);
     if (it == fields.end()) return;
 
@@ -210,8 +254,14 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
         apply_execution_report(fields);
     } else if (msg_type == "AP") {
         apply_position_report(fields);
+    } else if (msg_type == "4") {
+        // SequenceReset: advance expected inbound sequence to tag 36 (NewSeqNo).
+        auto ns_it = fields.find(36);
+        if (ns_it != fields.end()) {
+            try { expected_inbound_seq_ = std::stoi(ns_it->second); } catch (...) {}
+        }
     }
-    // Logon (A), Heartbeat (0), and other message types are silently accepted.
+    // Logon (A), Heartbeat (0), ResendRequest (2), and other types accepted silently.
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +318,55 @@ void FixOmsAdapter::emit_position() {
 }
 
 // ---------------------------------------------------------------------------
+// Session recovery helpers
+// ---------------------------------------------------------------------------
+
+bool FixOmsAdapter::reconnect_with_backoff() {
+    close_socket();
+    int backoff_s = std::min(1 << reconnect_attempts_, kMaxReconnectBackoffSeconds);
+    std::cerr << "[FixOmsAdapter] reconnecting in " << backoff_s << " seconds\n";
+    for (int i = 0; i < backoff_s * 10 && running_.load(); ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (!running_.load()) return false;
+    if (!open_socket()) {
+        ++reconnect_attempts_;
+        return false;
+    }
+    seq_num_ = 1;
+    std::string logon = build_logon(/*reset_seq=*/true);
+    ssize_t sent = ::send(sockfd_, logon.c_str(), static_cast<int>(logon.size()), 0);
+    if (sent != static_cast<ssize_t>(logon.size())) {
+        close_socket();
+        ++reconnect_attempts_;
+        return false;
+    }
+    seq_num_++;
+    reconnect_attempts_ = 0;
+    std::cerr << "[FixOmsAdapter] reconnected successfully\n";
+    return true;
+}
+
+void FixOmsAdapter::send_sequence_reset() {
+    std::string msg = build_sequence_reset(1);
+    ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
+    seq_num_ = 1;
+}
+
+void FixOmsAdapter::send_resend_request(int begin_seq, int end_seq) {
+    std::ostringstream body;
+    body << "35=2" << SOH
+         << "49=" << config_.sender_comp_id << SOH
+         << "56=" << config_.target_comp_id << SOH
+         << "34=" << seq_num_ << SOH
+         << "52=" << fix_utctime() << SOH
+         << "7="  << begin_seq << SOH
+         << "16=" << end_seq   << SOH;
+    std::string msg = fix_message(body.str());
+    ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
+    seq_num_++;
+}
+
+// ---------------------------------------------------------------------------
 // Reader thread
 // ---------------------------------------------------------------------------
 
@@ -295,7 +394,15 @@ void FixOmsAdapter::reader_thread() {
     while (running_.load()) {
         ssize_t n = recv(sockfd_, chunk,
                          static_cast<int>(sizeof(chunk) - 1), 0);
-        if (n <= 0) break;
+        if (n <= 0) {
+            std::cerr << "[FixOmsAdapter] recv failed, reconnecting\n";
+            if (reconnect_with_backoff()) {
+                last_heartbeat = std::chrono::steady_clock::now();
+                buf.clear();
+                continue;
+            }
+            break;  // stop() was called or reconnect failed — exit thread
+        }
         chunk[n] = '\0';
         buf.append(chunk, static_cast<size_t>(n));
 
@@ -321,7 +428,17 @@ void FixOmsAdapter::reader_thread() {
             now - last_heartbeat);
         if (elapsed.count() >= config_.heartbeat_interval_s) {
             std::string hb = build_heartbeat();
-            send(sockfd_, hb.c_str(), static_cast<int>(hb.size()), 0);
+            ssize_t hb_sent = ::send(sockfd_, hb.c_str(),
+                                     static_cast<int>(hb.size()), 0);
+            if (hb_sent != static_cast<ssize_t>(hb.size())) {
+                std::cerr << "[FixOmsAdapter] heartbeat send failed, reconnecting\n";
+                if (reconnect_with_backoff()) {
+                    last_heartbeat = std::chrono::steady_clock::now();
+                    buf.clear();
+                    continue;
+                }
+                break;
+            }
             seq_num_++;
             last_heartbeat = now;
         }

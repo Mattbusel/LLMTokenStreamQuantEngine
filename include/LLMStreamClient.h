@@ -57,6 +57,10 @@ public:
         std::chrono::seconds loop_interval{5};
         /// When true, dump every raw byte received to stderr for 3 seconds then exit.
         bool debug_raw{false};
+        /// When true, attempt to reuse the TCP connection across requests.
+        /// Only effective for servers that support persistent SSE streams.
+        /// Set to false for OpenAI which closes after [DONE].
+        bool use_keep_alive{false};
     };
 
     /// Construct a streaming client with the given connection parameters.
@@ -96,6 +100,16 @@ public:
     /// Returns true if the background reader thread is active.
     bool is_running() const { return running_.load(); }
 
+    /// Parse one SSE `data:` line and extract the token delta.
+    ///
+    /// Exposed as public static for unit testing of the parsing logic without
+    /// a live server.  Returns empty string if the line is not a content delta
+    /// or if the content field is absent or empty in the JSON payload.
+    ///
+    /// # Arguments
+    /// * `data_line` — Raw text following the "data: " SSE prefix.
+    static std::string parse_sse_delta(const std::string& data_line);
+
 private:
     void reader_thread();
     bool open_socket();
@@ -134,15 +148,6 @@ private:
     /// # Arguments
     /// * `body` — JSON request body produced by build_request_body().
     std::string build_http_request(const std::string& body) const;
-
-    /// Parse one SSE `data:` line and extract the token delta.
-    ///
-    /// Returns empty string if the line is not a content delta or if the
-    /// content field is absent or empty in the JSON payload.
-    ///
-    /// # Arguments
-    /// * `data_line` — Raw text following the "data: " SSE prefix.
-    static std::string parse_sse_delta(const std::string& data_line);
 
     Config          config_;
     TokenCallback   token_cb_;

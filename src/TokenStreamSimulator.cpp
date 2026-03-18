@@ -63,8 +63,9 @@ void TokenStreamSimulator::stream_worker() {
     while (running_.load()) {
         std::string token_text;
 
+        // 1. Try to pop a token from the ring buffer.
         if (!ring_buffer_.try_pop(token_text)) {
-            // Ring empty: refill from source_tokens_ in a tight loop, then retry.
+            // 2. Ring empty: refill from source_tokens_ in a tight loop, then retry.
             {
                 std::lock_guard<std::mutex> lock(load_mutex_);
                 if (!source_tokens_.empty()) {
@@ -78,13 +79,14 @@ void TokenStreamSimulator::stream_worker() {
                     }
                 }
             }
-            // Still nothing — interval sleep and retry.
+            // 3. Still empty after refill: back-off sleep only, then retry loop.
             if (!ring_buffer_.try_pop(token_text)) {
                 std::this_thread::sleep_for(config_.token_interval);
-                continue;
+                continue;  // Do NOT fall through to the dispatch sleep.
             }
         }
 
+        // 4. We have a token: dispatch via callback, update stats, THEN sleep (normal cadence).
         uint64_t seq = current_sequence_.fetch_add(1);
         Token token(std::move(token_text), seq);
 
@@ -99,7 +101,7 @@ void TokenStreamSimulator::stream_worker() {
         }
 
         stats_.tokens_emitted++;
-        std::this_thread::sleep_for(config_.token_interval);
+        std::this_thread::sleep_for(config_.token_interval);  // Normal cadence: only after dispatch.
     }
 }
 

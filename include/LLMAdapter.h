@@ -81,17 +81,20 @@ public:
     /// * `weight` — SemanticWeight to associate with the token.
     void add_token_mapping(const std::string& token, const SemanticWeight& weight);
 
-    /// Batch-score a sequence of tokens using SIMD-accelerated aggregation.
+    /// Batch-score a sequence of tokens using SSE2-accelerated aggregation.
     ///
-    /// Equivalent to map_sequence_to_weight() but the confidence-weighted
-    /// dot-product is computed using SSE2 intrinsics when four or more tokens
-    /// are present, falling back to scalar for the remainder.
+    /// Processes token pairs with SSE2 intrinsics, accumulating four
+    /// confidence-weighted sums (sentiment, volatility, directional bias, and
+    /// total confidence) across two 128-bit registers.  A scalar tail loop
+    /// handles any odd remaining token.  The final result is the
+    /// confidence-weighted average of all four fields, identical in semantics
+    /// to map_sequence_to_weight() but faster on sequences of two or more tokens.
     ///
     /// # Arguments
     /// * `tokens` — Tokens to score; may be empty (returns zero weight).
     ///
     /// # Returns
-    /// Confidence-weighted aggregate SemanticWeight.
+    /// Confidence-weighted average SemanticWeight computed via SSE2.
     SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
 
 private:

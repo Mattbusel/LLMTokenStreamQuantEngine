@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <yaml-cpp/yaml.h>
@@ -103,8 +104,11 @@ public:
     /// Reset all fields to their compiled-in defaults.
     void set_defaults();
 
-    /// Return a read-only reference to the loaded SystemConfig.
-    const SystemConfig& get_config() const { return config_; }
+    /// Return a snapshot of the loaded config. Thread-safe.
+    SystemConfig get_config() const {
+        std::lock_guard<std::mutex> lk(config_mutex_);
+        return config_;
+    }
     SystemConfig&       get_mutable_config()  { return config_; }
 
     /// Start watching the config file for changes and reload automatically.
@@ -126,6 +130,7 @@ public:
 
 private:
     SystemConfig config_;
+    mutable std::mutex config_mutex_;  ///< Guards config_ during hot-reload.
     std::thread watcher_thread_;
     std::atomic<bool> watching_{false};
 };

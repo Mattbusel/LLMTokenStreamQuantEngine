@@ -11,43 +11,32 @@ add_executable(tests
     unit/test_llm_stream_client.cpp
     unit/test_invariants.cpp
     unit/test_oms_adapter.cpp
+    unit/test_prometheus_exporter.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
     performance/bench_hot_path.cpp
-    ${CMAKE_SOURCE_DIR}/src/TokenStreamSimulator.cpp
-    ${CMAKE_SOURCE_DIR}/src/TradeSignalEngine.cpp
-    ${CMAKE_SOURCE_DIR}/src/LatencyController.cpp
-    ${CMAKE_SOURCE_DIR}/src/LLMAdapter.cpp
-    ${CMAKE_SOURCE_DIR}/src/MetricsLogger.cpp
-    ${CMAKE_SOURCE_DIR}/src/Config.cpp
-    ${CMAKE_SOURCE_DIR}/src/RiskManager.cpp
-    ${CMAKE_SOURCE_DIR}/src/Deduplicator.cpp
-    ${CMAKE_SOURCE_DIR}/src/LLMStreamClient.cpp
-    ${CMAKE_SOURCE_DIR}/src/RestOmsAdapter.cpp
-    ${CMAKE_SOURCE_DIR}/src/FixOmsAdapter.cpp
-    ${CMAKE_SOURCE_DIR}/src/MockOmsAdapter.cpp
 )
 
-target_link_libraries(tests
-    GTest::gtest_main
-    spdlog::spdlog
-    yaml-cpp
-    Threads::Threads
-)
-
-if(WIN32)
-    target_link_libraries(tests ws2_32)
-endif()
-
-if(OpenSSL_FOUND OR OPENSSL_FOUND)
-    target_link_libraries(tests OpenSSL::SSL OpenSSL::Crypto)
-endif()
-
-if(hiredis_FOUND OR HIREDIS_FOUND)
-    target_link_libraries(tests hiredis)
-endif()
-
+target_link_libraries(tests PRIVATE GTest::gtest_main llmquant)
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-add_test(NAME unit_tests COMMAND tests)
+# Labelled test targets for selective CI execution.
+add_test(NAME unit_tests
+    COMMAND tests
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*Prometheus*"
+)
+set_tests_properties(unit_tests PROPERTIES LABELS "unit")
+
+add_test(NAME integration_tests
+    COMMAND tests --gtest_filter="*pipeline*:*Pipeline*:*chaos*:*Chaos*:*OmsPipeline*"
+)
+set_tests_properties(integration_tests PROPERTIES LABELS "integration")
+
+add_test(NAME performance_tests
+    COMMAND tests --gtest_filter="*Performance*:*Bench*:*bench*"
+)
+set_tests_properties(performance_tests PROPERTIES LABELS "performance")
+
+add_test(NAME all_tests COMMAND tests)
+set_tests_properties(all_tests PROPERTIES LABELS "all")

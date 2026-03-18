@@ -132,6 +132,20 @@ void RedisDeduplicator::redis_disconnect() {
     }
     redis_connected_ = false;
 }
+
+bool RedisDeduplicator::try_reconnect() {
+    std::lock_guard<std::mutex> lk(reconnect_mutex_);
+    if (redis_connected_) return true;
+    return try_connect();
+}
+#endif
+
+void RedisDeduplicator::set_disconnect_callback(DisconnectCallback cb) {
+    disconnect_cb_ = std::move(cb);
+}
+
+#ifndef LLMQUANT_REDIS_ENABLED
+bool RedisDeduplicator::try_reconnect() { return false; }
 #endif
 
 bool RedisDeduplicator::is_connected() const {
@@ -156,8 +170,22 @@ DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
             redisCommand(ctx, "SET %s \"\" NX EX %lld",
                          key.value.c_str(), ttl_sec));
         if (!reply) {
-            // Connection lost — fall through to in-process backend.
-            redis_connected_ = false;
+            // Connection lost — fire disconnect callback then attempt reconnect.
+            std::string err_msg = ctx->errstr ? ctx->errstr : "nil reply";
+            bool was_connected = false;
+            {
+                std::lock_guard<std::mutex> lk(reconnect_mutex_);
+                if (redis_connected_) {
+                    redis_connected_ = false;
+                    was_connected = true;
+                }
+            }
+            if (was_connected && disconnect_cb_) {
+                disconnect_cb_(err_msg);
+            }
+            // Attempt immediate single reconnect.
+            try_reconnect();
+            // Fall through to in-process backend.
         } else {
             bool is_novel = (reply->type == REDIS_REPLY_STATUS);
             freeReplyObject(reply);

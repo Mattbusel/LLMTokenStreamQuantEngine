@@ -20,10 +20,10 @@ namespace llmquant {
 ///
 /// ## Session Behaviour
 /// Sends a FIX Logon (35=A) on connect and a Heartbeat (35=0) every
-/// HeartBtInt seconds.  Sequence number reset and ResendRequest are NOT
-/// implemented — this adapter is intended as a read-only position feed from a
-/// cooperative acceptor.  For unattended 24/7 operation, implement full session
-/// recovery (see CLAUDE.md "What Still Needs Building").
+/// HeartBtInt seconds.  Sequence gaps are detected via tag 34 (MsgSeqNum); on
+/// a gap a ResendRequest (35=2) is sent and a SequenceReset (35=4) is handled
+/// to advance the expected inbound sequence.  On reconnect the Logon carries
+/// ResetSeqNumFlag (141=Y) to reset both sides to seq 1.
 ///
 /// ## Thread Safety
 /// start/stop are safe from any thread.  The position callback is invoked from
@@ -86,6 +86,14 @@ private:
     /// Main loop executed on the reader thread.
     void reader_thread();
 
+    /// Close socket, wait with exponential backoff, reopen, re-logon.
+    /// Returns true on successful reconnect, false if stopped.
+    bool reconnect_with_backoff();
+    /// Send SequenceReset-Reset (35=4, GapFillFlag=N, NewSeqNo=1).
+    void send_sequence_reset();
+    /// Send ResendRequest (35=2) for range [begin_seq, end_seq].
+    void send_resend_request(int begin_seq, int end_seq);
+
     /// Open a TCP connection to config_.host:config_.port.
     bool open_socket();
 
@@ -97,10 +105,19 @@ private:
     // -----------------------------------------------------------------------
 
     /// Build a complete FIX Logon (35=A) message.
-    std::string build_logon() const;
+    /// When `reset_seq` is true the message includes ResetSeqNumFlag (141=Y).
+    std::string build_logon(bool reset_seq = false) const;
 
     /// Build a complete FIX Heartbeat (35=0) message.
     std::string build_heartbeat() const;
+
+    /// Build a FIX ResendRequest (35=2) asking the acceptor to retransmit
+    /// messages from `begin_seq` to end-of-session (tag 16=0).
+    std::string build_resend_request(int begin_seq) const;
+
+    /// Build a FIX SequenceReset-Reset (35=4, GapFillFlag=N) advancing the
+    /// sender's sequence number to `new_seq_num`.
+    std::string build_sequence_reset(int new_seq_num) const;
 
     /// Wrap a pre-assembled FIX body with BeginString, BodyLength, and
     /// Checksum fields and return the complete transmittable message.
@@ -141,7 +158,8 @@ private:
     std::atomic<bool> running_{false};
     std::thread       thread_;
     int               sockfd_{-1};
-    int               seq_num_{1};
+    int               seq_num_{1};            ///< Next outbound sequence number.
+    int               expected_inbound_seq_{1}; ///< Next expected inbound MsgSeqNum.
 
     // Accumulated position protected by pos_mutex_.
     mutable std::mutex pos_mutex_;
@@ -149,6 +167,9 @@ private:
     double pnl_{0.0};
 
     std::atomic<uint64_t> messages_parsed_{0};
+
+    int reconnect_attempts_{0};
+    static constexpr int kMaxReconnectBackoffSeconds = 60;
 };
 
 } // namespace llmquant

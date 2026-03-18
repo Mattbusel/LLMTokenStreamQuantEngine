@@ -1,31 +1,46 @@
 #include "TradeSignalEngine.h"
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace llmquant {
 
-TradeSignalEngine::TradeSignalEngine(const Config& config) 
-    : config_(config), last_signal_time_(std::chrono::high_resolution_clock::now()) {}
+TradeSignalEngine::TradeSignalEngine(const Config& config)
+    : config_(config), last_signal_time_(std::chrono::high_resolution_clock::now()) {
+    if (config_.bias_sensitivity <= 0.0)
+        throw std::invalid_argument("TradeSignalEngine: bias_sensitivity must be > 0");
+    if (config_.volatility_sensitivity <= 0.0)
+        throw std::invalid_argument("TradeSignalEngine: volatility_sensitivity must be > 0");
+    if (config_.signal_decay_rate <= 0.0 || config_.signal_decay_rate > 1.0)
+        throw std::invalid_argument("TradeSignalEngine: signal_decay_rate must be in (0, 1]");
+}
 
 void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     // Apply sensitivity scaling
     double bias_contribution = weight.directional_bias * weight.confidence_score * config_.bias_sensitivity;
     double vol_contribution = weight.volatility_score * weight.confidence_score * config_.volatility_sensitivity;
     
-    // Accumulate signals with decay
-    double current_bias = accumulated_bias_.load();
-    double current_vol = accumulated_volatility_.load();
-    
-    // Apply decay
-    current_bias *= config_.signal_decay_rate;
-    current_vol *= config_.signal_decay_rate;
-    
-    // Add new contribution
-    current_bias += bias_contribution;
-    current_vol += vol_contribution;
-    
-    accumulated_bias_ = current_bias;
-    accumulated_volatility_ = current_vol;
+    // Accumulate signals with decay using CAS loops for linearisable RMW.
+    double expected_bias = accumulated_bias_.load(std::memory_order_relaxed);
+    double desired_bias;
+    do {
+        desired_bias = expected_bias * config_.signal_decay_rate + bias_contribution;
+    } while (!accumulated_bias_.compare_exchange_weak(
+                 expected_bias, desired_bias,
+                 std::memory_order_release,
+                 std::memory_order_relaxed));
+
+    double expected_vol = accumulated_volatility_.load(std::memory_order_relaxed);
+    double desired_vol;
+    do {
+        desired_vol = expected_vol * config_.signal_decay_rate + vol_contribution;
+    } while (!accumulated_volatility_.compare_exchange_weak(
+                 expected_vol, desired_vol,
+                 std::memory_order_release,
+                 std::memory_order_relaxed));
+
+    double current_bias = desired_bias;
+    double current_vol  = desired_vol;
     
     // Record latest confidence for use in emitted signals.
     last_confidence_ = weight.confidence_score;
@@ -45,10 +60,17 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         
         emit_signal(signal);
         
-        // Reset accumulators after significant signal
+        // Reset accumulators after significant signal using CAS loops so the
+        // halving is a linearisable RMW even if another thread is accumulating.
         if (std::abs(current_bias) > 0.8 || std::abs(current_vol) > 0.8) {
-            accumulated_bias_ = current_bias * 0.5;
-            accumulated_volatility_ = current_vol * 0.5;
+            double b = accumulated_bias_.load(std::memory_order_relaxed);
+            while (!accumulated_bias_.compare_exchange_weak(
+                       b, b * 0.5,
+                       std::memory_order_release, std::memory_order_relaxed)) {}
+            double v = accumulated_volatility_.load(std::memory_order_relaxed);
+            while (!accumulated_volatility_.compare_exchange_weak(
+                       v, v * 0.5,
+                       std::memory_order_release, std::memory_order_relaxed)) {}
         }
     }
 }
@@ -87,14 +109,17 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.confidence = last_confidence_.load();
 
     if (callback_) {
-        callback_(signal);
-    } else {
+        try { callback_(signal); } catch (...) {}
+    } else if (output_sinks_.empty()) {
+        // Signal has no callback and no sinks — it is fully suppressed.
         stats_.signals_suppressed++;
     }
+    // signals_generated counts every emission regardless of routing;
+    // signals_suppressed counts only those with no destination at all.
 
     // Emit to all registered output sinks.
     for (const auto& sink : output_sinks_) {
-        sink->emit(signal);
+        try { sink->emit(signal); } catch (...) {}
     }
 
     // Update stats unconditionally — count every emitted signal regardless of

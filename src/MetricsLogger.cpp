@@ -114,6 +114,22 @@ void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
     }
 }
 
+void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, double confidence) {
+    log_entries_++;
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+
+    if (config_.format == OutputFormat::CSV) {
+        std::ostringstream oss;
+        oss << timestamp << ",RISK_REJECTION," << reason << ",,"
+            << std::fixed << std::setprecision(3) << bias << ",,"
+            << confidence << ",,";
+        if (file_logger_) file_logger_->info(oss.str());
+        if (console_logger_)
+            console_logger_->warn("Risk rejection: {} bias={:+.3f} conf={:.3f}", reason, bias, confidence);
+    }
+}
+
 void MetricsLogger::log_performance_summary() {
     if (console_logger_) {
         console_logger_->info("=== Performance Summary ===");

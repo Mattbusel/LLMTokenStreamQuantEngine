@@ -171,6 +171,26 @@ bool extract_double(const std::string& json,
 
 bool RestOmsAdapter::parse_position(const std::string& body,
                                     RiskManager::PositionState& out) {
+    // Validate HTTP status code before attempting JSON parse.
+    if (body.rfind("HTTP/", 0) == 0) {
+        size_t sp1 = body.find(' ');
+        if (sp1 != std::string::npos) {
+            size_t sp2 = body.find(' ', sp1 + 1);
+            std::string code_str = body.substr(
+                sp1 + 1,
+                sp2 != std::string::npos ? sp2 - sp1 - 1 : std::string::npos);
+            try {
+                int code = std::stoi(code_str);
+                if (code < 200 || code >= 300) {
+                    std::cerr << "[rest_oms] HTTP error status: " << code << "\n";
+                    return false;
+                }
+            } catch (...) {
+                return false;
+            }
+        }
+    }
+
     // Strip HTTP headers: the JSON body begins after the blank line.
     size_t json_start = body.find("\r\n\r\n");
     std::string json = (json_start != std::string::npos)

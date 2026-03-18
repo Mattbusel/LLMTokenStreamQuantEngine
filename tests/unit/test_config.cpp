@@ -221,5 +221,31 @@ TEST(ConfigTest, test_config_hot_reload_detects_file_change) {
         << "Reloaded config must reflect the new token_interval_ms value";
 }
 
+// ---------------------------------------------------------------------------
+// Range validation tests (improvement 3)
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_invalid_signal_decay_rate_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string("trading:\n  signal_decay_rate: 1.5\n");
+    EXPECT_FALSE(ok);
+    // Defaults must be restored after validation failure.
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.signal_decay_rate, 0.95);
+}
+
+TEST(ConfigTest, test_config_zero_buffer_size_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string("token_stream:\n  buffer_size: 0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_EQ(cfg.get_config().token_stream.buffer_size, 1024u);
+}
+
+TEST(ConfigTest, test_config_negative_bias_sensitivity_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string("trading:\n  bias_sensitivity: -1.0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.bias_sensitivity, 1.0);
+}
+
 } // namespace
 } // namespace llmquant

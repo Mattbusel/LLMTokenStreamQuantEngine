@@ -24,33 +24,26 @@ endif()
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
-find_package(spdlog   REQUIRED)
-find_package(yaml-cpp REQUIRED)
-find_package(GTest    REQUIRED)
-find_package(Threads  REQUIRED)
+find_package(spdlog        REQUIRED)
+find_package(yaml-cpp      REQUIRED)
+find_package(GTest         REQUIRED)
+find_package(Threads       REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND OR OPENSSL_FOUND)
     message(STATUS "OpenSSL found — TLS enabled in LLMStreamClient")
-    add_compile_definitions(LLMQUANT_TLS_ENABLED)
 endif()
 
 find_package(hiredis QUIET)
 if(hiredis_FOUND OR HIREDIS_FOUND)
     message(STATUS "hiredis found — Redis deduplication enabled")
-    add_compile_definitions(LLMQUANT_REDIS_ENABLED)
 endif()
 
 # ---------------------------------------------------------------------------
-# Include paths
+# Engine library — compiled once, linked by executable and tests.
 # ---------------------------------------------------------------------------
-include_directories(include)
-
-# ---------------------------------------------------------------------------
-# Main executable
-# ---------------------------------------------------------------------------
-set(ENGINE_SOURCES
-    src/main.cpp
+add_library(llmquant STATIC
     src/TokenStreamSimulator.cpp
     src/TradeSignalEngine.cpp
     src/LatencyController.cpp
@@ -63,27 +56,38 @@ set(ENGINE_SOURCES
     src/RestOmsAdapter.cpp
     src/FixOmsAdapter.cpp
     src/MockOmsAdapter.cpp
+    src/PrometheusExporter.cpp
 )
 
-add_executable(LLMTokenStreamQuantEngine ${ENGINE_SOURCES})
+target_include_directories(llmquant PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-target_link_libraries(LLMTokenStreamQuantEngine
-    spdlog::spdlog
-    yaml-cpp
-    Threads::Threads
+target_link_libraries(llmquant
+    PUBLIC
+        spdlog::spdlog
+        yaml-cpp
+        nlohmann_json::nlohmann_json
+        Threads::Threads
 )
 
 if(WIN32)
-    target_link_libraries(LLMTokenStreamQuantEngine ws2_32)
+    target_link_libraries(llmquant PUBLIC ws2_32)
 endif()
 
 if(OpenSSL_FOUND OR OPENSSL_FOUND)
-    target_link_libraries(LLMTokenStreamQuantEngine OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TLS_ENABLED)
+    target_link_libraries(llmquant PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 if(hiredis_FOUND OR HIREDIS_FOUND)
-    target_link_libraries(LLMTokenStreamQuantEngine hiredis)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REDIS_ENABLED)
+    target_link_libraries(llmquant PUBLIC hiredis)
 endif()
+
+# ---------------------------------------------------------------------------
+# Main executable
+# ---------------------------------------------------------------------------
+add_executable(LLMTokenStreamQuantEngine src/main.cpp)
+target_link_libraries(LLMTokenStreamQuantEngine PRIVATE llmquant)
 
 # ---------------------------------------------------------------------------
 # Tests
