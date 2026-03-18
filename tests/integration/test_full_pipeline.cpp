@@ -130,10 +130,12 @@ TEST(FullPipeline5Stage, Stage1_DedupAllowsDifferentTokens) {
 }
 
 TEST(FullPipeline5Stage, Stage1_DedupRespectsTTLExpiry) {
-    Pipeline p(std::chrono::milliseconds{50} /*very short TTL*/);
+    // Use a 100 ms TTL and a 300 ms sleep so the test is robust on loaded CI
+    // runners where std::this_thread::sleep_for() may wake late.
+    Pipeline p(std::chrono::milliseconds{100} /*TTL*/);
     EXPECT_TRUE(p.push("volatile"));
     EXPECT_FALSE(p.push("volatile"));        // within TTL -> deduped
-    std::this_thread::sleep_for(std::chrono::milliseconds{80});
+    std::this_thread::sleep_for(std::chrono::milliseconds{300});
     EXPECT_TRUE(p.push("volatile"));         // TTL expired -> novel again
 }
 

@@ -76,6 +76,11 @@ struct FullPipeline {
     std::atomic<uint64_t>        tokens_deduped{0};
     std::atomic<uint64_t>        tokens_processed{0};
 
+    // TokenStreamSimulator loops indefinitely.  max_tokens_ is set by run()
+    // to cap processing at exactly tokens.size() observations so tests that
+    // assert exact counts are not sensitive to loop iterations or drain timing.
+    std::atomic<uint64_t>        max_tokens_{UINT64_MAX};
+
     explicit FullPipeline(
         std::chrono::milliseconds dedup_ttl = std::chrono::milliseconds{500})
         : simulator([] {
@@ -107,6 +112,11 @@ struct FullPipeline {
         });
 
         simulator.set_token_callback([this](const Token& tok) {
+            // Discard tokens once we have seen max_tokens_ total observations.
+            // This makes exact-count assertions independent of loop iterations.
+            const uint64_t seen = tokens_processed.load() + tokens_deduped.load();
+            if (seen >= max_tokens_.load()) return;
+
             // Stage 2: deduplication
             if (dedup.check(tok.text) == DedupResult::Duplicate) {
                 ++tokens_deduped;
@@ -124,6 +134,10 @@ struct FullPipeline {
              const std::vector<RiskManager::PositionState>& oms_states = {},
              std::chrono::milliseconds drain_ms = std::chrono::milliseconds{200})
     {
+        // Cap processing at exactly tokens.size() observations so the simulator
+        // looping behaviour does not affect exact-count assertions.
+        max_tokens_.store(static_cast<uint64_t>(tokens.size()));
+
         simulator.load_tokens_from_memory(tokens);
         if (!oms_states.empty()) {
             oms.load_states(oms_states);

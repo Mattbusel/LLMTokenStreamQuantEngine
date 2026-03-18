@@ -183,14 +183,17 @@ jobs:
         run: cmake --build build-fuzz --target fuzz_deduplicator fuzz_pipeline --parallel
 
       - name: Smoke-run fuzz_deduplicator (30 s)
+        # fuzz_deduplicator is defined in fuzz/CMakeLists.txt (add_subdirectory),
+        # so CMake places the binary in build-fuzz/fuzz/ not build-fuzz/.
         run: |
-          build-fuzz/fuzz_deduplicator \
+          build-fuzz/fuzz/fuzz_deduplicator \
             -max_total_time=30 \
             -max_len=256 \
             -print_final_stats=1 \
             2>&1 | tail -20
 
       - name: Smoke-run fuzz_pipeline (30 s)
+        # fuzz_pipeline is defined in root CMakeLists.txt so it lands in build-fuzz/.
         run: |
           build-fuzz/fuzz_pipeline \
             -max_total_time=30 \
@@ -213,13 +216,19 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y build-essential cmake ninja-build \
             libssl-dev libspdlog-dev libyaml-cpp-dev \
-            nlohmann-json3-dev libhiredis-dev libgtest-dev
+            nlohmann-json3-dev libhiredis-dev libgtest-dev libgmock-dev
 
       - name: Configure
-        run: cmake -B build-int -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
+        run: |
+          cmake -S . -B build-int \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
 
       - name: Build
-        run: cmake --build build-int
+        run: cmake --build build-int --parallel
 
       - name: Run integration tests
-        run: ctest --test-dir build-int -V -R integration
+        # Use -L (label) rather than -R (name regex) to select only the
+        # integration-labelled ctest targets.
+        run: ctest --test-dir build-int -V -L integration

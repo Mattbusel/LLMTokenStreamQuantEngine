@@ -176,18 +176,17 @@ add_subdirectory(tests)
 # fuzz_token_stream); tests/fuzz/ contains the original pipeline harnesses.
 # ---------------------------------------------------------------------------
 if(LLMQUANT_ENABLE_FUZZING)
+    # fuzz/ builds fuzz_deduplicator and fuzz_token_stream.
     add_subdirectory(fuzz)
 
-    foreach(_fuzz_src fuzz_deduplicator fuzz_pipeline)
-        add_executable(${_fuzz_src} tests/fuzz/${_fuzz_src}.cpp)
-        target_include_directories(${_fuzz_src} PRIVATE ${CMAKE_SOURCE_DIR}/include)
-        target_link_libraries(${_fuzz_src} PRIVATE llmquant)
-        # -fsanitize=fuzzer provides the LLVMFuzzerRunDriver main() and the
-        # coverage-guided mutation engine.  Address + UB sanitisers are layered
-        # on top to detect memory errors during fuzzing.
-        target_compile_options(${_fuzz_src} PRIVATE -fsanitize=fuzzer,address,undefined)
-        target_link_options(   ${_fuzz_src} PRIVATE -fsanitize=fuzzer,address,undefined)
-    endforeach()
+    # tests/fuzz/fuzz_pipeline.cpp is the only target not covered by fuzz/.
+    # Do NOT add fuzz_deduplicator here — it is already defined above and CMake
+    # forbids two add_executable() calls with the same target name.
+    add_executable(fuzz_pipeline tests/fuzz/fuzz_pipeline.cpp)
+    target_include_directories(fuzz_pipeline PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(fuzz_pipeline PRIVATE llmquant)
+    target_compile_options(fuzz_pipeline PRIVATE -fsanitize=fuzzer,address,undefined)
+    target_link_options(   fuzz_pipeline PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()
 
 # ---------------------------------------------------------------------------
