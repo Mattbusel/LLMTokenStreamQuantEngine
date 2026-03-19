@@ -90,6 +90,12 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             }
 
             size_t N = samples_copy.size();
+            // Nearest-rank percentile (0-indexed): idx = ceil(p * N) - 1
+            // For N=100, p=0.95: ceil(95.0)-1 = 94, which is the 95th value
+            // (1-indexed) in a sorted array — correct by definition.
+            // The conditional decrement is equivalent to direct subtraction but
+            // guards against p95_idx==0 (only possible when N==0, already
+            // excluded by the outer sample_count_ > 0 check).
             size_t p95_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.95));
             if (p95_idx > 0) p95_idx--;
             size_t p99_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.99));
