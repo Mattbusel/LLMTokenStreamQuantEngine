@@ -14,6 +14,30 @@ LLMAdapter::LLMAdapter() {
 SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     stats_.tokens_processed++;
 
+    // Fast-path: if the token is already normalized (lowercase ASCII letters,
+    // digits, spaces or underscores, no leading/trailing whitespace) skip the
+    // allocation and look up the original string directly.
+    auto is_normalized = [](const std::string& s) -> bool {
+        if (s.empty()) return true;
+        if (std::isspace(static_cast<unsigned char>(s.front()))) return false;
+        if (std::isspace(static_cast<unsigned char>(s.back()))) return false;
+        for (unsigned char c : s) {
+            if (c >= 'A' && c <= 'Z') return false;  // uppercase
+        }
+        return true;
+    };
+
+    if (is_normalized(token)) {
+        auto it_fast = token_weights_.find(token);
+        if (it_fast != token_weights_.end()) {
+            stats_.cache_hits++;
+            return it_fast->second;
+        }
+        // Token is already normalized but not found — no need to normalize again.
+        stats_.cache_misses++;
+        return SemanticWeight{0.0, 0.5, 0.1, 0.0};
+    }
+
     // Normalize: strip leading/trailing whitespace, lowercase.
     // GPT-4o streams tokens like " bullish" or "Bullish" that must map to "bullish".
     std::string norm;

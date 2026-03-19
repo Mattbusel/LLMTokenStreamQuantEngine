@@ -195,6 +195,11 @@ private:
     std::atomic<bool> running_{false};
     std::thread     thread_;
     int             sockfd_{-1};
+    // On Windows, WSAGetLastError() is thread-local and only valid immediately
+    // after the failing call.  When stop() closes the socket from the main
+    // thread while the reader thread is in recv(), the reader thread captures
+    // the WSA error here atomically so it can be logged after the join.
+    std::atomic<int> last_socket_error_{0};
 
 #ifdef LLMQUANT_TLS_ENABLED
     void* ssl_ctx_{nullptr};   ///< SSL_CTX* — opaque to avoid OpenSSL headers leaking.

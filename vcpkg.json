@@ -1,0 +1,12 @@
+{
+  "name": "llmtokenstreamquantengine",
+  "version": "1.1.0",
+  "dependencies": [
+    { "name": "spdlog", "version>=": "1.13.0" },
+    { "name": "yaml-cpp", "version>=": "0.8.0" },
+    { "name": "gtest", "version>=": "1.14.0" },
+    { "name": "openssl", "version>=": "3.3.0" },
+    { "name": "hiredis", "version>=": "1.2.0" },
+    { "name": "nlohmann-json", "version>=": "3.11.3" }
+  ]
+}

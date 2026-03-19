@@ -106,6 +106,26 @@ public:
      */
     SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
 
+    /**
+     * @brief Return a snapshot of internal processing statistics.
+     *
+     * @return Struct with tokens_processed, cache_hits and cache_misses counts.
+     */
+    struct Stats {
+        uint64_t tokens_processed;
+        uint64_t cache_hits;
+        uint64_t cache_misses;
+    };
+
+    /** @brief Return current processing statistics. */
+    Stats get_stats() const noexcept {
+        return Stats{
+            stats_.tokens_processed.load(),
+            stats_.cache_hits.load(),
+            stats_.cache_misses.load()
+        };
+    }
+
 private:
     void initialize_default_mappings();
 

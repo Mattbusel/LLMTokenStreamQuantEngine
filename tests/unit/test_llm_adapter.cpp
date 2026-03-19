@@ -130,6 +130,26 @@ TEST(LLMAdapterTest, test_llm_adapter_simd_matches_scalar_for_four_tokens) {
     EXPECT_NEAR(scalar.confidence_score, simd.confidence_score, 1e-9);
 }
 
+// Improvement #15: empty-sequence test verifying stats and neutral output.
+TEST(LLMAdapterTest, EmptySequence) {
+    LLMAdapter adapter;
+    auto stats_before = adapter.get_stats();
+
+    SemanticWeight w = adapter.map_sequence_to_weight({});
+
+    // All output fields must be zero / neutral for an empty input.
+    EXPECT_DOUBLE_EQ(w.sentiment_score,   0.0);
+    EXPECT_DOUBLE_EQ(w.confidence_score,  0.0);
+    EXPECT_DOUBLE_EQ(w.volatility_score,  0.0);
+    EXPECT_DOUBLE_EQ(w.directional_bias,  0.0);
+
+    // map_sequence_to_weight({}) returns early before calling map_token_to_weight,
+    // so tokens_processed must not have changed.
+    auto stats_after = adapter.get_stats();
+    EXPECT_EQ(stats_after.tokens_processed, stats_before.tokens_processed)
+        << "Empty sequence must not increment tokens_processed";
+}
+
 TEST(LLMAdapterTest, test_llm_adapter_simd_odd_count_matches_scalar) {
     LLMAdapter adapter;
     std::vector<std::string> tokens{"crash", "panic", "bullish", "rally", "volatile"};

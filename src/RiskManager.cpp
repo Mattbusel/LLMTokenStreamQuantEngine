@@ -49,17 +49,22 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
         } else {
             double projected = position_.net_position + signal.delta_bias_shift;
             double limit     = position_.position_limit;
+            // Check position hard breach.
             if (std::abs(projected) > limit) {
                 hard_breach = true;
                 stats_.signals_blocked_position++;
                 reject_reason = "position_limit";
-            } else {
-                if (std::abs(projected) > limit * config_.position_warn_fraction)
-                    soft_warn = true;
-                if (position_.pnl < position_.pnl_limit) {
-                    pnl_breach = true;
-                    stats_.signals_blocked_position++;
-                    reject_reason = "position_limit";
+            }
+            // Check soft warn independently of hard breach.
+            if (!hard_breach && std::abs(projected) > limit * config_.position_warn_fraction) {
+                soft_warn = true;
+            }
+            // Check PnL breach always — not nested inside else of position check.
+            if (position_.pnl < position_.pnl_limit) {
+                pnl_breach = true;
+                if (!hard_breach) {
+                    stats_.signals_blocked_pnl++;
+                    reject_reason = "pnl_limit";
                 }
             }
             if (reject_reason.empty()) {

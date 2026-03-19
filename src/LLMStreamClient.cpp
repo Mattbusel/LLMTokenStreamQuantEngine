@@ -345,7 +345,16 @@ void LLMStreamClient::reader_thread() {
 #ifdef LLMQUANT_TLS_ENABLED
             }
 #endif
-            if (n <= 0) break;
+            if (n <= 0) {
+#ifdef _WIN32
+                // Capture the WSA error immediately — WSAGetLastError() is
+                // thread-local and its value is lost once the thread returns
+                // from recv().  stop() may read last_socket_error_ after join.
+                int wsa_err = WSAGetLastError();
+                if (wsa_err != 0) last_socket_error_.store(wsa_err);
+#endif
+                break;
+            }
             chunk[n] = '\0';
             buf.append(chunk, static_cast<size_t>(n));
 

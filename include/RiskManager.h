@@ -86,6 +86,7 @@ public:
         std::atomic<uint64_t> signals_blocked_rate{0};
         std::atomic<uint64_t> signals_blocked_drawdown{0};
         std::atomic<uint64_t> signals_blocked_position{0};
+        std::atomic<uint64_t> signals_blocked_pnl{0};
     };
 
     /**

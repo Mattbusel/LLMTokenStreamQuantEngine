@@ -36,7 +36,10 @@ else()
         list(APPEND _warn_flags -Werror)
     endif()
     add_compile_options(${_warn_flags})
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -ffast-math")
+    # -ffast-math intentionally removed: it permits FP reordering and
+    # NaN/Inf mis-handling that are unsafe in a quant engine where
+    # atomic accumulation results must be numerically reproducible.
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
     if(LLMQUANT_ENABLE_ASAN)
         set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer")
     else()
@@ -73,6 +76,8 @@ configure_file(
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
+# Dependency versions are pinned in vcpkg.json at the project root.
+# To use vcpkg: cmake -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
 find_package(spdlog        REQUIRED)
 find_package(yaml-cpp      REQUIRED)
 find_package(GTest         REQUIRED)

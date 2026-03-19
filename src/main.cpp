@@ -59,8 +59,23 @@ int main(int argc, char* argv[]) {
     // API key security: fall back to LLMQUANT_API_KEY env var if not given on CLI.
     // Never echo the key value into logs or the banner.
     if (stream_api_key.empty()) {
-        if (const char* env_key = std::getenv("LLMQUANT_API_KEY"))
+        // getenv is safe here: the environment is not modified concurrently
+        // during this single-threaded init phase.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
+        const char* env_key_raw = std::getenv("LLMQUANT_API_KEY");
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+        if (const char* env_key = env_key_raw) {
             stream_api_key = env_key;
+            spdlog::warn("API key loaded from environment variable LLMQUANT_API_KEY"
+                         " — consider using a key file (mode 0600) for better security");
+        }
+    } else {
+        spdlog::debug("API key loaded from command-line argument");
     }
 
     // Colour helpers — emit empty string when --no-color is active.
@@ -121,6 +136,9 @@ int main(int argc, char* argv[]) {
     std::atomic<double>   sentiment_variance_accum{0.0};
     std::atomic<double>   sentiment_mean_accum{0.0};
     std::atomic<uint64_t> variance_n{0};
+    // Wall-clock timestamp of the last Welford accumulator reset.
+    // Reset every 60 seconds to prevent catastrophic cancellation.
+    auto variance_last_reset = std::chrono::steady_clock::now();
     // Protects the three Welford variables as a unit: both the token-callback
     // update and the monitoring-loop reset must hold this mutex so they are
     // never interleaved, which would silently corrupt the variance estimate.
@@ -406,18 +424,22 @@ int main(int argc, char* argv[]) {
         blocked = sat_add(blocked, rs.signals_blocked_rate.load());
         blocked = sat_add(blocked, rs.signals_blocked_drawdown.load());
         blocked = sat_add(blocked, rs.signals_blocked_position.load());
+        blocked = sat_add(blocked, rs.signals_blocked_pnl.load());
 
-        // Welford periodic reset: avoid precision loss after many samples.
-        // After 1M tokens the accumulated sum-of-squares is reset to avoid
-        // catastrophic cancellation in the variance estimate.
+        // Welford periodic reset: avoid precision loss over time.
+        // Reset the accumulators every 60 seconds (wall-clock) instead of
+        // by sample count, preventing catastrophic cancellation while
+        // bounding the reset interval to a predictable time window.
         // The mutex ensures the three stores are never interleaved with the
         // Welford update running in the token callback.
         {
             std::lock_guard<std::mutex> lk(variance_mutex);
-            if (variance_n.load() > 1000000) {
+            auto now_steady = std::chrono::steady_clock::now();
+            if (now_steady - variance_last_reset > std::chrono::seconds{60}) {
                 variance_n.store(0);
                 sentiment_mean_accum.store(0.0);
                 sentiment_variance_accum.store(0.0);
+                variance_last_reset = now_steady;
             }
         }
 
@@ -432,6 +454,24 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
                  << "# TYPE llmquant_signals_blocked_total counter\n"
                  << "llmquant_signals_blocked_total " << blocked << "\n"
+                 << "# HELP llmquant_signals_blocked_magnitude_total Signals blocked: magnitude exceeded\n"
+                 << "# TYPE llmquant_signals_blocked_magnitude_total counter\n"
+                 << "llmquant_signals_blocked_magnitude_total " << rs.signals_blocked_magnitude.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_confidence_total Signals blocked: confidence below minimum\n"
+                 << "# TYPE llmquant_signals_blocked_confidence_total counter\n"
+                 << "llmquant_signals_blocked_confidence_total " << rs.signals_blocked_confidence.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_rate_total Signals blocked: rate limit exceeded\n"
+                 << "# TYPE llmquant_signals_blocked_rate_total counter\n"
+                 << "llmquant_signals_blocked_rate_total " << rs.signals_blocked_rate.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_drawdown_total Signals blocked: drawdown limit exceeded\n"
+                 << "# TYPE llmquant_signals_blocked_drawdown_total counter\n"
+                 << "llmquant_signals_blocked_drawdown_total " << rs.signals_blocked_drawdown.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_position_total Signals blocked: position limit breached\n"
+                 << "# TYPE llmquant_signals_blocked_position_total counter\n"
+                 << "llmquant_signals_blocked_position_total " << rs.signals_blocked_position.load() << "\n"
+                 << "# HELP llmquant_signals_blocked_pnl_total Signals blocked: PnL limit breached\n"
+                 << "# TYPE llmquant_signals_blocked_pnl_total counter\n"
+                 << "llmquant_signals_blocked_pnl_total " << rs.signals_blocked_pnl.load() << "\n"
                  << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_p99_us gauge\n"
                  << "llmquant_latency_p99_us " << p99 << "\n"
@@ -487,6 +527,7 @@ int main(int argc, char* argv[]) {
         fblocked = fsat(fblocked, frs.signals_blocked_rate.load());
         fblocked = fsat(fblocked, frs.signals_blocked_drawdown.load());
         fblocked = fsat(fblocked, frs.signals_blocked_position.load());
+        fblocked = fsat(fblocked, frs.signals_blocked_pnl.load());
         std::cout << "  Signals blocked  : " << fblocked << "\n";
     }
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";

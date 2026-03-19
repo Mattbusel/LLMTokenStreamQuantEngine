@@ -179,7 +179,8 @@ private:
     std::atomic<uint64_t> min_latency_us_{UINT64_MAX};
     std::atomic<uint64_t> max_latency_us_{0};
 
-    std::vector<std::chrono::microseconds> latency_samples_;  ///< Ring buffer, size == config_.sample_window.
+    std::vector<std::chrono::microseconds> latency_samples_;    ///< Ring buffer, size == config_.sample_window.
+    mutable std::vector<std::chrono::microseconds> percentile_scratch_;  ///< Reused buffer for percentile calc.
     size_t sample_head_{0};    ///< Next write index (wraps at sample_window).
     size_t sample_count_{0};   ///< Valid entries (saturates at sample_window).
     mutable std::mutex samples_mutex_;
