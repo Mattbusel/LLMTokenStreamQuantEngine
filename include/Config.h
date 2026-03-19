@@ -64,13 +64,36 @@ struct LoggingConfig {
 };
 
 /**
+ * @brief Risk gate override flags (for testing / debugging only).
+ */
+struct RiskOverrideConfig {
+    bool disable_magnitude_gate{false};   ///< Bypass magnitude gate (testing only).
+    bool disable_confidence_gate{false};  ///< Bypass confidence gate (testing only).
+    bool disable_rate_gate{false};        ///< Bypass rate-limit gate (testing only).
+    bool disable_drawdown_gate{false};    ///< Bypass drawdown gate (testing only).
+    bool disable_position_gate{false};    ///< Bypass position/PnL gate (testing only).
+};
+
+/**
+ * @brief Configuration for the pressure / back-pressure tuning subsystem.
+ */
+struct PressureConfig {
+    /** @brief Maximum expected token ingestion rate (tokens/s); used to scale ingestion pressure. */
+    double max_ingestion_rate_tps{50.0};
+    /** @brief Multiplier applied to compute the exponential backoff ceiling. */
+    double backoff_scale_factor{5.0};
+};
+
+/**
  * @brief Top-level configuration object that aggregates all subsystem configs.
  */
 struct SystemConfig {
-    TokenStreamConfig token_stream;
-    TradingConfig     trading;
-    LatencyConfig     latency;
-    LoggingConfig     logging;
+    TokenStreamConfig  token_stream;
+    TradingConfig      trading;
+    LatencyConfig      latency;
+    LoggingConfig      logging;
+    PressureConfig     pressure;
+    RiskOverrideConfig risk_overrides;
 };
 
 /**
@@ -158,8 +181,9 @@ public:
      * @param filepath         Path to watch (same file passed to load_from_file).
      * @param on_reload        Callback invoked on the watcher thread after reload.
      * @param poll_interval_ms How often to check for changes (default 500 ms).
+     * @return true if the watcher thread was successfully started; false otherwise.
      */
-    void start_watching(const std::string& filepath,
+    bool start_watching(const std::string& filepath,
                         std::function<void(const SystemConfig&)> on_reload,
                         int poll_interval_ms = 500);
 

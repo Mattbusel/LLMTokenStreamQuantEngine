@@ -1,5 +1,6 @@
 #include "LLMAdapter.h"
 #include <fstream>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <algorithm>
 #include <numeric>
@@ -139,9 +140,17 @@ static inline __m128d sse2_hadd(__m128d a, __m128d b) {
 SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tokens) const {
     if (tokens.empty()) return SemanticWeight{0.0, 0.0, 0.0, 0.0};
 
+    constexpr size_t kMaxSequenceTokens = 1'000'000;
+    const size_t effective_size = tokens.size() > kMaxSequenceTokens
+        ? (spdlog::warn("LLMAdapter: sequence length {} exceeds limit {}, truncating",
+                        tokens.size(), kMaxSequenceTokens),
+           kMaxSequenceTokens)
+        : tokens.size();
+
     std::vector<SemanticWeight> weights;
-    weights.reserve(tokens.size());
-    for (const auto& t : tokens) weights.push_back(map_token_to_weight(t));
+    weights.reserve(effective_size);
+    for (size_t idx = 0; idx < effective_size; ++idx)
+        weights.push_back(map_token_to_weight(tokens[idx]));
 
     const size_t n = weights.size();
 
@@ -216,6 +225,16 @@ SemanticWeight LLMAdapter::aggregate_scalar(const std::vector<SemanticWeight>& w
         r.confidence_score  = total_conf / static_cast<double>(end - begin);
     }
     return r;
+}
+
+size_t LLMAdapter::get_dictionary_size() const {
+    return token_weights_.size();
+}
+
+void LLMAdapter::clear_custom_mappings() {
+    // Clears ALL mappings (both built-in and custom) since there is no distinction
+    // between them in the map. Call initialize_default_mappings() after if needed.
+    token_weights_.clear();
 }
 
 void LLMAdapter::initialize_default_mappings() {

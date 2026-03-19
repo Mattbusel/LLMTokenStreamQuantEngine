@@ -142,3 +142,25 @@ TEST(MetricsLoggerTest, test_metrics_logger_inaccessible_path_does_not_crash) {
 
 } // namespace
 } // namespace llmquant
+
+// ---------------------------------------------------------------------------
+// Improvement 15: MetricsLogger with non-ASCII token strings
+// ---------------------------------------------------------------------------
+using namespace llmquant;  // NOLINT: test-only using directive outside namespace
+
+TEST(MetricsLoggerTest, MetricsLoggerNonAsciiToken) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path         = "";  // no file output
+    cfg.format                = MetricsLogger::OutputFormat::CSV;
+    cfg.enable_console_output = false;
+    cfg.flush_interval        = std::chrono::milliseconds(100);
+
+    ASSERT_NO_THROW({
+        MetricsLogger logger(cfg);
+        // Valid UTF-8 (e with acute) and invalid UTF-8 bytes.
+        logger.log_token_received("\xc3\xa9", 1);
+        logger.log_token_received("\xff\xfe", 2);
+        logger.log_signal_generated(0.1, 0.2, 5);
+        logger.flush();
+    });
+}

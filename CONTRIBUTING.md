@@ -157,3 +157,5 @@ Zero failures required.
 - [ ] Thread-safety contract documented for any new class
 - [ ] `README.md` updated if a user-visible feature was added
 - [ ] `CHANGELOG.md` entry added under `[Unreleased]`
+
+Install pre-commit hooks with: pip install pre-commit && pre-commit install

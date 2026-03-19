@@ -53,6 +53,23 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (l["enable_profiling"]) tmp.latency.enable_profiling = l["enable_profiling"].as<bool>();
         }
 
+        // Risk gate override settings
+        if (yaml["risk"]) {
+            auto r = yaml["risk"];
+            if (r["disable_magnitude_gate"])  tmp.risk_overrides.disable_magnitude_gate  = r["disable_magnitude_gate"].as<bool>();
+            if (r["disable_confidence_gate"]) tmp.risk_overrides.disable_confidence_gate = r["disable_confidence_gate"].as<bool>();
+            if (r["disable_rate_gate"])       tmp.risk_overrides.disable_rate_gate       = r["disable_rate_gate"].as<bool>();
+            if (r["disable_drawdown_gate"])   tmp.risk_overrides.disable_drawdown_gate   = r["disable_drawdown_gate"].as<bool>();
+            if (r["disable_position_gate"])   tmp.risk_overrides.disable_position_gate   = r["disable_position_gate"].as<bool>();
+        }
+
+        // Pressure settings
+        if (yaml["pressure"]) {
+            auto pr = yaml["pressure"];
+            if (pr["max_ingestion_rate_tps"]) tmp.pressure.max_ingestion_rate_tps = pr["max_ingestion_rate_tps"].as<double>();
+            if (pr["backoff_scale_factor"])   tmp.pressure.backoff_scale_factor   = pr["backoff_scale_factor"].as<double>();
+        }
+
         // Logging settings
         if (yaml["logging"]) {
             auto log = yaml["logging"];
@@ -81,13 +98,13 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
-        if (!std::isfinite(tr.bias_sensitivity) || tr.bias_sensitivity <= 0.0) {
-            spdlog::error("Config validation failed: bias_sensitivity must be > 0 and finite");
+        if (!std::isfinite(tr.bias_sensitivity) || tr.bias_sensitivity <= 0.0 || tr.bias_sensitivity > 10.0) {
+            spdlog::error("Config: bias_sensitivity must be in (0, 10]");
             set_defaults();
             return false;
         }
-        if (!std::isfinite(tr.volatility_sensitivity) || tr.volatility_sensitivity <= 0.0) {
-            spdlog::error("Config validation failed: volatility_sensitivity must be > 0 and finite");
+        if (!std::isfinite(tr.volatility_sensitivity) || tr.volatility_sensitivity <= 0.0 || tr.volatility_sensitivity > 10.0) {
+            spdlog::error("Config: volatility_sensitivity must be in (0, 10]");
             set_defaults();
             return false;
         }
@@ -179,16 +196,17 @@ void Config::set_defaults() {
     config_ = SystemConfig{};
 }
 
-void Config::start_watching(const std::string& filepath,
+bool Config::start_watching(const std::string& filepath,
                             std::function<void(const SystemConfig&)> on_reload,
                             int poll_interval_ms) {
     bool expected = false;
     if (!watching_.compare_exchange_strong(expected, true,
                                            std::memory_order_acquire,
                                            std::memory_order_relaxed)) {
-        return;  // Another thread already started the watcher.
+        return false;  // Another thread already started the watcher.
     }
 
+    try {
     watcher_thread_ = std::thread([this, filepath, on_reload, poll_interval_ms]() {
         namespace fs = std::filesystem;
         std::filesystem::file_time_type last_mtime{};
@@ -230,6 +248,12 @@ void Config::start_watching(const std::string& filepath,
             }
         }
     });
+    } catch (const std::exception& e) {
+        spdlog::error("Config: failed to start hot-reload watcher thread: {}", e.what());
+        watching_ = false;
+        return false;
+    }
+    return true;
 }
 
 void Config::stop_watching() {

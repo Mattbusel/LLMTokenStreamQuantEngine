@@ -21,9 +21,22 @@ logging:
   enable_console: true
   flush_interval_ms: 100
 
-# pressure: (not yet wired — when added, extend LatencyController::Config and
-#   parse in Config.cpp under the "pressure:" YAML key; add a PressureConfig
-#   struct to SystemConfig in Config.h)
+pressure:
+  max_ingestion_rate_tps: 50
+  backoff_scale_factor: 5.0
+
+# --- Risk gate overrides (all false by default; set true for testing only) ---
+# risk:
+#   disable_magnitude_gate: false
+#   disable_confidence_gate: false
+#   disable_rate_gate: false
+#   disable_drawdown_gate: false
+#   disable_position_gate: false
+
+# --- Pressure system tuning ---
+# pressure:
+#   max_ingestion_rate_tps: 50
+#   backoff_scale_factor: 5.0
 
 # semantic_weights: (not yet wired — when added, extend LLMAdapter to accept
 #   per-category multipliers at construction time and parse them in Config.cpp

@@ -287,6 +287,15 @@ public:
      */
     bool is_connected() const;
 
+    /**
+     * @brief Return the number of reconnect attempts since construction.
+     *
+     * @return Reconnect attempt count.
+     */
+    uint64_t reconnect_attempts() const noexcept {
+        return redis_reconnect_attempts_.load(std::memory_order_relaxed);
+    }
+
     /** @brief Callback type invoked when the Redis connection is lost. */
     using DisconnectCallback = std::function<void(const std::string& error)>;
 
@@ -312,6 +321,7 @@ private:
 
     DisconnectCallback disconnect_cb_;
     std::mutex reconnect_mutex_;   ///< Serialises reconnect attempts.
+    std::atomic<uint64_t> redis_reconnect_attempts_{0};  ///< Total reconnect attempts since construction.
 
 #ifdef LLMQUANT_REDIS_ENABLED
     void* redis_ctx_{nullptr};   ///< redisContext* -- opaque to avoid hiredis header leaking.

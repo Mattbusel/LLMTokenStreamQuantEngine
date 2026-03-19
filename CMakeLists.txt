@@ -79,6 +79,8 @@ configure_file(
 # Dependency versions are pinned in vcpkg.json at the project root.
 # To use vcpkg: cmake -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
 find_package(spdlog        REQUIRED)
+# fmt required by spdlog; explicit linkage prevents version mismatch on some distros.
+find_package(fmt CONFIG QUIET)
 find_package(yaml-cpp      REQUIRED)
 find_package(GTest         REQUIRED)
 find_package(Threads       REQUIRED)
@@ -135,6 +137,8 @@ target_link_libraries(llmquant
         yaml-cpp::yaml-cpp
         nlohmann_json::nlohmann_json
         Threads::Threads
+        # fmt::fmt explicitly linked to prevent version mismatch with spdlog on some distros.
+        $<$<TARGET_EXISTS:fmt::fmt>:fmt::fmt>
 )
 
 if(WIN32)

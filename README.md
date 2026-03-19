@@ -15,7 +15,7 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 ## What It Does
 
 1. **Token ingestion** — Connects to the OpenAI `gpt-4o` streaming API (or replays a pre-loaded token sequence in simulator mode) and delivers each token to the pipeline.
-2. **Deduplication** — An FNV-1a TTL deduplicator filters repeated tokens within a configurable window, with an optional Redis backend for cross-process dedup.
+2. **Deduplication** — An FNV-1a TTL deduplicator filters repeated tokens within a configurable window (default 5 seconds, tunable via `token_stream.token_interval_ms * 10` in `config.yaml`). On Redis disconnect the system falls back transparently to the in-process backend with no signal loss. Adjust the TTL window by changing the multiplier passed to the `Deduplicator` constructor, or configure `token_stream.token_interval_ms` in `config.yaml` to scale both the emission cadence and the dedup window together.
 3. **Semantic weighting** — An exact-match dictionary maps each token to a `SemanticWeight` (sentiment, confidence, volatility, directional bias). An SSE2 SIMD path accelerates batch scoring.
 4. **Signal generation** — Accumulates directional bias and volatility with exponential decay and emits a `TradeSignal` when the cooldown elapses (realtime) or on every token (backtest).
 5. **Risk gating** — A five-gate cascade (magnitude, confidence, rate-limit, drawdown, position/PnL) evaluates each signal before it leaves the engine.

@@ -102,10 +102,12 @@ int main(int argc, char* argv[]) {
         config.set_use_memory_stream(true);
     }
 
-    config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
+    if (!config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity << std::endl;
-    });
+    })) {
+        std::cerr << "[warn] Config hot-reload watcher failed to start\n";
+    }
 
     const auto& sys_config = config.get_config();
 
@@ -390,7 +392,7 @@ int main(int argc, char* argv[]) {
         // Update ingestion pressure.
         uint64_t tps = token_count_window.exchange(0);
         double   max_tps = stream_mode
-                               ? 50.0   // gpt-4o emits ~10-30 tokens/s
+                               ? sys_config.pressure.max_ingestion_rate_tps   // gpt-4o emits ~10-30 tokens/s
                                : static_cast<double>(1000000 / std::max(1, sys_config.token_stream.token_interval_ms));
         latency_ctrl.update_ingestion_pressure(static_cast<double>(tps), max_tps);
 
@@ -484,7 +486,27 @@ int main(int argc, char* argv[]) {
                  << "llmquant_latency_p99_us " << p99 << "\n"
                  << "# HELP llmquant_latency_avg_us Average token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_avg_us gauge\n"
-                 << "llmquant_latency_avg_us " << stats.avg_latency.count() << "\n";
+                 << "llmquant_latency_avg_us " << stats.avg_latency.count() << "\n"
+                 << "# HELP llmquant_oms_update_count_total Total successful OMS position updates\n"
+                 << "# TYPE llmquant_oms_update_count_total counter\n"
+                 << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
+                        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
+                            return rest->update_count();
+                        return 0;
+                    }() << "\n"
+                 << "# HELP llmquant_oms_error_count_total Total OMS connection errors\n"
+                 << "# TYPE llmquant_oms_error_count_total counter\n"
+                 << "llmquant_oms_error_count_total " << [&]() -> uint64_t {
+                        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
+                            return rest->error_count();
+                        return 0;
+                    }() << "\n"
+                 << "# HELP llmquant_dedup_redis_connected Whether a Redis dedup connection is active\n"
+                 << "# TYPE llmquant_dedup_redis_connected gauge\n"
+                 << "llmquant_dedup_redis_connected 0\n"
+                 << "# HELP llmquant_dedup_redis_reconnect_attempts_total Total Redis reconnect attempts\n"
+                 << "# TYPE llmquant_dedup_redis_reconnect_attempts_total counter\n"
+                 << "llmquant_dedup_redis_reconnect_attempts_total 0\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

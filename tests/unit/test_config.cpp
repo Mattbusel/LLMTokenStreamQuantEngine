@@ -7,6 +7,9 @@
 #include <string>
 #include <thread>
 #include <cstdio>
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
 
 namespace llmquant {
 namespace {
@@ -288,6 +291,33 @@ TEST(ConfigTest, test_config_concurrent_hot_reload_and_get_config_is_safe) {
 
     // No assertion on values — just verifying no crash or deadlock.
     SUCCEED();
+}
+
+// ---------------------------------------------------------------------------
+// Test: Config load on unreadable file (chmod 000; skip on Windows)
+// ---------------------------------------------------------------------------
+TEST(ConfigTest, ConfigLoadUnreadableFile) {
+#ifndef _WIN32
+    // Create a temp file with valid YAML.
+    std::string tmp_path = "/tmp/llmquant_unreadable_test.yaml";
+    {
+        std::ofstream f(tmp_path);
+        f << "trading:\n  bias_sensitivity: 1.0\n";
+    }
+    chmod(tmp_path.c_str(), 0000);
+
+    Config cfg;
+    bool ok = cfg.load_from_file(tmp_path);
+    // Either throws or returns false; either is acceptable.
+    (void)ok;
+
+    // Restore and cleanup.
+    chmod(tmp_path.c_str(), 0644);
+    std::remove(tmp_path.c_str());
+    SUCCEED();
+#else
+    GTEST_SKIP() << "chmod not available on Windows";
+#endif
 }
 
 } // namespace

@@ -53,6 +53,17 @@ public:
         /// Fraction of position_limit at which a limit-approach warning is fired
         /// (e.g. 0.8 = fire callback when |projected_position| > 80% of limit).
         double position_warn_fraction{0.8};
+
+        /// When true, the magnitude gate is bypassed (for testing only).
+        bool disable_magnitude_gate{false};
+        /// When true, the confidence gate is bypassed (for testing only).
+        bool disable_confidence_gate{false};
+        /// When true, the rate-limit gate is bypassed (for testing only).
+        bool disable_rate_gate{false};
+        /// When true, the drawdown gate is bypassed (for testing only).
+        bool disable_drawdown_gate{false};
+        /// When true, the position/PnL gate is bypassed (for testing only).
+        bool disable_position_gate{false};
     };
 
     /**
@@ -122,6 +133,10 @@ public:
     /**
      * @brief Register a callback to be invoked when a signal is blocked.
      *
+     * @warning Callbacks are invoked OUTSIDE the evaluate() mutex. Callbacks
+     *          MUST NOT call any RiskManager methods or a deadlock will occur.
+     *          Callbacks MUST NOT block for extended periods.
+     *
      * @param cb Callable matching AlertCallback; stored by value.
      */
     void set_alert_callback(AlertCallback cb);
@@ -137,6 +152,10 @@ public:
 
     /**
      * @brief Register a callback for OMS events (limit-approach, limit-breach, pnl-alert).
+     *
+     * @warning Callbacks are invoked OUTSIDE the evaluate() mutex. Callbacks
+     *          MUST NOT call any RiskManager methods or a deadlock will occur.
+     *          Callbacks MUST NOT block for extended periods.
      *
      * @param cb Callable matching OmsCallback; stored by value.
      */
