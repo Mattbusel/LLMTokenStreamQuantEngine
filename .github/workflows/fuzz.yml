@@ -1,0 +1,19 @@
+name: Fuzz Smoke Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get install -y clang libspdlog-dev libyaml-cpp-dev cmake nlohmann-json3-dev
+      - name: Configure
+        run: CC=clang CXX=clang++ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLLMQUANT_ENABLE_FUZZING=ON -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
+      - name: Build
+        run: cmake --build build -j$(nproc) --target fuzz_pipeline
+      - name: Smoke test
+        run: ./build/fuzz_pipeline -runs=500 -max_total_time=30

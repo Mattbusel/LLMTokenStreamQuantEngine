@@ -98,31 +98,31 @@ bool Config::save_to_file(const std::string& filepath) const {
         std::lock_guard<std::mutex> lk(config_mutex_);
         snap = config_;
     }
-    const auto& config_ = snap;  // shadow member so the rest of the function is unchanged
+    const auto& snap_cfg = snap;  // local alias — avoids shadowing the config_ member
     YAML::Node yaml;
 
     // Token stream
-    yaml["token_stream"]["data_file_path"] = config_.token_stream.data_file_path;
-    yaml["token_stream"]["token_interval_ms"] = config_.token_stream.token_interval_ms;
-    yaml["token_stream"]["buffer_size"] = config_.token_stream.buffer_size;
-    yaml["token_stream"]["use_memory_stream"] = config_.token_stream.use_memory_stream;
+    yaml["token_stream"]["data_file_path"] = snap_cfg.token_stream.data_file_path;
+    yaml["token_stream"]["token_interval_ms"] = snap_cfg.token_stream.token_interval_ms;
+    yaml["token_stream"]["buffer_size"] = snap_cfg.token_stream.buffer_size;
+    yaml["token_stream"]["use_memory_stream"] = snap_cfg.token_stream.use_memory_stream;
 
     // Trading
-    yaml["trading"]["bias_sensitivity"] = config_.trading.bias_sensitivity;
-    yaml["trading"]["volatility_sensitivity"] = config_.trading.volatility_sensitivity;
-    yaml["trading"]["signal_decay_rate"] = config_.trading.signal_decay_rate;
-    yaml["trading"]["signal_cooldown_us"] = config_.trading.signal_cooldown_us;
+    yaml["trading"]["bias_sensitivity"] = snap_cfg.trading.bias_sensitivity;
+    yaml["trading"]["volatility_sensitivity"] = snap_cfg.trading.volatility_sensitivity;
+    yaml["trading"]["signal_decay_rate"] = snap_cfg.trading.signal_decay_rate;
+    yaml["trading"]["signal_cooldown_us"] = snap_cfg.trading.signal_cooldown_us;
 
     // Latency
-    yaml["latency"]["target_latency_us"] = config_.latency.target_latency_us;
-    yaml["latency"]["sample_window"] = config_.latency.sample_window;
-    yaml["latency"]["enable_profiling"] = config_.latency.enable_profiling;
+    yaml["latency"]["target_latency_us"] = snap_cfg.latency.target_latency_us;
+    yaml["latency"]["sample_window"] = snap_cfg.latency.sample_window;
+    yaml["latency"]["enable_profiling"] = snap_cfg.latency.enable_profiling;
 
     // Logging
-    yaml["logging"]["log_file_path"] = config_.logging.log_file_path;
-    yaml["logging"]["format"] = config_.logging.format;
-    yaml["logging"]["enable_console"] = config_.logging.enable_console;
-    yaml["logging"]["flush_interval_ms"] = config_.logging.flush_interval_ms;
+    yaml["logging"]["log_file_path"] = snap_cfg.logging.log_file_path;
+    yaml["logging"]["format"] = snap_cfg.logging.format;
+    yaml["logging"]["enable_console"] = snap_cfg.logging.enable_console;
+    yaml["logging"]["flush_interval_ms"] = snap_cfg.logging.flush_interval_ms;
 
     std::ofstream f(filepath);
     if (!f.is_open()) {

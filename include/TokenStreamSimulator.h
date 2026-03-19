@@ -139,6 +139,11 @@ private:
      * false sharing. Capacity is rounded up to the next power of two so
      * the index mask trick applies.
      */
+    // MSVC C4324: padding is expected and intentional for cache-line alignment.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4324)
+#endif
     struct RingBuffer {
         static constexpr size_t kCacheLineSize = 64;
 
@@ -198,6 +203,9 @@ private:
         size_t mask_{0};
         std::vector<std::string> slots_;
     };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
     void stream_worker();
 

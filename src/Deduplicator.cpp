@@ -17,19 +17,30 @@ namespace llmquant {
 // ---------------------------------------------------------------------------
 
 DedupKey DedupKey::from_token(const std::string& token, const std::string& context) noexcept {
-    // Deterministic key: FNV-1a 64-bit hash of "token|context".
-    // Store the raw integer to avoid double-hashing a hex string.
-    // For production, replace with SHA-256 if collision resistance
-    // stronger than 64-bit is required.
-    uint64_t hash = 14695981039346656037ULL;
+    // 128-bit dedup key: two independent FNV-1a 64-bit passes with different
+    // seeds over "token|context".  Combining both halves gives collision
+    // resistance of ~2^128 vs the original 2^64 single-pass approach.
+    // Seed1 is the standard FNV-1a offset basis; seed2 is an alternate offset.
+    constexpr uint64_t kSeed1 = 14695981039346656037ULL;
+    constexpr uint64_t kSeed2 = 0xcbf29ce484222325ULL ^ 0xdeadbeefcafeULL;
+    constexpr uint64_t kPrime = 1099511628211ULL;
+
+    uint64_t lo = kSeed1;
+    uint64_t hi = kSeed2;
+
     auto fnv_byte = [&](unsigned char b) {
-        hash ^= static_cast<uint64_t>(b);
-        hash *= 1099511628211ULL;
+        lo ^= static_cast<uint64_t>(b);
+        lo *= kPrime;
+        // Second pass: mix the byte differently for independence.
+        hi ^= static_cast<uint64_t>(b) ^ (lo >> 32);
+        hi *= kPrime;
     };
-    for (unsigned char c : token)  fnv_byte(c);
+
+    for (unsigned char c : token)   fnv_byte(c);
     fnv_byte('|');
     for (unsigned char c : context) fnv_byte(c);
-    return DedupKey{hash};
+
+    return DedupKey{lo, hi};
 }
 
 // ---------------------------------------------------------------------------
@@ -197,9 +208,11 @@ DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
         // SET key "" NX EX ttl_sec — atomic check-and-set with TTL.
         // Returns status "OK" if the key was newly set (novel), or nil if it
         // already existed (duplicate).
+        // Use both 64-bit halves as the Redis key for full 128-bit uniqueness.
+        std::string redis_key = std::to_string(key.value) + "_" + std::to_string(key.value_hi);
         auto* reply = static_cast<redisReply*>(
             redisCommand(ctx, "SET %s \"\" NX EX %lld",
-                         std::to_string(key.value).c_str(), ttl_sec));
+                         redis_key.c_str(), ttl_sec));
         if (!reply) {
             // Connection lost — fire disconnect callback then attempt reconnect.
             std::string err_msg = ctx->errstr ? ctx->errstr : "nil reply";
@@ -231,8 +244,9 @@ void RedisDeduplicator::evict(const DedupKey& key) {
 #ifdef LLMQUANT_REDIS_ENABLED
     if (redis_connected_) {
         auto* ctx   = static_cast<redisContext*>(redis_ctx_);
+        std::string redis_key = std::to_string(key.value) + "_" + std::to_string(key.value_hi);
         auto* reply = static_cast<redisReply*>(
-            redisCommand(ctx, "DEL %s", std::to_string(key.value).c_str()));
+            redisCommand(ctx, "DEL %s", redis_key.c_str()));
         if (reply) freeReplyObject(reply);
     }
 #endif

@@ -1,12 +1,15 @@
 #include "LatencyController.h"
 #include <algorithm>
 #include <numeric>
+#include <thread>
 
 namespace llmquant {
 
 LatencyController::LatencyController(const Config& config) : config_(config) {
     // Pre-allocate the ring buffer to its full capacity so writes never reallocate.
     latency_samples_.assign(config_.sample_window, std::chrono::microseconds{0});
+    // Reserve the scratch buffer once so get_stats() never allocates on the heap.
+    percentile_scratch_.reserve(config_.sample_window);
 }
 
 void LatencyController::start_measurement() {
@@ -30,10 +33,20 @@ void LatencyController::record_latency(std::chrono::microseconds latency) {
     total_latency_us_ += latency_us;
     
     uint64_t current_min = min_latency_us_.load();
-    while (latency_us < current_min && !min_latency_us_.compare_exchange_weak(current_min, latency_us));
-    
+    {
+        int retries = 0;
+        while (latency_us < current_min && !min_latency_us_.compare_exchange_weak(current_min, latency_us)) {
+            if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+        }
+    }
+
     uint64_t current_max = max_latency_us_.load();
-    while (latency_us > current_max && !max_latency_us_.compare_exchange_weak(current_max, latency_us));
+    {
+        int retries = 0;
+        while (latency_us > current_max && !max_latency_us_.compare_exchange_weak(current_max, latency_us)) {
+            if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+        }
+    }
     
     // Store sample in ring buffer for percentile calculation — O(1) per insert.
     if (config_.enable_profiling) {
@@ -48,7 +61,11 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
     LatencyStats stats;
     
     uint64_t measurements = total_measurements_.load();
-    if (measurements == 0) return stats;
+    if (measurements == 0) {
+        // Ensure min_latency stays 0 (not the UINT64_MAX sentinel) when no data.
+        stats.min_latency = std::chrono::microseconds{0};
+        return stats;
+    }
     
     stats.avg_latency = std::chrono::microseconds(total_latency_us_.load() / measurements);
     stats.min_latency = std::chrono::microseconds(min_latency_us_.load());
@@ -60,7 +77,9 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
         std::lock_guard<std::mutex> lock(samples_mutex_);
         if (sample_count_ > 0) {
             // Reconstruct the valid samples in insertion order from the ring buffer.
-            std::vector<std::chrono::microseconds> samples_copy(sample_count_);
+            // Reuse percentile_scratch_ to avoid per-call heap allocation.
+            auto& samples_copy = percentile_scratch_;
+            samples_copy.resize(sample_count_);
             for (size_t k = 0; k < sample_count_; ++k) {
                 size_t idx = (sample_head_ + config_.sample_window - sample_count_ + k)
                              % config_.sample_window;
@@ -188,7 +207,9 @@ void LatencyController::recompute_composite() {
     if (c >= 0.8) {
         backoff_multiplier_ = std::min(backoff_multiplier_ * 1.5, 5.0);
     } else if (c < 0.5) {
-        backoff_multiplier_ = 1.0;
+        // Exponential decay toward 1.0 rather than an abrupt reset,
+        // preventing oscillation when composite pressure hovers near 0.5.
+        backoff_multiplier_ = std::max(1.0, backoff_multiplier_ * 0.85);
     }
 }
 

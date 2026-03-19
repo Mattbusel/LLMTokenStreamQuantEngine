@@ -21,11 +21,17 @@ enum class DedupResult {
 };
 
 /**
- * @brief Key type for deduplication: a raw FNV-1a 64-bit hash of token text + optional context.
+ * @brief Key type for deduplication: a 128-bit hash of token text + optional context.
+ *
+ * Uses two independent FNV-1a passes with different seeds to produce a 128-bit
+ * (hi, lo) pair, giving collision resistance equivalent to 2^128 rather than 2^64.
+ * The `value` field retains the low 64 bits for backwards compatibility where needed.
  */
 struct DedupKey {
-    /** @brief Raw FNV-1a 64-bit hash of the token and context concatenation. */
+    /** @brief Low 64 bits of the 128-bit hash (same as the original FNV-1a value). */
     uint64_t value{0};
+    /** @brief High 64 bits of the 128-bit hash (second FNV-1a pass with alternate seed). */
+    uint64_t value_hi{0};
 
     /**
      * @brief Construct a dedup key from a raw token string and optional context.
@@ -35,27 +41,32 @@ struct DedupKey {
      *
      * @param token   Raw token string.
      * @param context Optional context string that scopes the key (default: "").
-     * @return A DedupKey with the computed hash.
+     * @return A DedupKey with the computed 128-bit hash.
      */
     static DedupKey from_token(const std::string& token,
                                const std::string& context = "") noexcept;
 
     /**
-     * @brief Equality comparison operator.
+     * @brief Equality comparison operator (uses both 64-bit halves).
      *
      * @param other DedupKey to compare against.
-     * @return true if both keys have the same hash value.
+     * @return true if both keys have the same 128-bit hash value.
      */
-    bool operator==(const DedupKey& other) const noexcept { return value == other.value; }
+    bool operator==(const DedupKey& other) const noexcept {
+        return value == other.value && value_hi == other.value_hi;
+    }
 };
 
 } // namespace llmquant
 
 // Allow DedupKey to be used as an unordered_map key.
+// Combine both 64-bit halves into a single size_t hash via XOR-shift mixing.
 namespace std {
 template<> struct hash<llmquant::DedupKey> {
     size_t operator()(const llmquant::DedupKey& k) const noexcept {
-        return static_cast<size_t>(k.value);
+        // Mix both halves: XOR the high bits into the low hash with a rotation.
+        uint64_t h = k.value ^ (k.value_hi * 0x9e3779b97f4a7c15ULL);
+        return static_cast<size_t>(h);
     }
 };
 } // namespace std

@@ -51,8 +51,8 @@ bool PrometheusExporter::bind_socket() {
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port   = htons(config_.port);
-    addr.sin_addr.s_addr = inet_addr(config_.bind_address.c_str());
-    if (addr.sin_addr.s_addr == INADDR_NONE)
+    // Use inet_pton (POSIX/Winsock2) instead of deprecated inet_addr.
+    if (inet_pton(AF_INET, config_.bind_address.c_str(), &addr.sin_addr) != 1)
         addr.sin_addr.s_addr = INADDR_ANY;
 
     if (::bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {

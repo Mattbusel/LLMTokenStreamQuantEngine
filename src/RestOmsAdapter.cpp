@@ -274,54 +274,74 @@ bool RestOmsAdapter::parse_position(const std::string& body,
 // ---------------------------------------------------------------------------
 
 void RestOmsAdapter::poller_thread() {
+    // Initialise the effective poll interval from config (may be grown by backoff).
+    current_poll_interval_ = config_.poll_interval;
+    static constexpr std::chrono::milliseconds kMaxPollInterval{30000};
+
     while (running_.load()) {
+        bool success = false;
+
         if (!open_socket()) {
             error_count_++;
-            std::this_thread::sleep_for(config_.poll_interval);
-            continue;
-        }
+        } else {
+            std::string request = build_request();
 
-        std::string request = build_request();
-
-        // Send full request.
-        bool send_ok = true;
-        size_t sent = 0;
-        while (sent < request.size()) {
-            ssize_t n = send(sockfd_,
-                             request.c_str() + sent,
-                             static_cast<int>(request.size() - sent), 0);
-            if (n <= 0) { send_ok = false; break; }
-            sent += static_cast<size_t>(n);
-        }
-
-        // Receive full response until the server closes the connection.
-        std::string response;
-        if (send_ok) {
-            char buf[4096];
-            while (true) {
-                ssize_t n = recv(sockfd_, buf,
-                                 static_cast<int>(sizeof(buf) - 1), 0);
-                if (n <= 0) break;
-                buf[n] = '\0';
-                response.append(buf, static_cast<size_t>(n));
+            // Send full request.
+            bool send_ok = true;
+            size_t sent = 0;
+            while (sent < request.size()) {
+                ssize_t n = send(sockfd_,
+                                 request.c_str() + sent,
+                                 static_cast<int>(request.size() - sent), 0);
+                if (n <= 0) { send_ok = false; break; }
+                sent += static_cast<size_t>(n);
             }
-        }
 
-        close_socket();
+            // Receive full response until the server closes the connection.
+            std::string response;
+            if (send_ok) {
+                char buf[4096];
+                while (true) {
+                    ssize_t n = recv(sockfd_, buf,
+                                     static_cast<int>(sizeof(buf) - 1), 0);
+                    if (n <= 0) break;
+                    buf[n] = '\0';
+                    response.append(buf, static_cast<size_t>(n));
+                }
+            }
 
-        if (!response.empty()) {
-            RiskManager::PositionState state;
-            if (parse_position(response, state)) {
-                if (callback_) callback_(state);
-                update_count_++;
+            close_socket();
+
+            if (!response.empty()) {
+                RiskManager::PositionState state;
+                if (parse_position(response, state)) {
+                    if (callback_) callback_(state);
+                    update_count_++;
+                    success = true;
+                } else {
+                    error_count_++;
+                }
             } else {
                 error_count_++;
             }
-        } else {
-            error_count_++;
         }
 
-        std::this_thread::sleep_for(config_.poll_interval);
+        // Circuit-breaker: exponential backoff after 3 consecutive failures.
+        if (success) {
+            consecutive_failures_ = 0;
+            current_poll_interval_ = config_.poll_interval;  // reset on success
+        } else {
+            ++consecutive_failures_;
+            if (consecutive_failures_ >= 3) {
+                // Double the poll interval up to the cap of 30 seconds.
+                auto doubled = std::chrono::milliseconds{current_poll_interval_.count() * 2};
+                current_poll_interval_ = (doubled < kMaxPollInterval) ? doubled : kMaxPollInterval;
+                spdlog::warn("[rest_oms] {} consecutive failures; backing off to {}ms",
+                             consecutive_failures_, current_poll_interval_.count());
+            }
+        }
+
+        std::this_thread::sleep_for(current_poll_interval_);
     }
 }
 

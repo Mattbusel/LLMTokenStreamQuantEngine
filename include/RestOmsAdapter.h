@@ -150,6 +150,10 @@ private:
     bool              wsa_initialized_{false};  ///< True iff WSAStartup succeeded (Windows only).
     std::atomic<uint64_t> update_count_{0};
     std::atomic<uint64_t> error_count_{0};
+
+    /// Circuit-breaker state: consecutive failures and current (possibly backed-off) poll interval.
+    int consecutive_failures_{0};
+    std::chrono::milliseconds current_poll_interval_{};  ///< Initialised from config_.poll_interval in poller_thread.
 };
 
 } // namespace llmquant

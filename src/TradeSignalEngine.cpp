@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <thread>
 
 namespace llmquant {
 
@@ -24,23 +25,32 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     double vol_contribution = weight.volatility_score * weight.confidence_score * config_.volatility_sensitivity;
     
     // Accumulate signals with decay using CAS loops for linearisable RMW.
+    // Yield after 8 failed retries to avoid livelock under high contention.
     double expected_bias = accumulated_bias_.load(std::memory_order_relaxed);
     double desired_bias;
-    do {
-        desired_bias = expected_bias * config_.signal_decay_rate + bias_contribution;
-    } while (!accumulated_bias_.compare_exchange_weak(
-                 expected_bias, desired_bias,
-                 std::memory_order_release,
-                 std::memory_order_relaxed));
+    {
+        int retries = 0;
+        do {
+            desired_bias = expected_bias * config_.signal_decay_rate + bias_contribution;
+            if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+        } while (!accumulated_bias_.compare_exchange_weak(
+                     expected_bias, desired_bias,
+                     std::memory_order_release,
+                     std::memory_order_relaxed));
+    }
 
     double expected_vol = accumulated_volatility_.load(std::memory_order_relaxed);
     double desired_vol;
-    do {
-        desired_vol = expected_vol * config_.signal_decay_rate + vol_contribution;
-    } while (!accumulated_volatility_.compare_exchange_weak(
-                 expected_vol, desired_vol,
-                 std::memory_order_release,
-                 std::memory_order_relaxed));
+    {
+        int retries = 0;
+        do {
+            desired_vol = expected_vol * config_.signal_decay_rate + vol_contribution;
+            if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+        } while (!accumulated_volatility_.compare_exchange_weak(
+                     expected_vol, desired_vol,
+                     std::memory_order_release,
+                     std::memory_order_relaxed));
+    }
 
     double current_bias = desired_bias;
     double current_vol  = desired_vol;
@@ -60,20 +70,33 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         }
         
         signal.strategy_weight = std::min(1.0, weight.confidence_score * 2.0);
-        
+        // Set confidence on the signal before emit_signal() so the field is
+        // correctly populated without relying on an overwrite inside emit_signal().
+        signal.confidence = weight.confidence_score;
+
         emit_signal(signal);
         
         // Reset accumulators after significant signal using CAS loops so the
         // halving is a linearisable RMW even if another thread is accumulating.
         if (std::abs(current_bias) > 0.8 || std::abs(current_vol) > 0.8) {
             double b = accumulated_bias_.load(std::memory_order_relaxed);
-            while (!accumulated_bias_.compare_exchange_weak(
-                       b, b * 0.5,
-                       std::memory_order_release, std::memory_order_relaxed)) {}
+            {
+                int retries = 0;
+                while (!accumulated_bias_.compare_exchange_weak(
+                           b, b * 0.5,
+                           std::memory_order_release, std::memory_order_relaxed)) {
+                    if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+                }
+            }
             double v = accumulated_volatility_.load(std::memory_order_relaxed);
-            while (!accumulated_volatility_.compare_exchange_weak(
-                       v, v * 0.5,
-                       std::memory_order_release, std::memory_order_relaxed)) {}
+            {
+                int retries = 0;
+                while (!accumulated_volatility_.compare_exchange_weak(
+                           v, v * 0.5,
+                           std::memory_order_release, std::memory_order_relaxed)) {
+                    if (++retries > 8) { std::this_thread::yield(); retries = 0; }
+                }
+            }
         }
     }
 }
@@ -109,7 +132,10 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.spread_modifier = (std::abs(signal.delta_bias_shift) > 0.5)
                                  ? -0.1 * signal.delta_bias_shift
                                  : 0.0;
-    signal.confidence = last_confidence_.load();
+    // Do NOT overwrite signal.confidence here — it must be set by the caller
+    // (process_semantic_weight) before calling emit_signal().  Overwriting it
+    // would silently discard any per-signal confidence already populated.
+    // signal.confidence = last_confidence_.load();  // removed (improvement #14)
 
     if (callback_) {
         try { callback_(signal); } catch (...) {}
