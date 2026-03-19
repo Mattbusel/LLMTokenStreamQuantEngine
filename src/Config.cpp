@@ -1,9 +1,11 @@
 #include "Config.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 
 namespace llmquant {
 
@@ -69,13 +71,48 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
         const auto& tr  = tmp.trading;
         const auto& lat = tmp.latency;
         const auto& log = tmp.logging;
-        if (ts.token_interval_ms <= 0 || ts.token_interval_ms > 60000 || ts.buffer_size == 0 ||
-            tr.bias_sensitivity <= 0.0 || tr.volatility_sensitivity <= 0.0 ||
-            tr.signal_decay_rate <= 0.0 || tr.signal_decay_rate > 1.0 ||
-            tr.signal_cooldown_us < 0 ||
-            lat.target_latency_us <= 0 || lat.sample_window == 0 ||
-            log.flush_interval_ms <= 0) {
-            spdlog::error("Config validation failed: one or more fields out of range");
+        if (ts.token_interval_ms <= 0 || ts.token_interval_ms > 60000) {
+            spdlog::error("Config validation failed: token_interval_ms out of range [1, 60000]");
+            set_defaults();
+            return false;
+        }
+        if (ts.buffer_size == 0) {
+            spdlog::error("Config validation failed: buffer_size must be >= 1");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(tr.bias_sensitivity) || tr.bias_sensitivity <= 0.0) {
+            spdlog::error("Config validation failed: bias_sensitivity must be > 0 and finite");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(tr.volatility_sensitivity) || tr.volatility_sensitivity <= 0.0) {
+            spdlog::error("Config validation failed: volatility_sensitivity must be > 0 and finite");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(tr.signal_decay_rate) || tr.signal_decay_rate <= 0.0 || tr.signal_decay_rate > 1.0) {
+            spdlog::error("Config validation failed: signal_decay_rate must be in (0, 1]");
+            set_defaults();
+            return false;
+        }
+        if (tr.signal_cooldown_us < 0) {
+            spdlog::error("Config validation failed: signal_cooldown_us must be >= 0");
+            set_defaults();
+            return false;
+        }
+        if (lat.target_latency_us <= 0) {
+            spdlog::error("Config validation failed: target_latency_us must be > 0");
+            set_defaults();
+            return false;
+        }
+        if (lat.sample_window == 0) {
+            spdlog::error("Config validation failed: sample_window must be >= 1");
+            set_defaults();
+            return false;
+        }
+        if (log.flush_interval_ms <= 0) {
+            spdlog::error("Config validation failed: flush_interval_ms must be > 0");
             set_defaults();
             return false;
         }

@@ -133,9 +133,12 @@ int main(int argc, char* argv[]) {
 
     // Arrival rate tracking for pressure system.
     std::atomic<uint64_t> token_count_window{0};
-    std::atomic<double>   sentiment_variance_accum{0.0};
-    std::atomic<double>   sentiment_mean_accum{0.0};
-    std::atomic<uint64_t> variance_n{0};
+    // Welford variance accumulators: plain (non-atomic) variables protected exclusively
+    // by variance_mutex so readers can never see an inconsistent state between reset
+    // and update (Improvement 2 — fix Welford variance race).
+    double   sentiment_variance_accum{0.0};
+    double   sentiment_mean_accum{0.0};
+    uint64_t variance_n{0};
     // Wall-clock timestamp of the last Welford accumulator reset.
     // Reset every 60 seconds to prevent catastrophic cancellation.
     auto variance_last_reset = std::chrono::steady_clock::now();
@@ -231,15 +234,14 @@ int main(int argc, char* argv[]) {
         {
             std::lock_guard<std::mutex> lk(variance_mutex);
             double s = weight.sentiment_score;
-            uint64_t n = variance_n.fetch_add(1) + 1;
-            double mean = sentiment_mean_accum.load();
-            double delta = s - mean;
-            sentiment_mean_accum.store(mean + delta / static_cast<double>(n));
-            double delta2 = s - sentiment_mean_accum.load();
-            double var = sentiment_variance_accum.load();
-            sentiment_variance_accum.store(var + delta * delta2);
+            ++variance_n;
+            uint64_t n = variance_n;
+            double delta = s - sentiment_mean_accum;
+            sentiment_mean_accum += delta / static_cast<double>(n);
+            double delta2 = s - sentiment_mean_accum;
+            sentiment_variance_accum += delta * delta2;
             current_variance = (n > 1)
-                ? (sentiment_variance_accum.load() / static_cast<double>(n - 1))
+                ? (sentiment_variance_accum / static_cast<double>(n - 1))
                 : 0.0;
         }
 
@@ -409,8 +411,13 @@ int main(int argc, char* argv[]) {
             (pressure.composite < 0.5) ? C("\033[32m") :
             (pressure.composite < 0.8) ? C("\033[33m") : C("\033[31m");
 
+        uint64_t tokens_total_local;
+        {
+            std::lock_guard<std::mutex> lk(variance_mutex);
+            tokens_total_local = variance_n;
+        }
         uint64_t tokens_total = stream_mode
-                                    ? static_cast<uint64_t>(variance_n.load())
+                                    ? tokens_total_local
                                     : token_sim.get_stats().tokens_emitted.load();
 
         // Saturating addition for the BLOCK counter — prevent silent wrap-around.
@@ -436,9 +443,9 @@ int main(int argc, char* argv[]) {
             std::lock_guard<std::mutex> lk(variance_mutex);
             auto now_steady = std::chrono::steady_clock::now();
             if (now_steady - variance_last_reset > std::chrono::seconds{60}) {
-                variance_n.store(0);
-                sentiment_mean_accum.store(0.0);
-                sentiment_variance_accum.store(0.0);
+                variance_n = 0;
+                sentiment_mean_accum = 0.0;
+                sentiment_variance_accum = 0.0;
                 variance_last_reset = now_steady;
             }
         }
@@ -515,7 +522,12 @@ int main(int argc, char* argv[]) {
     std::cout << "\n\n  =========================================================\n";
     std::cout << "  SESSION SUMMARY\n";
     std::cout << "  ---------------------------------------------------------\n";
-    std::cout << "  Tokens processed : " << variance_n.load() << "\n";
+    uint64_t final_variance_n;
+    {
+        std::lock_guard<std::mutex> lk(variance_mutex);
+        final_variance_n = variance_n;
+    }
+    std::cout << "  Tokens processed : " << final_variance_n << "\n";
     std::cout << "  Signals emitted  : " << trade_engine.get_stats().signals_generated.load() << "\n";
     {
         const auto& frs = risk_mgr.get_stats();

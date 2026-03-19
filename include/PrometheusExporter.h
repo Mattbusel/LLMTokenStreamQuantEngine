@@ -84,6 +84,8 @@ private:
     Config            config_;
     MetricsCallback   metrics_cb_;
     std::atomic<bool> running_{false};
+    /// Guards metrics_cb_ against re-entrancy if a slow scrape triggers another scrape.
+    std::atomic<bool> callback_in_progress_{false};
     std::thread       thread_;
     int               listen_fd_{-1};
 };

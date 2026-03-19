@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
@@ -209,7 +210,13 @@ DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
         // Returns status "OK" if the key was newly set (novel), or nil if it
         // already existed (duplicate).
         // Use both 64-bit halves as the Redis key for full 128-bit uniqueness.
-        std::string redis_key = std::to_string(key.value) + "_" + std::to_string(key.value_hi);
+        // Hex encoding with fixed width avoids the separator collision that
+        // plain decimal + "_" can cause (e.g. "12_3" vs "1_23").
+        char redis_key_buf[35]; // "llmq:" + 16 hex + 16 hex + null
+        std::snprintf(redis_key_buf, sizeof(redis_key_buf), "llmq:%016llx%016llx",
+                      static_cast<unsigned long long>(key.value),
+                      static_cast<unsigned long long>(key.value_hi));
+        std::string redis_key = redis_key_buf;
         auto* reply = static_cast<redisReply*>(
             redisCommand(ctx, "SET %s \"\" NX EX %lld",
                          redis_key.c_str(), ttl_sec));
@@ -244,7 +251,13 @@ void RedisDeduplicator::evict(const DedupKey& key) {
 #ifdef LLMQUANT_REDIS_ENABLED
     if (redis_connected_) {
         auto* ctx   = static_cast<redisContext*>(redis_ctx_);
-        std::string redis_key = std::to_string(key.value) + "_" + std::to_string(key.value_hi);
+        // Hex encoding with fixed width avoids the separator collision that
+        // plain decimal + "_" can cause (e.g. "12_3" vs "1_23").
+        char redis_key_buf[35]; // "llmq:" + 16 hex + 16 hex + null
+        std::snprintf(redis_key_buf, sizeof(redis_key_buf), "llmq:%016llx%016llx",
+                      static_cast<unsigned long long>(key.value),
+                      static_cast<unsigned long long>(key.value_hi));
+        std::string redis_key = redis_key_buf;
         auto* reply = static_cast<redisReply*>(
             redisCommand(ctx, "DEL %s", redis_key.c_str()));
         if (reply) freeReplyObject(reply);

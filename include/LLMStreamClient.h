@@ -193,6 +193,9 @@ private:
     TokenCallback   token_cb_;
     DoneCallback    done_cb_;
     std::atomic<bool> running_{false};
+    /// Set to true before close_socket() in stop() so the reader thread can
+    /// distinguish an intentional socket close from an unexpected recv() error.
+    std::atomic<bool> shutdown_requested_{false};
     std::thread     thread_;
     int             sockfd_{-1};
     // On Windows, WSAGetLastError() is thread-local and only valid immediately

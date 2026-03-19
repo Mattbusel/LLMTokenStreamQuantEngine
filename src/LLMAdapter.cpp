@@ -12,7 +12,8 @@ LLMAdapter::LLMAdapter() {
 }
 
 SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
-    stats_.tokens_processed++;
+    // tokens_processed is incremented AFTER the lookup so the invariant
+    // cache_hits + cache_misses == tokens_processed always holds (Improvement 12).
 
     // Fast-path: if the token is already normalized (lowercase ASCII letters,
     // digits, spaces or underscores, no leading/trailing whitespace) skip the
@@ -30,10 +31,12 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     if (is_normalized(token)) {
         auto it_fast = token_weights_.find(token);
         if (it_fast != token_weights_.end()) {
+            stats_.tokens_processed++;
             stats_.cache_hits++;
             return it_fast->second;
         }
         // Token is already normalized but not found — no need to normalize again.
+        stats_.tokens_processed++;
         stats_.cache_misses++;
         return SemanticWeight{0.0, 0.5, 0.1, 0.0};
     }
@@ -51,10 +54,12 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
 
     auto it = token_weights_.find(norm);
     if (it != token_weights_.end()) {
+        stats_.tokens_processed++;
         stats_.cache_hits++;
         return it->second;
     }
 
+    stats_.tokens_processed++;
     stats_.cache_misses++;
 
     // Default neutral weight for unknown tokens

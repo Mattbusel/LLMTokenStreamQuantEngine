@@ -9,6 +9,8 @@
   #include <sys/socket.h>
   #include <netdb.h>
   #include <unistd.h>
+  #include <netinet/tcp.h>
+  #include <cerrno>
 #endif
 
 #include <algorithm>
@@ -51,12 +53,16 @@ void FixOmsAdapter::set_position_callback(PositionCallback cb) {
 
 bool FixOmsAdapter::start() {
     if (running_.load()) return false;
+    shutdown_requested_ = false;
     running_ = true;
     thread_ = std::thread(&FixOmsAdapter::reader_thread, this);
     return true;
 }
 
 void FixOmsAdapter::stop() {
+    // Closing the socket from another thread is the only portable way to unblock recv();
+    // EBADF/WSAENOTSOCK after close_socket() is expected and not an error.
+    shutdown_requested_ = true;
     running_ = false;
     // close_socket() must come before thread_.join(): the background thread may
     // be blocked in recv() and will not observe running_==false until the socket
@@ -98,6 +104,22 @@ bool FixOmsAdapter::open_socket() {
         if (::connect(fd, rp->ai_addr,
                       static_cast<int>(rp->ai_addrlen)) == 0) {
             sockfd_ = fd;
+            // Disable Nagle's algorithm for low-latency FIX message delivery.
+            int flag = 1;
+            if (setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY,
+                           reinterpret_cast<const char*>(&flag), sizeof(flag)) != 0) {
+                spdlog::debug("[FixOmsAdapter] TCP_NODELAY setsockopt failed (non-fatal)");
+            }
+            // Set a 30-second receive timeout so the reader thread doesn't block forever.
+#ifdef _WIN32
+            DWORD rcv_timeout_ms = 30000;
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&rcv_timeout_ms), sizeof(rcv_timeout_ms));
+#else
+            struct timeval rcv_tv{30, 0};
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&rcv_tv), sizeof(rcv_tv));
+#endif
             break;
         }
 #ifdef _WIN32
@@ -282,8 +304,8 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
             try {
                 int begin = std::stoi(begin_it->second);
                 // EndSeqNo=0 means "to current" — use our next outbound seq.
-                int new_seq = (end_it != fields.end() && end_it->second != "0")
-                              ? std::stoi(end_it->second) + 1
+                uint32_t new_seq = (end_it != fields.end() && end_it->second != "0")
+                              ? static_cast<uint32_t>(std::stoi(end_it->second) + 1)
                               : seq_num_;
                 std::ostringstream body;
                 body << "35=4"  << SOH
@@ -443,6 +465,40 @@ void FixOmsAdapter::reader_thread() {
         ssize_t n = recv(sockfd_, chunk,
                          static_cast<int>(sizeof(chunk) - 1), 0);
         if (n <= 0) {
+#ifdef _WIN32
+            int recv_err = WSAGetLastError();
+            // WSAENOTSOCK/WSAEBADF after close_socket() from stop() is expected — not an error.
+            if (shutdown_requested_.load() &&
+                (recv_err == WSAENOTSOCK || recv_err == WSAEBADF || recv_err == WSAEINTR)) {
+                break;
+            }
+            // Receive timeout — log warning and attempt reconnect.
+            if (recv_err == WSAETIMEDOUT) {
+                spdlog::warn("[FixOmsAdapter] no data received in 30s — possible dead connection");
+                if (running_.load() && reconnect_with_backoff()) {
+                    last_heartbeat = std::chrono::steady_clock::now();
+                    buf.clear();
+                    continue;
+                }
+                break;
+            }
+#else
+            int recv_err = errno;
+            // EBADF after close_socket() from stop() is expected — not an error.
+            if (shutdown_requested_.load() && (recv_err == EBADF || recv_err == EINTR)) {
+                break;
+            }
+            // Receive timeout — log warning and attempt reconnect.
+            if (recv_err == EAGAIN || recv_err == EWOULDBLOCK) {
+                spdlog::warn("[FixOmsAdapter] no data received in 30s — possible dead connection");
+                if (running_.load() && reconnect_with_backoff()) {
+                    last_heartbeat = std::chrono::steady_clock::now();
+                    buf.clear();
+                    continue;
+                }
+                break;
+            }
+#endif
             spdlog::warn("[FixOmsAdapter] recv failed, reconnecting");
             if (reconnect_with_backoff()) {
                 last_heartbeat = std::chrono::steady_clock::now();

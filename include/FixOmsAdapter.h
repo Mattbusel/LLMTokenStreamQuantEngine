@@ -127,9 +127,13 @@ private:
     Config            config_;
     PositionCallback  callback_;
     std::atomic<bool> running_{false};
+    /// Set to true before close_socket() in stop() so the reader thread can
+    /// distinguish an intentional socket close from an unexpected recv() error.
+    std::atomic<bool> shutdown_requested_{false};
     std::thread       thread_;
     int               sockfd_{-1};
-    int               seq_num_{1};              ///< Next outbound sequence number.
+    // FIX 4.2 seq nums are 1-2^32-1 per spec; uint32_t prevents signed overflow UB
+    uint32_t          seq_num_{1};              ///< Next outbound sequence number.
     int               expected_inbound_seq_{1}; ///< Next expected inbound MsgSeqNum.
 
     mutable std::mutex pos_mutex_;

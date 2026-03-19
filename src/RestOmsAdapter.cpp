@@ -9,6 +9,8 @@
   #include <sys/time.h>
   #include <netdb.h>
   #include <unistd.h>
+  #include <netinet/tcp.h>
+  #include <cerrno>
 #endif
 
 #include <cstring>
@@ -46,12 +48,16 @@ void RestOmsAdapter::set_position_callback(PositionCallback cb) {
 
 bool RestOmsAdapter::start() {
     if (running_.load()) return false;
+    shutdown_requested_ = false;
     running_ = true;
     thread_ = std::thread(&RestOmsAdapter::poller_thread, this);
     return true;
 }
 
 void RestOmsAdapter::stop() {
+    // Closing the socket from another thread is the only portable way to unblock recv();
+    // EBADF/WSAENOTSOCK after close_socket() is expected and not an error.
+    shutdown_requested_ = true;
     running_ = false;
     // close_socket() must come before thread_.join(): the background thread may
     // be blocked in recv() and will not observe running_==false until the socket
@@ -107,6 +113,12 @@ bool RestOmsAdapter::open_socket() {
             setsockopt(sockfd_, SOL_SOCKET, SO_SNDTIMEO,
                        reinterpret_cast<const char*>(&tv), sizeof(tv));
 #endif
+            // Disable Nagle's algorithm for low-latency REST polling.
+            int nodelay_flag = 1;
+            if (setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY,
+                           reinterpret_cast<const char*>(&nodelay_flag), sizeof(nodelay_flag)) != 0) {
+                spdlog::debug("[RestOmsAdapter] TCP_NODELAY setsockopt failed (non-fatal)");
+            }
             break;
         }
 #ifdef _WIN32
@@ -180,13 +192,18 @@ bool extract_double(const std::string& json,
         ++pos;
     }
 
-    // Collect the numeric token.
+    // Collect the numeric token — guard against oversized values.
+    constexpr size_t kMaxNumericLen = 64;
     size_t start = pos;
     while (pos < json.size() &&
            (std::isdigit(static_cast<unsigned char>(json[pos])) ||
             json[pos] == '-' || json[pos] == '.' ||
             json[pos] == 'e' || json[pos] == 'E' ||
             json[pos] == '+')) {
+        if (pos - start >= kMaxNumericLen) {
+            spdlog::warn("RestOmsAdapter: oversized numeric value in JSON response, skipping");
+            return false;
+        }
         ++pos;
     }
     if (pos == start) return false;
