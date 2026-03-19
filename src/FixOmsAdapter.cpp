@@ -266,10 +266,12 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
     auto seq_it = fields.find(34);  // MsgSeqNum
     if (seq_it != fields.end()) {
         try {
-            int received_seq = std::stoi(seq_it->second);
+            // FIX 4.2 seq nums are unsigned 32-bit per spec
+            uint32_t received_seq = static_cast<uint32_t>(std::stoul(seq_it->second));
             if (received_seq > expected_inbound_seq_) {
                 // Gap detected: request retransmission of missing messages.
-                send_resend_request(expected_inbound_seq_, received_seq - 1);
+                send_resend_request(static_cast<int>(expected_inbound_seq_),
+                                    static_cast<int>(received_seq - 1));
                 // Advance expected so we don't re-request on the next message.
                 expected_inbound_seq_ = received_seq + 1;
             } else if (received_seq == expected_inbound_seq_) {
@@ -292,7 +294,8 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
         // SequenceReset: advance expected inbound sequence to tag 36 (NewSeqNo).
         auto ns_it = fields.find(36);
         if (ns_it != fields.end()) {
-            try { expected_inbound_seq_ = std::stoi(ns_it->second); } catch (...) {}
+            // FIX 4.2 seq nums are unsigned 32-bit per spec; use stoul to avoid signed overflow
+            try { expected_inbound_seq_ = static_cast<uint32_t>(std::stoul(ns_it->second)); } catch (...) {}
         }
     } else if (msg_type == "2") {
         // ResendRequest: the counterparty wants messages we cannot replay.
@@ -302,10 +305,11 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
         auto end_it   = fields.find(16);  // EndSeqNo
         if (begin_it != fields.end()) {
             try {
-                int begin = std::stoi(begin_it->second);
+                // FIX 4.2 seq nums are unsigned 32-bit per spec; use stoul to avoid signed overflow
+                uint32_t begin = static_cast<uint32_t>(std::stoul(begin_it->second));
                 // EndSeqNo=0 means "to current" — use our next outbound seq.
                 uint32_t new_seq = (end_it != fields.end() && end_it->second != "0")
-                              ? static_cast<uint32_t>(std::stoi(end_it->second) + 1)
+                              ? static_cast<uint32_t>(std::stoul(end_it->second)) + 1u
                               : seq_num_;
                 std::ostringstream body;
                 body << "35=4"  << SOH
@@ -317,8 +321,10 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
                      << "123=Y" << SOH;  // GapFillFlag=Y
                 std::string msg = fix_message(body.str());
                 auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
-                if (sent != static_cast<decltype(sent)>(msg.size())) {
-                    spdlog::warn("[fix_oms] handle_message: inline send failed");
+                if (sent < 0) {
+                    spdlog::error("[fix_oms] send() failed in handle_message");
+                } else if (static_cast<size_t>(sent) != msg.size()) {
+                    spdlog::warn("[fix_oms] handle_message: inline send partial ({}/{})", sent, msg.size());
                 }
             } catch (...) {}
         }
@@ -397,7 +403,7 @@ bool FixOmsAdapter::reconnect_with_backoff() {
     seq_num_ = 1;
     std::string logon = build_logon(/*reset_seq=*/true);
     ssize_t sent = ::send(sockfd_, logon.c_str(), static_cast<int>(logon.size()), 0);
-    if (sent != static_cast<ssize_t>(logon.size())) {
+    if (sent < 0 || static_cast<size_t>(sent) != logon.size()) {
         close_socket();
         ++reconnect_attempts_;
         return false;
@@ -411,10 +417,12 @@ bool FixOmsAdapter::reconnect_with_backoff() {
 void FixOmsAdapter::send_sequence_reset() {
     std::string msg = build_sequence_reset(1);
     auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
-    if (sent == static_cast<decltype(sent)>(msg.size())) {
-        seq_num_ = 1;
+    if (sent < 0) {
+        spdlog::error("[fix_oms] send() failed in send_sequence_reset");
+    } else if (static_cast<size_t>(sent) != msg.size()) {
+        spdlog::warn("[fix_oms] send_sequence_reset: partial send ({}/{})", sent, msg.size());
     } else {
-        spdlog::warn("[fix_oms] send_sequence_reset failed");
+        seq_num_ = 1;
     }
 }
 
@@ -429,10 +437,12 @@ void FixOmsAdapter::send_resend_request(int begin_seq, int end_seq) {
          << "16=" << end_seq   << SOH;
     std::string msg = fix_message(body.str());
     auto sent = ::send(sockfd_, msg.c_str(), static_cast<int>(msg.size()), 0);
-    if (sent == static_cast<decltype(sent)>(msg.size())) {
-        seq_num_++;
+    if (sent < 0) {
+        spdlog::error("[fix_oms] send() failed in send_resend_request");
+    } else if (static_cast<size_t>(sent) != msg.size()) {
+        spdlog::warn("[fix_oms] send_resend_request: partial send ({}/{})", sent, msg.size());
     } else {
-        spdlog::warn("[fix_oms] send_resend_request failed");
+        seq_num_++;
     }
 }
 
@@ -449,7 +459,7 @@ void FixOmsAdapter::reader_thread() {
     // Send FIX Logon.
     std::string logon = build_logon();
     ssize_t sent = send(sockfd_, logon.c_str(), static_cast<int>(logon.size()), 0);
-    if (sent != static_cast<ssize_t>(logon.size())) {
+    if (sent < 0 || static_cast<size_t>(sent) != logon.size()) {
         close_socket();
         running_ = false;
         return;
@@ -534,7 +544,7 @@ void FixOmsAdapter::reader_thread() {
             std::string hb = build_heartbeat();
             ssize_t hb_sent = ::send(sockfd_, hb.c_str(),
                                      static_cast<int>(hb.size()), 0);
-            if (hb_sent != static_cast<ssize_t>(hb.size())) {
+            if (hb_sent < 0 || static_cast<size_t>(hb_sent) != hb.size()) {
                 spdlog::warn("[FixOmsAdapter] heartbeat send failed, reconnecting");
                 if (reconnect_with_backoff()) {
                     last_heartbeat = std::chrono::steady_clock::now();

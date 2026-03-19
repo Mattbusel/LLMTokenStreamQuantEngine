@@ -156,10 +156,14 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
 
     // Update stats unconditionally — count every emitted signal regardless of
     // whether a callback or only sinks are registered.
+    // signals_generated is incremented BEFORE loading n so that n >= 1 always
+    // holds when the Welford mean update runs below.  The guard against n==0
+    // defends the rare case where the saturating check skips the increment.
     // Saturating increment — wraps at UINT64_MAX then holds
     if (stats_.signals_generated.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
         stats_.signals_generated.fetch_add(1, std::memory_order_relaxed);
     uint64_t n = stats_.signals_generated.load();
+    if (n == 0) n = 1; // guard: n must be >= 1 for the Welford denominator
     double old_avg = stats_.avg_signal_strength.load();
     // Welford running mean: mean_n = mean_{n-1} + (x - mean_{n-1}) / n
     stats_.avg_signal_strength = old_avg + (std::fabs(signal.delta_bias_shift) - old_avg) / static_cast<double>(n);

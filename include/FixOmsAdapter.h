@@ -132,9 +132,9 @@ private:
     std::atomic<bool> shutdown_requested_{false};
     std::thread       thread_;
     int               sockfd_{-1};
-    // FIX 4.2 seq nums are 1-2^32-1 per spec; uint32_t prevents signed overflow UB
+    // FIX 4.2 seq nums are unsigned 32-bit per spec
     uint32_t          seq_num_{1};              ///< Next outbound sequence number.
-    int               expected_inbound_seq_{1}; ///< Next expected inbound MsgSeqNum.
+    uint32_t          expected_inbound_seq_{1}; ///< Next expected inbound MsgSeqNum.
 
     mutable std::mutex pos_mutex_;
     double net_position_{0.0};
