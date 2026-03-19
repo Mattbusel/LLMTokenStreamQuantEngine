@@ -64,7 +64,7 @@ public:
              << safe_d(sig.volatility_adjustment) << ","
              << safe_d(sig.spread_modifier) << ","
              << safe_d(sig.confidence) << ","
-             << sig.latency_us << ","
+             << safe_d(sig.latency_us) << ","
              << sig.strategy_toggle << ","
              << safe_d(sig.strategy_weight) << "\n";
     }
@@ -119,7 +119,7 @@ public:
              << "\"volatility_adjustment\":"  << safe_d(sig.volatility_adjustment)     << ","
              << "\"spread_modifier\":"        << safe_d(sig.spread_modifier)           << ","
              << "\"confidence\":"             << safe_d(sig.confidence)                << ","
-             << "\"latency_us\":"             << sig.latency_us                        << ","
+             << "\"latency_us\":"             << safe_d(sig.latency_us)                << ","
              << "\"strategy_toggle\":"        << sig.strategy_toggle                   << ","
              << "\"strategy_weight\":"        << safe_d(sig.strategy_weight)
              << "}\n";
