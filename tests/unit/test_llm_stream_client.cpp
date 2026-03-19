@@ -140,3 +140,17 @@ TEST(LLMStreamClientTest, test_stream_client_token_callback_exception_does_not_c
     client.stop();
     SUCCEED();
 }
+
+// ---------------------------------------------------------------------------
+// Improvement 13: KeepAlive reconnect stub (config parsing only)
+// Full keep-alive reconnect tested in integration; this verifies config parsing only.
+// ---------------------------------------------------------------------------
+TEST(LLMStreamClientTest, KeepAliveReconnectStub) {
+    LLMStreamClient::Config cfg = refused_config();
+    cfg.use_keep_alive = true;  // verify the field is parsed without error
+    LLMStreamClient client(cfg);
+    EXPECT_FALSE(client.is_running());
+    // Construction with use_keep_alive=true must not throw.
+    SUCCEED();
+}
+

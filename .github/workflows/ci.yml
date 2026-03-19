@@ -1,5 +1,17 @@
 name: CI
 on: [push, pull_request]
+# NOTE (improvement 20): A Windows/MSVC job with /arch:AVX2 matrix should be added
+# once a Windows runner with vcpkg is configured. Example matrix entry:
+#   windows-avx2:
+#     runs-on: windows-latest
+#     strategy:
+#       matrix:
+#         simd: [default, avx2]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+#             ${{ matrix.simd == 'avx2' && '-DCMAKE_CXX_FLAGS="/arch:AVX2"' || '' }}
+#       - run: cmake --build build --config Release -j4
 jobs:
   check:
     runs-on: ubuntu-latest

@@ -252,6 +252,9 @@ FixOmsAdapter::FixFields FixOmsAdapter::parse_fix(const std::string& raw) {
             // Reject out-of-range FIX tags (valid range: 1–9999).
             if (tag >= 1 && tag <= 9999)
                 fields[tag] = raw.substr(eq + 1, soh - eq - 1);
+        } catch (const std::exception& ex) {
+            spdlog::debug("[fix_oms] failed to parse tag value '{}': {}",
+                          raw.substr(pos, eq - pos), ex.what());
         } catch (...) {}
 
         pos = soh + 1;
@@ -530,7 +533,16 @@ void FixOmsAdapter::reader_thread() {
             if (end_soh == std::string::npos) break;
 
             std::string msg = buf.substr(start, end_soh - start + 1);
-            handle_message(parse_fix(msg));
+            try {
+                handle_message(parse_fix(msg));
+            } catch (const std::exception& ex) {
+                spdlog::debug("[fix_oms] skipping malformed message (first 256 bytes): {}",
+                              msg.substr(0, 256));
+                spdlog::debug("[fix_oms] parse error: {}", ex.what());
+            } catch (...) {
+                spdlog::debug("[fix_oms] skipping malformed message (first 256 bytes): {}",
+                              msg.substr(0, 256));
+            }
             start = end_soh + 1;
         }
         // Keep any incomplete trailing fragment.

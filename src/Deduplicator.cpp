@@ -179,6 +179,7 @@ void RedisDeduplicator::redis_disconnect() {
 bool RedisDeduplicator::try_reconnect() {
     std::lock_guard<std::mutex> lk(reconnect_mutex_);
     if (redis_connected_) return true;
+    redis_reconnect_attempts_.fetch_add(1, std::memory_order_relaxed);
     return try_connect();
 }
 #endif

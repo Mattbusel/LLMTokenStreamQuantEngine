@@ -475,3 +475,15 @@ TEST(RestOmsAdapterParsingTest, test_rest_description_contains_path_and_interval
     EXPECT_NE(desc.find("250"), std::string::npos)
         << "description() must contain the poll interval in milliseconds";
 }
+
+// ---------------------------------------------------------------------------
+// Improvement 14: MockOmsAdapter rapid start/stop stress
+// ---------------------------------------------------------------------------
+TEST(MockOmsAdapterTest, MockOmsAdapterRapidCycle) {
+    llmquant::MockOmsAdapter adapter;
+    for (int i = 0; i < 50; ++i) {
+        adapter.start();
+        adapter.stop();
+    }
+    EXPECT_FALSE(adapter.is_running());
+}

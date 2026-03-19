@@ -187,3 +187,33 @@ TEST(DeduplicatorTest, test_deduplicator_check_with_custom_ttl) {
     std::this_thread::sleep_for(ms{10});
     EXPECT_EQ(dedup.check_with_ttl(key, ms{5000}), DedupResult::Novel);
 }
+
+TEST(DeduplicatorTest, ConcurrentEvictAndRegister) {
+    // Concurrent evict + check_and_register on the same key; no crash = pass.
+    auto backend = std::make_shared<InProcessDeduplicator>();
+    Deduplicator dedup(backend, ms{100});
+
+    // Register initial key.
+    dedup.check("concurrent_key");
+
+    std::atomic<bool> stop_flag{false};
+
+    std::thread evict_thread([&]() {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+        while (std::chrono::steady_clock::now() < deadline) {
+            dedup.evict("concurrent_key");
+        }
+        stop_flag = true;
+    });
+
+    std::thread check_thread([&]() {
+        while (!stop_flag.load()) {
+            dedup.check("concurrent_key");
+        }
+    });
+
+    evict_thread.join();
+    check_thread.join();
+
+    SUCCEED();  // No crash or sanitizer error = pass.
+}

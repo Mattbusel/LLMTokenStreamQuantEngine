@@ -2,6 +2,7 @@
 #include "MetricsLogger.h"
 #include <cmath>
 #include <limits>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 // Helper: saturating increment for uint64_t atomics.
@@ -42,37 +43,39 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        if (!check_magnitude(signal)) {
+        if (!config_.disable_magnitude_gate && !check_magnitude(signal)) {
             sat_increment(stats_.signals_blocked_magnitude);
             reject_reason = "magnitude_exceeded";
-        } else if (!check_confidence(signal)) {
+        } else if (!config_.disable_confidence_gate && !check_confidence(signal)) {
             sat_increment(stats_.signals_blocked_confidence);
             reject_reason = "confidence_below_minimum";
-        } else if (!check_rate_limit()) {
+        } else if (!config_.disable_rate_gate && !check_rate_limit()) {
             sat_increment(stats_.signals_blocked_rate);
             reject_reason = "rate_limit_exceeded";
-        } else if (!check_drawdown(signal)) {
+        } else if (!config_.disable_drawdown_gate && !check_drawdown(signal)) {
             sat_increment(stats_.signals_blocked_drawdown);
             reject_reason = "drawdown_limit_exceeded";
         } else {
             double projected = position_.net_position + signal.delta_bias_shift;
             double limit     = position_.position_limit;
-            // Check position hard breach.
-            if (std::fabs(projected) > limit) {
-                hard_breach = true;
-                sat_increment(stats_.signals_blocked_position);
-                reject_reason = "position_limit";
-            }
-            // Check soft warn independently of hard breach.
-            if (!hard_breach && std::fabs(projected) > limit * config_.position_warn_fraction) {
-                soft_warn = true;
-            }
-            // Check PnL breach always — not nested inside else of position check.
-            if (position_.pnl < position_.pnl_limit) {
-                pnl_breach = true;
-                if (!hard_breach) {
-                    sat_increment(stats_.signals_blocked_pnl);
-                    reject_reason = "pnl_limit";
+            if (!config_.disable_position_gate) {
+                // Check position hard breach.
+                if (std::fabs(projected) > limit) {
+                    hard_breach = true;
+                    sat_increment(stats_.signals_blocked_position);
+                    reject_reason = "position_limit";
+                }
+                // Check soft warn independently of hard breach.
+                if (!hard_breach && std::fabs(projected) > limit * config_.position_warn_fraction) {
+                    soft_warn = true;
+                }
+                // Check PnL breach always — not nested inside else of position check.
+                if (position_.pnl < position_.pnl_limit) {
+                    pnl_breach = true;
+                    if (!hard_breach) {
+                        sat_increment(stats_.signals_blocked_pnl);
+                        reject_reason = "pnl_limit";
+                    }
                 }
             }
             if (reject_reason.empty()) {
@@ -94,15 +97,23 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
     // Fire OMS callbacks outside the lock.
     if ((hard_breach || pnl_breach) && oms_cb_copy) {
         const char* ev = hard_breach ? "position_limit_breached" : "pnl_limit_breached";
-        try { oms_cb_copy(ev, pos_copy, signal); } catch (...) {}
+        try { oms_cb_copy(ev, pos_copy, signal); }
+        catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
+        catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
     }
     if (soft_warn && oms_cb_copy) {
-        try { oms_cb_copy("position_limit_approaching", pos_copy, signal); } catch (...) {}
+        try { oms_cb_copy("position_limit_approaching", pos_copy, signal); }
+        catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
+        catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
     }
 
     // Fire alert / log callbacks outside the lock.
     if (!reject_reason.empty()) {
-        if (alert_cb_copy) { try { alert_cb_copy(reject_reason, signal); } catch (...) {} }
+        if (alert_cb_copy) {
+            try { alert_cb_copy(reject_reason, signal); }
+            catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
+            catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
+        }
         if (logger_copy)   { logger_copy->log_risk_rejection(reject_reason, signal.delta_bias_shift, signal.confidence); }
         return false;
     }
@@ -164,7 +175,9 @@ void RiskManager::set_metrics_logger(MetricsLogger* logger) {
 
 void RiskManager::fire_alert(const std::string& reason, const TradeSignal& signal) {
     if (alert_cb_) {
-        try { alert_cb_(reason, signal); } catch (...) {}
+        try { alert_cb_(reason, signal); }
+        catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
+        catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
     }
     if (logger_) {
         logger_->log_risk_rejection(reason, signal.delta_bias_shift, signal.confidence);

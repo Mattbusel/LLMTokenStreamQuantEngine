@@ -345,6 +345,10 @@ void RestOmsAdapter::poller_thread() {
 
         // Circuit-breaker: exponential backoff after 3 consecutive failures.
         if (success) {
+            if (consecutive_failures_ > 0) {
+                spdlog::info("RestOmsAdapter: connection recovered after {} failures, resetting poll interval",
+                             consecutive_failures_);
+            }
             consecutive_failures_ = 0;
             current_poll_interval_ = config_.poll_interval;  // reset on success
         } else {
@@ -353,7 +357,7 @@ void RestOmsAdapter::poller_thread() {
                 // Double the poll interval up to the cap of 30 seconds.
                 auto doubled = std::chrono::milliseconds{current_poll_interval_.count() * 2};
                 current_poll_interval_ = (doubled < kMaxPollInterval) ? doubled : kMaxPollInterval;
-                spdlog::warn("[rest_oms] {} consecutive failures; backing off to {}ms",
+                spdlog::warn("RestOmsAdapter: {} consecutive failures, backing off to {}ms poll interval",
                              consecutive_failures_, current_poll_interval_.count());
             }
         }

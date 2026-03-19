@@ -145,6 +145,16 @@ bool LLMStreamClient::open_socket() {
                            reinterpret_cast<const char*>(&tcp_flag), sizeof(tcp_flag)) != 0) {
                 spdlog::debug("[stream] TCP_NODELAY setsockopt failed (non-fatal)");
             }
+            // 30-second receive timeout to detect stalled streams.
+#ifdef _WIN32
+            DWORD rcvtimeo_ms = 30000;
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&rcvtimeo_ms), sizeof(rcvtimeo_ms));
+#else
+            struct timeval rcvtv{30, 0};
+            setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char*>(&rcvtv), sizeof(rcvtv));
+#endif
             break;
         }
 #ifdef _WIN32
@@ -369,11 +379,22 @@ void LLMStreamClient::reader_thread() {
                     (wsa_err == WSAENOTSOCK || wsa_err == WSAEBADF || wsa_err == WSAEINTR)) {
                     break;  // clean shutdown — not an error
                 }
+                if (wsa_err == WSAETIMEDOUT) {
+                    spdlog::warn("LLMStreamClient: no data in 30s — possible stalled stream, reconnecting");
+                    break;
+                }
 #else
                 if (shutdown_requested_.load()) {
                     int err = errno;
                     if (err == EBADF || err == EINTR) {
                         break;  // clean shutdown — not an error
+                    }
+                }
+                {
+                    int err = errno;
+                    if (err == EAGAIN || err == EWOULDBLOCK) {
+                        spdlog::warn("LLMStreamClient: no data in 30s — possible stalled stream, reconnecting");
+                        break;
                     }
                 }
 #endif

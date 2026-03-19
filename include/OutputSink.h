@@ -36,6 +36,24 @@ public:
      * The default implementation is a no-op; file sinks override this.
      */
     virtual void flush() {}
+
+    /**
+     * @brief Type-safe downcast; returns nullptr if this sink is not of type T.
+     *
+     * @tparam T Concrete sink type (e.g. MemoryOutputSink).
+     * @return Pointer to T, or nullptr.
+     */
+    template<typename T>
+    T* as() { return dynamic_cast<T*>(this); }
+
+    /**
+     * @brief Type-safe downcast (const overload); returns nullptr if not of type T.
+     *
+     * @tparam T Concrete sink type.
+     * @return Const pointer to T, or nullptr.
+     */
+    template<typename T>
+    const T* as() const { return dynamic_cast<const T*>(this); }
 };
 
 } // namespace llmquant

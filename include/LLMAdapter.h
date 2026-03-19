@@ -107,6 +107,22 @@ public:
     SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
 
     /**
+     * @brief Returns the number of token-to-weight mappings currently loaded.
+     *
+     * @return Total number of entries in the token dictionary (built-in + custom).
+     */
+    size_t get_dictionary_size() const;
+
+    /**
+     * @brief Removes all mappings from the dictionary.
+     *
+     * Note: this clears both built-in and custom mappings. After calling this
+     * method, all tokens will return the neutral default weight until new
+     * mappings are added via add_token_mapping() or load_sentiment_dictionary().
+     */
+    void clear_custom_mappings();
+
+    /**
      * @brief Return a snapshot of internal processing statistics.
      *
      * @return Struct with tokens_processed, cache_hits and cache_misses counts.

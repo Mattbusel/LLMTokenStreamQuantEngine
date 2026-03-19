@@ -161,6 +161,24 @@ public:
     Stats get_stats() const noexcept { return stats_; }
 
     /**
+     * @brief Returns the current accumulated directional bias (atomic read, instantaneous snapshot).
+     *
+     * @return Current accumulated bias value.
+     */
+    double get_accumulated_bias() const noexcept {
+        return accumulated_bias_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Returns the current accumulated volatility (atomic read, instantaneous snapshot).
+     *
+     * @return Current accumulated volatility value.
+     */
+    double get_accumulated_volatility() const noexcept {
+        return accumulated_volatility_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Register an OutputSink to receive all emitted signals.
      *
      * The sink is called synchronously inside emit_signal() after the
