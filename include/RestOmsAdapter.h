@@ -145,6 +145,9 @@ private:
     Config            config_;
     PositionCallback  callback_;
     std::atomic<bool> running_{false};
+    /// Set to true before close_socket() in stop() so the poller thread can
+    /// distinguish an intentional socket close from an unexpected recv() error.
+    std::atomic<bool> shutdown_requested_{false};
     std::thread       thread_;
     int               sockfd_{-1};
     bool              wsa_initialized_{false};  ///< True iff WSAStartup succeeded (Windows only).

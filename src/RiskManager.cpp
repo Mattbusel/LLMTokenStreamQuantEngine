@@ -1,7 +1,15 @@
 #include "RiskManager.h"
 #include "MetricsLogger.h"
 #include <cmath>
+#include <limits>
 #include <stdexcept>
+
+// Helper: saturating increment for uint64_t atomics.
+// Saturating increment — wraps at UINT64_MAX then holds
+static inline void sat_increment(std::atomic<uint64_t>& counter) {
+    if (counter.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+        counter.fetch_add(1, std::memory_order_relaxed);
+}
 
 namespace llmquant {
 
@@ -35,42 +43,42 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
         std::lock_guard<std::mutex> lock(mutex_);
 
         if (!check_magnitude(signal)) {
-            stats_.signals_blocked_magnitude++;
+            sat_increment(stats_.signals_blocked_magnitude);
             reject_reason = "magnitude_exceeded";
         } else if (!check_confidence(signal)) {
-            stats_.signals_blocked_confidence++;
+            sat_increment(stats_.signals_blocked_confidence);
             reject_reason = "confidence_below_minimum";
         } else if (!check_rate_limit()) {
-            stats_.signals_blocked_rate++;
+            sat_increment(stats_.signals_blocked_rate);
             reject_reason = "rate_limit_exceeded";
         } else if (!check_drawdown(signal)) {
-            stats_.signals_blocked_drawdown++;
+            sat_increment(stats_.signals_blocked_drawdown);
             reject_reason = "drawdown_limit_exceeded";
         } else {
             double projected = position_.net_position + signal.delta_bias_shift;
             double limit     = position_.position_limit;
             // Check position hard breach.
-            if (std::abs(projected) > limit) {
+            if (std::fabs(projected) > limit) {
                 hard_breach = true;
-                stats_.signals_blocked_position++;
+                sat_increment(stats_.signals_blocked_position);
                 reject_reason = "position_limit";
             }
             // Check soft warn independently of hard breach.
-            if (!hard_breach && std::abs(projected) > limit * config_.position_warn_fraction) {
+            if (!hard_breach && std::fabs(projected) > limit * config_.position_warn_fraction) {
                 soft_warn = true;
             }
             // Check PnL breach always — not nested inside else of position check.
             if (position_.pnl < position_.pnl_limit) {
                 pnl_breach = true;
                 if (!hard_breach) {
-                    stats_.signals_blocked_pnl++;
+                    sat_increment(stats_.signals_blocked_pnl);
                     reject_reason = "pnl_limit";
                 }
             }
             if (reject_reason.empty()) {
                 update_drawdown(signal);
                 signals_in_window_++;
-                stats_.signals_passed++;
+                sat_increment(stats_.signals_passed);
             }
         }
 
@@ -116,9 +124,9 @@ void RiskManager::reset() {
 }
 
 bool RiskManager::check_magnitude(const TradeSignal& signal) {
-    return std::abs(signal.delta_bias_shift)      <= config_.max_bias_magnitude
-        && std::abs(signal.volatility_adjustment)  <= config_.max_volatility_magnitude
-        && std::abs(signal.spread_modifier)        <= config_.max_spread_magnitude;
+    return std::fabs(signal.delta_bias_shift)      <= config_.max_bias_magnitude
+        && std::fabs(signal.volatility_adjustment)  <= config_.max_volatility_magnitude
+        && std::fabs(signal.spread_modifier)        <= config_.max_spread_magnitude;
 }
 
 bool RiskManager::check_confidence(const TradeSignal& signal) {
@@ -142,7 +150,7 @@ bool RiskManager::check_drawdown(const TradeSignal& signal) {
         drawdown_window_start_ = now;
         cumulative_bias_       = 0.0;
     }
-    return std::abs(cumulative_bias_ + signal.delta_bias_shift) <= config_.max_drawdown;
+    return std::fabs(cumulative_bias_ + signal.delta_bias_shift) <= config_.max_drawdown;
 }
 
 void RiskManager::update_drawdown(const TradeSignal& signal) {

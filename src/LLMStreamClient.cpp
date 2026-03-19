@@ -17,6 +17,8 @@
   #include <netdb.h>
   #include <unistd.h>
   #include <arpa/inet.h>
+  #include <netinet/tcp.h>
+  #include <cerrno>
 #endif
 
 #include <nlohmann/json.hpp>
@@ -90,12 +92,16 @@ bool LLMStreamClient::connect() {
     if (running_.load()) return false;
     // The reader_thread opens (and re-opens) its own socket per request,
     // so we just start the thread here.
+    shutdown_requested_ = false;
     running_ = true;
     thread_ = std::thread(&LLMStreamClient::reader_thread, this);
     return true;
 }
 
 void LLMStreamClient::stop() {
+    // Closing the socket from another thread is the only portable way to unblock recv();
+    // EBADF/WSAENOTSOCK after close_socket() is expected and not an error.
+    shutdown_requested_ = true;
     running_ = false;
     // close_socket() must come before thread_.join(): the background thread may
     // be blocked in recv() and will not observe running_==false until the socket
@@ -133,6 +139,12 @@ bool LLMStreamClient::open_socket() {
         if (fd < 0) continue;
         if (::connect(fd, rp->ai_addr, static_cast<int>(rp->ai_addrlen)) == 0) {
             sockfd_ = fd;
+            // Disable Nagle's algorithm for low-latency streaming.
+            int tcp_flag = 1;
+            if (setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY,
+                           reinterpret_cast<const char*>(&tcp_flag), sizeof(tcp_flag)) != 0) {
+                spdlog::debug("[stream] TCP_NODELAY setsockopt failed (non-fatal)");
+            }
             break;
         }
 #ifdef _WIN32
@@ -352,6 +364,18 @@ void LLMStreamClient::reader_thread() {
                 // from recv().  stop() may read last_socket_error_ after join.
                 int wsa_err = WSAGetLastError();
                 if (wsa_err != 0) last_socket_error_.store(wsa_err);
+                // WSAENOTSOCK/WSAEBADF after close_socket() from stop() is expected.
+                if (shutdown_requested_.load() &&
+                    (wsa_err == WSAENOTSOCK || wsa_err == WSAEBADF || wsa_err == WSAEINTR)) {
+                    break;  // clean shutdown — not an error
+                }
+#else
+                if (shutdown_requested_.load()) {
+                    int err = errno;
+                    if (err == EBADF || err == EINTR) {
+                        break;  // clean shutdown — not an error
+                    }
+                }
 #endif
                 break;
             }

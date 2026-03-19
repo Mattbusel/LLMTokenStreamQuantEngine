@@ -1,6 +1,7 @@
 #include "TradeSignalEngine.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 
@@ -65,7 +66,7 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         signal.volatility_adjustment = current_vol;
         
         // Strategy selection logic
-        if (std::abs(current_bias) > 0.5) {
+        if (std::fabs(current_bias) > 0.5) {
             signal.strategy_toggle = (current_bias > 0) ? 1 : -1;
         }
         
@@ -78,7 +79,7 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         
         // Reset accumulators after significant signal using CAS loops so the
         // halving is a linearisable RMW even if another thread is accumulating.
-        if (std::abs(current_bias) > 0.8 || std::abs(current_vol) > 0.8) {
+        if (std::fabs(current_bias) > 0.8 || std::fabs(current_vol) > 0.8) {
             double b = accumulated_bias_.load(std::memory_order_relaxed);
             {
                 int retries = 0;
@@ -129,7 +130,7 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.timestamp_ns = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()).count());
-    signal.spread_modifier = (std::abs(signal.delta_bias_shift) > 0.5)
+    signal.spread_modifier = (std::fabs(signal.delta_bias_shift) > 0.5)
                                  ? -0.1 * signal.delta_bias_shift
                                  : 0.0;
     // Do NOT overwrite signal.confidence here — it must be set by the caller
@@ -141,7 +142,9 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
         try { callback_(signal); } catch (...) {}
     } else if (output_sinks_.empty()) {
         // Signal has no callback and no sinks — it is fully suppressed.
-        stats_.signals_suppressed++;
+        // Saturating increment — wraps at UINT64_MAX then holds
+        if (stats_.signals_suppressed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+            stats_.signals_suppressed.fetch_add(1, std::memory_order_relaxed);
     }
     // signals_generated counts every emission regardless of routing;
     // signals_suppressed counts only those with no destination at all.
@@ -153,11 +156,13 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
 
     // Update stats unconditionally — count every emitted signal regardless of
     // whether a callback or only sinks are registered.
-    stats_.signals_generated++;
+    // Saturating increment — wraps at UINT64_MAX then holds
+    if (stats_.signals_generated.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+        stats_.signals_generated.fetch_add(1, std::memory_order_relaxed);
     uint64_t n = stats_.signals_generated.load();
     double old_avg = stats_.avg_signal_strength.load();
     // Welford running mean: mean_n = mean_{n-1} + (x - mean_{n-1}) / n
-    stats_.avg_signal_strength = old_avg + (std::abs(signal.delta_bias_shift) - old_avg) / static_cast<double>(n);
+    stats_.avg_signal_strength = old_avg + (std::fabs(signal.delta_bias_shift) - old_avg) / static_cast<double>(n);
     last_signal_time_ = now;
 }
 

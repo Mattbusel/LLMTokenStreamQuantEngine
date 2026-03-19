@@ -1,5 +1,6 @@
 #include "LatencyController.h"
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include <thread>
 
@@ -28,9 +29,11 @@ void LatencyController::end_measurement() {
 void LatencyController::record_latency(std::chrono::microseconds latency) {
     uint64_t latency_us = latency.count();
     
-    // Update atomic stats
-    total_measurements_++;
-    total_latency_us_ += latency_us;
+    // Update atomic stats — saturating increment: wraps at UINT64_MAX then holds
+    if (total_measurements_.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+        total_measurements_.fetch_add(1, std::memory_order_relaxed);
+    if (total_latency_us_.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - latency_us)
+        total_latency_us_.fetch_add(latency_us, std::memory_order_relaxed);
     
     uint64_t current_min = min_latency_us_.load();
     {
