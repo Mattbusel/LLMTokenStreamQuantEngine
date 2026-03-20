@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 #include <yaml-cpp/yaml.h>
 #include <sstream>
 
@@ -269,6 +270,19 @@ public:
      * @return Number of environment variables successfully applied.
      */
     int load_from_env();
+
+    /**
+     * @brief Validate the current configuration and return a list of error messages.
+     *
+     * Runs all range checks without modifying the configuration or applying defaults.
+     * An empty return value means the configuration is valid.  Useful for pre-flight
+     * checks and health-check endpoints.
+     *
+     * Thread-safe (acquires config_mutex_).
+     *
+     * @return Vector of human-readable error messages; empty if the config is valid.
+     */
+    std::vector<std::string> validate() const;
 
 private:
     SystemConfig config_;

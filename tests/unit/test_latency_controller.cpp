@@ -685,5 +685,129 @@ TEST(LatencyControllerTest, test_record_batch_equivalent_to_sequential_record) {
     EXPECT_EQ(s1.avg_latency,  s2.avg_latency);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 31: get_percentile(double p)
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_get_percentile_zero_before_measurements) {
+    LatencyController lc(make_config());
+    EXPECT_EQ(lc.get_percentile(0.5).count(), 0)
+        << "get_percentile must return 0 when no samples recorded";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_p50_matches_get_stats_p50) {
+    LatencyController lc(make_config(true, 200));
+    for (int i = 1; i <= 100; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    auto stats_p50 = lc.get_stats().p50_latency;
+    auto perc_p50  = lc.get_percentile(0.5);
+    EXPECT_EQ(stats_p50, perc_p50)
+        << "get_percentile(0.5) must match get_stats().p50_latency";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_p99_matches_get_stats_p99) {
+    LatencyController lc(make_config(true, 200));
+    for (int i = 1; i <= 100; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    auto stats_p99 = lc.get_stats().p99_latency;
+    auto perc_p99  = lc.get_percentile(0.99);
+    EXPECT_EQ(stats_p99, perc_p99)
+        << "get_percentile(0.99) must match get_stats().p99_latency";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_clamped_above_one) {
+    LatencyController lc(make_config(true, 50));
+    for (int i = 1; i <= 50; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    auto p1   = lc.get_percentile(1.0);
+    auto p1p5 = lc.get_percentile(1.5);  // must clamp to 1.0
+    EXPECT_EQ(p1, p1p5)
+        << "get_percentile with p > 1.0 must clamp to p=1.0";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_clamped_below_zero) {
+    LatencyController lc(make_config(true, 50));
+    for (int i = 1; i <= 50; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    auto p0    = lc.get_percentile(0.0);
+    auto pneg  = lc.get_percentile(-0.5);  // must clamp to 0.0
+    EXPECT_EQ(p0, pneg)
+        << "get_percentile with p < 0.0 must clamp to p=0.0";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_returns_zero_when_profiling_disabled) {
+    LatencyController lc(make_config(false /*profiling off*/));
+    lc.record_latency(std::chrono::microseconds{100});
+    EXPECT_EQ(lc.get_percentile(0.5).count(), 0)
+        << "get_percentile must return 0 when profiling is disabled";
+}
+
+TEST(LatencyControllerTest, test_get_percentile_ordering_p25_le_p50_le_p75) {
+    LatencyController lc(make_config(true, 200));
+    for (int i = 1; i <= 100; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    auto p25 = lc.get_percentile(0.25);
+    auto p50 = lc.get_percentile(0.50);
+    auto p75 = lc.get_percentile(0.75);
+
+    EXPECT_LE(p25.count(), p50.count()) << "p25 must be <= p50";
+    EXPECT_LE(p50.count(), p75.count()) << "p50 must be <= p75";
+}
+
+// ---------------------------------------------------------------------------
+// update_config
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_update_config_changes_target_latency) {
+    LatencyController lc(make_config(true, 100, 5));
+    LatencyController::Config cfg;
+    cfg.target_latency   = std::chrono::microseconds{50};
+    cfg.sample_window    = 100;
+    cfg.enable_profiling = true;
+    lc.update_config(cfg);
+    EXPECT_EQ(lc.get_target_latency().count(), 50)
+        << "update_config must reflect new target_latency";
+}
+
+TEST(LatencyControllerTest, test_update_config_resize_window_resets_samples) {
+    LatencyController lc(make_config(true, 100));
+    for (int i = 0; i < 50; ++i)
+        lc.record_latency(std::chrono::microseconds{i + 1});
+
+    EXPECT_GT(lc.get_window_fill_ratio(), 0.0) << "should have samples before resize";
+
+    LatencyController::Config cfg;
+    cfg.target_latency   = std::chrono::microseconds{10};
+    cfg.sample_window    = 200;   // different from 100
+    cfg.enable_profiling = true;
+    lc.update_config(cfg);
+
+    EXPECT_EQ(lc.get_window_fill_ratio(), 0.0)
+        << "changing sample_window must discard existing samples";
+}
+
+TEST(LatencyControllerTest, test_update_config_same_window_preserves_samples) {
+    LatencyController lc(make_config(true, 100));
+    for (int i = 0; i < 50; ++i)
+        lc.record_latency(std::chrono::microseconds{i + 1});
+
+    double fill_before = lc.get_window_fill_ratio();
+
+    LatencyController::Config cfg;
+    cfg.target_latency   = std::chrono::microseconds{20};
+    cfg.sample_window    = 100;   // same size — samples preserved
+    cfg.enable_profiling = true;
+    lc.update_config(cfg);
+
+    EXPECT_DOUBLE_EQ(lc.get_window_fill_ratio(), fill_before)
+        << "same sample_window must not discard existing samples";
+    EXPECT_EQ(lc.get_target_latency().count(), 20);
+}
+
 } // namespace
 } // namespace llmquant

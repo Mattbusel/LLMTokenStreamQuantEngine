@@ -212,6 +212,17 @@ public:
     void update_config(const Config& config);
 
     /**
+     * @brief Update only the signal cooldown period without replacing the whole config.
+     *
+     * Equivalent to reading get_config(), setting signal_cooldown, and calling
+     * update_config(), but avoids re-validating unrelated fields.
+     * Must be called from the same thread as process_semantic_weight().
+     *
+     * @param cooldown New minimum time between consecutive signal emissions.
+     */
+    void set_signal_cooldown(std::chrono::microseconds cooldown);
+
+    /**
      * @brief Return a copy of the current engine configuration.
      *
      * @return Copy of the active Config struct.

@@ -189,6 +189,18 @@ void LatencyController::reset_stats() {
     sample_count_ = 0;
 }
 
+void LatencyController::update_config(const Config& config) {
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    bool window_changed = (config.sample_window != config_.sample_window);
+    config_ = config;
+    if (window_changed) {
+        latency_samples_.assign(config_.sample_window, std::chrono::microseconds{0});
+        percentile_scratch_.reserve(config_.sample_window);
+        sample_head_  = 0;
+        sample_count_ = 0;
+    }
+}
+
 void LatencyController::record_batch(const std::vector<std::chrono::microseconds>& latencies) {
     for (const auto& lat : latencies) {
         record_latency(lat);
@@ -206,6 +218,32 @@ void LatencyController::profile_signal_generation() {
 
 void LatencyController::profile_queue_lag() {
     // Hook for queue lag profiling
+}
+
+std::chrono::microseconds LatencyController::get_percentile(double p) const {
+    if (!config_.enable_profiling) return std::chrono::microseconds{0};
+    if (p < 0.0) p = 0.0;
+    if (p > 1.0) p = 1.0;
+
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    if (sample_count_ == 0) return std::chrono::microseconds{0};
+
+    percentile_scratch_.resize(sample_count_);
+    for (size_t k = 0; k < sample_count_; ++k) {
+        size_t idx = (sample_head_ + config_.sample_window - sample_count_ + k)
+                     % config_.sample_window;
+        percentile_scratch_[k] = latency_samples_[idx];
+    }
+
+    size_t N    = sample_count_;
+    size_t rank = static_cast<size_t>(std::ceil(static_cast<double>(N) * p));
+    if (rank > 0) rank--;
+    rank = std::min(rank, N - 1);
+
+    std::nth_element(percentile_scratch_.begin(),
+                     percentile_scratch_.begin() + static_cast<std::ptrdiff_t>(rank),
+                     percentile_scratch_.end());
+    return percentile_scratch_[rank];
 }
 
 double LatencyController::get_slo_breach_rate() const noexcept {

@@ -620,5 +620,84 @@ TEST(LLMAdapterTest, test_llm_adapter_batch_add_empty_batch) {
     EXPECT_EQ(adapter.get_dictionary_size(), before);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 31: get_sentiment_distribution()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_sentiment_distribution_default_dict) {
+    LLMAdapter adapter;
+    auto dist = adapter.get_sentiment_distribution();
+
+    // Default dict has negative tokens (crash, panic, etc.) and positive tokens.
+    EXPECT_GT(dist.negative_count, 0u)
+        << "Default dictionary must contain negative-sentiment tokens";
+    EXPECT_GT(dist.positive_count, 0u)
+        << "Default dictionary must contain positive-sentiment tokens";
+    EXPECT_EQ(dist.negative_count + dist.neutral_count + dist.positive_count,
+              adapter.get_dictionary_size())
+        << "Sum of bucket counts must equal dictionary size";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_sentiment_distribution_confidence_in_range) {
+    LLMAdapter adapter;
+    auto dist = adapter.get_sentiment_distribution();
+    EXPECT_GE(dist.mean_confidence, 0.0);
+    EXPECT_LE(dist.mean_confidence, 1.0)
+        << "Mean confidence must be in [0, 1]";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_sentiment_distribution_empty_dict) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();  // removes all tokens
+    auto dist = adapter.get_sentiment_distribution();
+    EXPECT_EQ(dist.negative_count, 0u);
+    EXPECT_EQ(dist.neutral_count,  0u);
+    EXPECT_EQ(dist.positive_count, 0u);
+    EXPECT_DOUBLE_EQ(dist.mean_sentiment,  0.0);
+    EXPECT_DOUBLE_EQ(dist.mean_confidence, 0.0);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_sentiment_distribution_single_negative_token) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("collapse", {-0.9, 0.9, 0.7, -0.9});
+    auto dist = adapter.get_sentiment_distribution();
+    EXPECT_EQ(dist.negative_count, 1u);
+    EXPECT_EQ(dist.neutral_count,  0u);
+    EXPECT_EQ(dist.positive_count, 0u);
+    EXPECT_NEAR(dist.mean_sentiment,  -0.9, 1e-9);
+    EXPECT_NEAR(dist.mean_confidence,  0.9, 1e-9);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_sentiment_distribution_neutral_boundary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    // Exactly at boundary -0.1 and +0.1 should be neutral.
+    adapter.add_token_mapping("tok_neg_boundary", {-0.1, 0.5, 0.0, 0.0});
+    adapter.add_token_mapping("tok_pos_boundary", { 0.1, 0.5, 0.0, 0.0});
+    auto dist = adapter.get_sentiment_distribution();
+    EXPECT_EQ(dist.neutral_count,  2u)
+        << "Tokens with |sentiment| == 0.1 should be in the neutral bucket";
+    EXPECT_EQ(dist.negative_count, 0u);
+    EXPECT_EQ(dist.positive_count, 0u);
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 31: get_all_token_keys()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_get_all_token_keys_count_matches_dict_size) {
+    LLMAdapter adapter;
+    auto keys = adapter.get_all_token_keys();
+    EXPECT_EQ(keys.size(), adapter.get_dictionary_size())
+        << "get_all_token_keys must return exactly dictionary_size entries";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_get_all_token_keys_empty_after_clear) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_TRUE(adapter.get_all_token_keys().empty());
+}
+
 } // namespace
 } // namespace llmquant

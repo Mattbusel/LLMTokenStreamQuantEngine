@@ -150,6 +150,10 @@ void TradeSignalEngine::update_config(const Config& config) {
     config_ = config;
 }
 
+void TradeSignalEngine::set_signal_cooldown(std::chrono::microseconds cooldown) {
+    config_.signal_cooldown = cooldown;
+}
+
 void TradeSignalEngine::set_signal_callback(TradeSignalCallback callback) {
     callback_ = std::move(callback);
 }

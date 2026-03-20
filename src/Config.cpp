@@ -451,6 +451,66 @@ int Config::load_from_env() {
     return applied;
 }
 
+std::vector<std::string> Config::validate() const {
+    std::vector<std::string> errors;
+    SystemConfig snap;
+    {
+        std::lock_guard<std::mutex> lk(config_mutex_);
+        snap = config_;
+    }
+    const auto& ts  = snap.token_stream;
+    const auto& tr  = snap.trading;
+    const auto& lat = snap.latency;
+    const auto& log = snap.logging;
+    const auto& rt  = snap.risk_thresholds;
+    const auto& pr  = snap.pressure;
+    const auto& m   = snap.metrics;
+
+    if (ts.token_interval_ms <= 0 || ts.token_interval_ms > 60000)
+        errors.emplace_back("token_interval_ms out of range [1, 60000]");
+    if (ts.buffer_size == 0)
+        errors.emplace_back("buffer_size must be >= 1");
+    if (!std::isfinite(tr.bias_sensitivity) || tr.bias_sensitivity <= 0.0 || tr.bias_sensitivity > 10.0)
+        errors.emplace_back("bias_sensitivity must be in (0, 10]");
+    if (!std::isfinite(tr.volatility_sensitivity) || tr.volatility_sensitivity <= 0.0 || tr.volatility_sensitivity > 10.0)
+        errors.emplace_back("volatility_sensitivity must be in (0, 10]");
+    if (!std::isfinite(tr.signal_decay_rate) || tr.signal_decay_rate <= 0.0 || tr.signal_decay_rate > 1.0)
+        errors.emplace_back("signal_decay_rate must be in (0, 1]");
+    if (tr.signal_cooldown_us < 0)
+        errors.emplace_back("signal_cooldown_us must be >= 0");
+    if (!std::isfinite(tr.max_signal_age_us) || tr.max_signal_age_us < 0.0)
+        errors.emplace_back("trading.max_signal_age_us must be >= 0");
+    if (!std::isfinite(tr.min_bias_threshold) || tr.min_bias_threshold < 0.0)
+        errors.emplace_back("trading.min_bias_threshold must be >= 0");
+    if (!std::isfinite(tr.max_accumulated_bias) || tr.max_accumulated_bias < 0.0)
+        errors.emplace_back("trading.max_accumulated_bias must be >= 0");
+    if (lat.target_latency_us <= 0)
+        errors.emplace_back("target_latency_us must be > 0");
+    if (lat.sample_window == 0)
+        errors.emplace_back("sample_window must be >= 1");
+    if (log.flush_interval_ms <= 0)
+        errors.emplace_back("flush_interval_ms must be > 0");
+    if (m.stats_port == 0)
+        errors.emplace_back("metrics.stats_port must be > 0");
+    if (!std::isfinite(pr.max_ingestion_rate_tps) || pr.max_ingestion_rate_tps <= 0.0)
+        errors.emplace_back("pressure.max_ingestion_rate_tps must be > 0");
+    if (!std::isfinite(pr.backoff_scale_factor) || pr.backoff_scale_factor <= 0.0)
+        errors.emplace_back("pressure.backoff_scale_factor must be > 0");
+    if (!std::isfinite(rt.max_bias_magnitude) || rt.max_bias_magnitude < 0.0)
+        errors.emplace_back("risk_thresholds.max_bias_magnitude must be >= 0");
+    if (!std::isfinite(rt.min_confidence) || rt.min_confidence < 0.0 || rt.min_confidence > 1.0)
+        errors.emplace_back("risk_thresholds.min_confidence must be in [0, 1]");
+    if (rt.max_signals_per_second == 0)
+        errors.emplace_back("risk_thresholds.max_signals_per_second must be > 0");
+    if (!std::isfinite(rt.max_drawdown) || rt.max_drawdown < 0.0)
+        errors.emplace_back("risk_thresholds.max_drawdown must be >= 0");
+    if (rt.drawdown_window_s <= 0)
+        errors.emplace_back("risk_thresholds.drawdown_window_s must be > 0");
+    if (!std::isfinite(rt.position_warn_fraction) || rt.position_warn_fraction < 0.0 || rt.position_warn_fraction > 1.0)
+        errors.emplace_back("risk_thresholds.position_warn_fraction must be in [0, 1]");
+    return errors;
+}
+
 std::string Config::to_summary_string() const {
     std::lock_guard<std::mutex> lk(config_mutex_);
     std::ostringstream ss;

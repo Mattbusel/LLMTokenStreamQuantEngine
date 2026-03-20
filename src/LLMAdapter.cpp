@@ -228,6 +228,16 @@ size_t LLMAdapter::get_dictionary_size() const {
     return token_weights_.size();
 }
 
+std::vector<std::string> LLMAdapter::get_all_token_keys() const {
+    std::vector<std::string> keys;
+    keys.reserve(token_weights_.size());
+    for (const auto& [tok, wt] : token_weights_) {
+        (void)wt;
+        keys.push_back(tok);
+    }
+    return keys;
+}
+
 void LLMAdapter::clear_custom_mappings() {
     // Clears ALL mappings (both built-in and custom) since there is no distinction
     // between them in the map. Call initialize_default_mappings() after if needed.
@@ -265,6 +275,30 @@ size_t LLMAdapter::batch_add_token_mappings(
         token_weights_[key] = wt;
     }
     return inserted;
+}
+
+LLMAdapter::SentimentDistribution LLMAdapter::get_sentiment_distribution() const {
+    SentimentDistribution dist;
+    if (token_weights_.empty()) return dist;
+
+    double sum_sentiment  = 0.0;
+    double sum_confidence = 0.0;
+
+    for (const auto& [token, weight] : token_weights_) {
+        sum_sentiment  += weight.sentiment_score;
+        sum_confidence += weight.confidence_score;
+        if (weight.sentiment_score < -0.1)
+            ++dist.negative_count;
+        else if (weight.sentiment_score > 0.1)
+            ++dist.positive_count;
+        else
+            ++dist.neutral_count;
+    }
+
+    double n = static_cast<double>(token_weights_.size());
+    dist.mean_sentiment  = sum_sentiment  / n;
+    dist.mean_confidence = sum_confidence / n;
+    return dist;
 }
 
 std::vector<std::pair<std::string, double>>

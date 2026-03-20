@@ -119,6 +119,17 @@ public:
     }
 
     /**
+     * @brief Hot-reload the controller configuration at runtime.
+     *
+     * Updates target_latency immediately.  If sample_window changes the ring
+     * buffer is resized and all existing samples are discarded.
+     * Thread-safe: acquires samples_mutex_.
+     *
+     * @param config New configuration to apply.
+     */
+    void update_config(const Config& config);
+
+    /**
      * @brief Profile hook: marks the beginning of token-processing for the next
      *        start_measurement() call. No-op if profiling is disabled.
      */
@@ -233,6 +244,17 @@ public:
      * @return SLO breach rate in [0.0, 1.0].
      */
     double get_slo_breach_rate() const noexcept;
+
+    /**
+     * @brief Compute an arbitrary percentile of the current sample window on demand.
+     *
+     * Uses the same nearest-rank formula as get_stats().  If profiling is
+     * disabled or the sample window is empty, returns zero.
+     *
+     * @param p Percentile fraction in [0.0, 1.0]; clamped if out of range.
+     * @return The p-th percentile latency from the current sample window.
+     */
+    std::chrono::microseconds get_percentile(double p) const;
 
     /**
      * @brief Return the current exponential-backoff multiplier for source polling.

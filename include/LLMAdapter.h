@@ -115,6 +115,16 @@ public:
     size_t get_dictionary_size() const;
 
     /**
+     * @brief Return all token keys currently in the dictionary.
+     *
+     * Order is unspecified (depends on the underlying hash map). Useful for
+     * serialisation, inspection, and testing dictionary state.
+     *
+     * @return Vector of normalised token strings.
+     */
+    std::vector<std::string> get_all_token_keys() const;
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this
@@ -182,6 +192,28 @@ public:
      *         (weight is left unchanged on false return).
      */
     bool get_token_mapping(const std::string& token, SemanticWeight& weight) const;
+
+    /**
+     * @brief Distribution of tokens across sentiment polarity buckets.
+     */
+    struct SentimentDistribution {
+        size_t negative_count{0};  ///< Tokens with sentiment_score < -0.1.
+        size_t neutral_count{0};   ///< Tokens with |sentiment_score| <= 0.1.
+        size_t positive_count{0};  ///< Tokens with sentiment_score > 0.1.
+        double mean_sentiment{0.0};   ///< Mean sentiment_score across all tokens.
+        double mean_confidence{0.0};  ///< Mean confidence_score across all tokens.
+    };
+
+    /**
+     * @brief Compute the sentiment distribution across all loaded dictionary tokens.
+     *
+     * Iterates the token dictionary and categorises each entry by sentiment_score
+     * into negative (<-0.1), neutral ([-0.1, 0.1]), or positive (>0.1) buckets.
+     * Also computes the mean sentiment and confidence across all tokens.
+     *
+     * @return SentimentDistribution with bucket counts and aggregate stats.
+     */
+    SentimentDistribution get_sentiment_distribution() const;
 
     /**
      * @brief Return the top N tokens sorted by absolute sentiment score.
