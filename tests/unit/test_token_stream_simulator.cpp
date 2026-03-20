@@ -261,5 +261,32 @@ TEST(TokenStreamSimulatorTest, test_set_token_interval_updates_config) {
     EXPECT_TRUE(true) << "set_token_interval must not throw";
 }
 
+TEST(TokenStreamSimulatorTest, test_get_drop_rate_zero_with_no_drops) {
+    TokenStreamSimulator sim(make_config(50000));
+    // No tokens emitted yet — drop rate should be 0.0
+    EXPECT_DOUBLE_EQ(sim.get_drop_rate(), 0.0)
+        << "get_drop_rate must be 0.0 when nothing has been attempted";
+}
+
+TEST(TokenStreamSimulatorTest, test_format_stats_contains_emitted_and_drops) {
+    TokenStreamSimulator sim(make_config(50000));
+    std::string stats = sim.format_stats();
+    EXPECT_NE(stats.find("emitted="), std::string::npos)
+        << "format_stats must contain emitted= field";
+    EXPECT_NE(stats.find("drops="), std::string::npos)
+        << "format_stats must contain drops= field";
+    EXPECT_NE(stats.find("drop_rate="), std::string::npos)
+        << "format_stats must contain drop_rate= field";
+}
+
+TEST(TokenStreamSimulatorTest, test_format_stats_reports_zero_counts_initially) {
+    TokenStreamSimulator sim(make_config(50000));
+    std::string stats = sim.format_stats();
+    EXPECT_NE(stats.find("emitted=0"), std::string::npos)
+        << "format_stats should show emitted=0 before any tokens are emitted";
+    EXPECT_NE(stats.find("drops=0"), std::string::npos)
+        << "format_stats should show drops=0 before any drops occur";
+}
+
 } // namespace
 } // namespace llmquant
