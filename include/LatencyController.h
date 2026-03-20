@@ -387,6 +387,18 @@ public:
      */
     size_t get_sample_count() const;
 
+    /**
+     * @brief Return the sample standard deviation of the current window in microseconds.
+     *
+     * Computed as sqrt(get_sample_variance_us()).  Returns 0.0 if fewer than
+     * two samples are in the window or if profiling is disabled.
+     *
+     * Thread-safe (delegates to get_sample_variance_us()).
+     *
+     * @return Standard deviation in µs.
+     */
+    double get_stddev_us() const;
+
 private:
     Config config_;
     std::chrono::high_resolution_clock::time_point construction_time_{
