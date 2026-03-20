@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
 
     // Start config hot-reload watcher now that risk_mgr exists so the callback
     // can update risk thresholds live without requiring a restart.
-    if (!config.start_watching(config_file, [&risk_mgr](const llmquant::SystemConfig& updated) {
+    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine](const llmquant::SystemConfig& updated) {
         const auto& u = updated.risk_thresholds;
         llmquant::RiskManager::Config new_risk_cfg;
         new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;

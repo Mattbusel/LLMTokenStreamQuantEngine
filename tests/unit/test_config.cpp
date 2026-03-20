@@ -273,6 +273,34 @@ TEST(ConfigTest, test_config_pressure_zero_max_ingestion_rate_returns_false) {
     EXPECT_GT(cfg.get_config().pressure.max_ingestion_rate_tps, 0.0);
 }
 
+TEST(ConfigTest, test_config_risk_thresholds_zero_drawdown_window_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n  drawdown_window_s: 0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_GT(cfg.get_config().risk_thresholds.drawdown_window_s, 0);
+}
+
+TEST(ConfigTest, test_config_risk_thresholds_out_of_range_position_warn_fraction_returns_false) {
+    // position_warn_fraction must be in [0, 1]
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n  position_warn_fraction: 1.5\n");
+    EXPECT_FALSE(ok);
+    // Defaults must be restored
+    double def = cfg.get_config().risk_thresholds.position_warn_fraction;
+    EXPECT_GE(def, 0.0);
+    EXPECT_LE(def, 1.0);
+}
+
+TEST(ConfigTest, test_config_risk_thresholds_negative_max_bias_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n  max_bias_magnitude: -1.0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_GE(cfg.get_config().risk_thresholds.max_bias_magnitude, 0.0);
+}
+
 // ---------------------------------------------------------------------------
 // Range validation tests (improvement 3)
 // ---------------------------------------------------------------------------

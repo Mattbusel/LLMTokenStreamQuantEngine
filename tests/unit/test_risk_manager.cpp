@@ -362,3 +362,23 @@ TEST(RiskManagerTest, test_risk_manager_oms_callback_receives_correct_event_stri
         EXPECT_EQ(ev, "pnl_limit_breached");
     }
 }
+
+// ============================================================
+// Test 17: update_config() changes thresholds at runtime.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_update_config_tightens_and_relaxes_limits) {
+    RiskManager rm(default_config());
+    // Signal within default limits — passes.
+    EXPECT_TRUE(rm.evaluate(make_signal(0.9, 0.1, 0.05, 0.8)));
+
+    // Tighten bias limit to 0.5 — same signal should now be blocked.
+    RiskManager::Config tight = default_config();
+    tight.max_bias_magnitude = 0.5;
+    rm.update_config(tight);
+    EXPECT_FALSE(rm.evaluate(make_signal(0.9, 0.1, 0.05, 0.8)));
+    EXPECT_GE(rm.get_stats().signals_blocked_magnitude.load(), 1u);
+
+    // Relax back to original limits — signal should pass again.
+    rm.update_config(default_config());
+    EXPECT_TRUE(rm.evaluate(make_signal(0.9, 0.1, 0.05, 0.8)));
+}

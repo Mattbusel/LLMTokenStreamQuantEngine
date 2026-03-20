@@ -152,6 +152,17 @@ public:
     void set_backtest_mode(bool enabled);
 
     /**
+     * @brief Replace the engine configuration at runtime (e.g. on hot-reload).
+     *
+     * Sensitivity changes take effect on the next call to process_semantic_weight().
+     * Must be called from the same thread as process_semantic_weight().
+     *
+     * @param config New configuration; all fields are replaced atomically from
+     *               the caller's perspective (single-threaded use only).
+     */
+    void update_config(const Config& config);
+
+    /**
      * @brief Return a copy of the current signal statistics.
      *
      * Thread-safe atomic snapshot.

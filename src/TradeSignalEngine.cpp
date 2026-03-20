@@ -105,6 +105,16 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     }
 }
 
+void TradeSignalEngine::update_config(const Config& config) {
+    if (config.bias_sensitivity <= 0.0)
+        throw std::invalid_argument("TradeSignalEngine: bias_sensitivity must be > 0");
+    if (config.volatility_sensitivity <= 0.0)
+        throw std::invalid_argument("TradeSignalEngine: volatility_sensitivity must be > 0");
+    if (config.signal_decay_rate <= 0.0 || config.signal_decay_rate > 1.0)
+        throw std::invalid_argument("TradeSignalEngine: signal_decay_rate must be in (0, 1]");
+    config_ = config;
+}
+
 void TradeSignalEngine::set_signal_callback(TradeSignalCallback callback) {
     callback_ = std::move(callback);
 }
