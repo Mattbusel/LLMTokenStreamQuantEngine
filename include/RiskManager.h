@@ -240,6 +240,16 @@ public:
     double get_net_exposure() const;
 
     /**
+     * @brief Return true if the next signal would be blocked by the rate gate.
+     *
+     * Checks whether signals_in_window_ has reached max_signals_per_second
+     * without advancing the window.  Thread-safe (acquires mutex_).
+     *
+     * @return true if the rate limit has been hit in the current window.
+     */
+    bool is_rate_limited() const;
+
+    /**
      * @brief Return the remaining drawdown budget in the current window.
      *
      * Computes max_drawdown - |cumulative_bias_|, clamped to [0, max_drawdown].

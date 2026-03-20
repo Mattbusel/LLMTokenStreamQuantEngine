@@ -1161,5 +1161,21 @@ TEST(TradeSignalEngineTest, test_get_bias_direction_zero_before_processing) {
         << "bias direction must be 0 before any processing";
 }
 
+TEST(TradeSignalEngineTest, test_has_pending_bias_false_initially) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_FALSE(engine.has_pending_bias())
+        << "has_pending_bias must be false when no tokens processed";
+}
+
+TEST(TradeSignalEngineTest, test_has_pending_bias_true_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.5, 0.9, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    EXPECT_TRUE(engine.has_pending_bias())
+        << "has_pending_bias must be true after accumulating non-zero bias";
+}
+
 } // namespace
 } // namespace llmquant

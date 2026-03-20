@@ -151,6 +151,12 @@ public:
     size_t count_bearish_tokens() const;
 
     /**
+     * @brief Count tokens with sentiment_score == 0.0 (neutral).
+     * @return Number of neutral tokens in the dictionary.
+     */
+    size_t count_neutral_tokens() const;
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this

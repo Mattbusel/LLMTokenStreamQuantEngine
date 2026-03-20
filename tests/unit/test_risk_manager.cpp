@@ -1324,3 +1324,21 @@ TEST(RiskManagerTest, test_get_net_exposure_reflects_update_position) {
     EXPECT_DOUBLE_EQ(rm.get_net_exposure(), 3.5)
         << "get_net_exposure must reflect the last update_position call";
 }
+
+TEST(RiskManagerTest, test_is_rate_limited_false_initially) {
+    RiskManager rm(default_config());
+    EXPECT_FALSE(rm.is_rate_limited())
+        << "is_rate_limited must be false when no signals have been processed";
+}
+
+TEST(RiskManagerTest, test_is_rate_limited_true_when_window_full) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 2;
+    RiskManager rm(cfg);
+    rm.disable_all_gates();
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
+    rm.evaluate(sig); rm.evaluate(sig);
+    EXPECT_TRUE(rm.is_rate_limited())
+        << "is_rate_limited must be true when max_signals_per_second is reached";
+}

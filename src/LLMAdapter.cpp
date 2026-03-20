@@ -240,6 +240,12 @@ size_t LLMAdapter::count_bearish_tokens() const {
     return count;
 }
 
+size_t LLMAdapter::count_neutral_tokens() const {
+    size_t count = 0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.sentiment_score == 0.0) ++count; }
+    return count;
+}
+
 std::vector<std::string> LLMAdapter::get_all_token_keys() const {
     std::vector<std::string> keys;
     keys.reserve(token_weights_.size());

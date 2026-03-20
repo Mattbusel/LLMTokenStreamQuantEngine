@@ -970,5 +970,14 @@ TEST(LLMAdapterTest, test_contains_any_of_short_circuits_on_first_match) {
     EXPECT_TRUE(adapter.contains_any_of({"first", "second"}));
 }
 
+TEST(LLMAdapterTest, test_count_neutral_tokens_basic) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("n1", {0.0, 0.5, 0.1, 0.0});
+    adapter.add_token_mapping("n2", {0.0, 0.6, 0.2, 0.0});
+    adapter.add_token_mapping("bull", {0.7, 0.9, 0.1, 0.6});
+    EXPECT_EQ(adapter.count_neutral_tokens(), size_t{2});
+}
+
 } // namespace
 } // namespace llmquant

@@ -281,6 +281,20 @@ public:
      *
      * @return +1 if accumulated bias > 0 (bullish), -1 if < 0 (bearish), 0 if zero.
      */
+    /**
+     * @brief Return true if the accumulated bias exceeds the noise gate threshold.
+     *
+     * Equivalent to checking |accumulated_bias| >= config.min_bias_threshold.
+     * If min_bias_threshold is 0 (disabled), returns true whenever bias != 0.
+     * Thread-safe (atomic reads).
+     */
+    bool has_pending_bias() const noexcept {
+        double bias = accumulated_bias_.load(std::memory_order_relaxed);
+        if (config_.min_bias_threshold > 0.0)
+            return std::fabs(bias) >= config_.min_bias_threshold;
+        return bias != 0.0;
+    }
+
     int get_bias_direction() const noexcept {
         double b = accumulated_bias_.load(std::memory_order_relaxed);
         if (b > 0.0) return  1;

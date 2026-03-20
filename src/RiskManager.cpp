@@ -307,6 +307,11 @@ double RiskManager::get_net_exposure() const {
     return position_.net_position;
 }
 
+bool RiskManager::is_rate_limited() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return signals_in_window_ >= config_.max_signals_per_second;
+}
+
 double RiskManager::get_cumulative_bias() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return cumulative_bias_;
