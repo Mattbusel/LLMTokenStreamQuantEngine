@@ -1,5 +1,6 @@
 #include "TokenStreamSimulator.h"
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 
 namespace llmquant {
@@ -107,6 +108,22 @@ void TokenStreamSimulator::stream_worker() {
         stats_.tokens_emitted++;
         std::this_thread::sleep_for(config_.token_interval);  // Normal cadence: only after dispatch.
     }
+}
+
+std::string TokenStreamSimulator::format_stats() const {
+    uint64_t emitted = stats_.tokens_emitted.load(std::memory_order_relaxed);
+    uint64_t drops   = stats_.ring_buffer_drops.load(std::memory_order_relaxed);
+    uint64_t avg_lat = stats_.avg_latency_us.load(std::memory_order_relaxed);
+    uint64_t max_lat = stats_.max_latency_us.load(std::memory_order_relaxed);
+    double drop_rate = get_drop_rate();
+
+    std::ostringstream oss;
+    oss << "emitted=" << emitted
+        << " drops=" << drops
+        << " avg_lat=" << avg_lat << "\xc2\xb5s"
+        << " max_lat=" << max_lat << "\xc2\xb5s"
+        << " drop_rate=" << std::fixed << std::setprecision(3) << drop_rate;
+    return oss.str();
 }
 
 } // namespace llmquant

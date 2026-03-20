@@ -188,6 +188,31 @@ public:
         config_.token_interval = interval;
     }
 
+    /**
+     * @brief Return the fraction of emit attempts that were dropped due to a full ring buffer.
+     *
+     * Computed as drops / (emitted + drops).  Returns 0.0 if no tokens have
+     * been attempted yet.  Thread-safe (atomic reads).
+     *
+     * @return Drop rate in [0, 1].
+     */
+    double get_drop_rate() const noexcept {
+        uint64_t drops   = stats_.ring_buffer_drops.load(std::memory_order_relaxed);
+        uint64_t emitted = stats_.tokens_emitted.load(std::memory_order_relaxed);
+        uint64_t total   = emitted + drops;
+        if (total == 0) return 0.0;
+        return static_cast<double>(drops) / static_cast<double>(total);
+    }
+
+    /**
+     * @brief Return a single-line human-readable stats summary.
+     *
+     * Format: "emitted=N drops=N avg_lat=Nµs max_lat=Nµs drop_rate=N.NNN"
+     *
+     * @return Formatted stats string.
+     */
+    std::string format_stats() const;
+
 private:
     /**
      * @brief Lock-free SPSC ring buffer for token strings.
