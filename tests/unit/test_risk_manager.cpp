@@ -612,6 +612,45 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_block_returns_reaso
 // ============================================================
 // Test: get_drawdown_budget_remaining() returns correct headroom.
 // ============================================================
+// ============================================================
+// Test: disable_all_gates() lets every signal through.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_disable_all_gates_lets_every_signal_through) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude       = 0.01;  // would normally block most signals
+    cfg.max_signals_per_second   = 1;     // rate limit
+    cfg.max_drawdown             = 0.01;  // tiny drawdown
+    cfg.min_confidence           = 0.99;  // very high confidence required
+    RiskManager rm(cfg);
+
+    rm.disable_all_gates();
+
+    // A signal that would normally fail every check must now pass.
+    auto sig = make_signal(5.0, 5.0, 5.0, 0.01);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_TRUE(rm.evaluate(sig))
+            << "All signals must pass when all gates are disabled";
+    }
+    EXPECT_EQ(rm.get_stats().signals_passed.load(), 5u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 0u);
+}
+
+// ============================================================
+// Test: enable_all_gates() re-activates all checks.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_enable_all_gates_blocks_signals_again) {
+    RiskManager rm(default_config());
+    rm.disable_all_gates();
+
+    // Large magnitude signal passes when gates disabled.
+    EXPECT_TRUE(rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8)));
+
+    // Re-enable — now the same signal must be blocked by magnitude gate.
+    rm.enable_all_gates();
+    EXPECT_FALSE(rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8)));
+    EXPECT_GT(rm.get_stats().signals_blocked_magnitude.load(), 0u);
+}
+
 TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_full_at_start) {
     RiskManager::Config cfg = default_config();
     cfg.max_drawdown = 5.0;
@@ -751,4 +790,32 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_does_not_disturb_ex
     EXPECT_FALSE(reason.empty());
     // The original callback must still have fired.
     EXPECT_EQ(alert_count.load(), 1);
+}
+
+// ============================================================
+// Test: get_rate_limit_utilization() reports window usage.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_zero_at_start) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_rate_limit_utilization(), 0.0);
+}
+
+TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_increases_with_signals) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 10;
+    RiskManager rm(cfg);
+    auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    rm.evaluate(sig);
+    rm.evaluate(sig);
+    rm.evaluate(sig);
+    EXPECT_DOUBLE_EQ(rm.get_rate_limit_utilization(), 0.3);
+}
+
+TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_caps_at_one) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 2;
+    RiskManager rm(cfg);
+    auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    for (int i = 0; i < 5; ++i) rm.evaluate(sig);
+    EXPECT_LE(rm.get_rate_limit_utilization(), 1.0);
 }

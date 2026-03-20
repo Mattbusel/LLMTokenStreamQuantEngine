@@ -206,6 +206,17 @@ public:
     double get_drawdown_budget_remaining() const;
 
     /**
+     * @brief Return the fraction of the per-second rate limit consumed in the
+     *        current window, in [0.0, 1.0].
+     *
+     * 0.0 = no signals in this window; 1.0 = at or above the limit.
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Rate-limit utilization fraction.
+     */
+    double get_rate_limit_utilization() const;
+
+    /**
      * @brief Attach a MetricsLogger for structured rejection logging.
      *
      * @param logger Pointer to an active MetricsLogger; must outlive this
@@ -237,6 +248,26 @@ public:
      * trading sessions when fresh counters are needed without a full restart.
      */
     void reset_stats() noexcept;
+
+    /**
+     * @brief Disable all risk gate checks simultaneously (for testing / circuit-break bypass).
+     *
+     * Sets all disable_*_gate flags in config_ to true in a single mutex-held
+     * operation.  Equivalent to calling update_config() with every gate flag set,
+     * but without needing to construct a full Config.
+     *
+     * Thread-safe (acquires mutex_).
+     */
+    void disable_all_gates();
+
+    /**
+     * @brief Re-enable all risk gate checks simultaneously.
+     *
+     * Clears all disable_*_gate flags in a single mutex-held operation.
+     *
+     * Thread-safe (acquires mutex_).
+     */
+    void enable_all_gates();
 
     /**
      * @brief Atomically replace the risk threshold configuration.

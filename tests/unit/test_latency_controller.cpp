@@ -524,5 +524,57 @@ TEST(LatencyControllerTest, test_target_breaches_cleared_by_reset_stats) {
         << "target_breaches must be zero after reset_stats()";
 }
 
+// ---------------------------------------------------------------------------
+// is_warmed_up()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_is_warmed_up_false_before_half_window) {
+    LatencyController lc(make_config(true, 100));  // window = 100
+
+    // Fill < 50% of the window.
+    for (int i = 0; i < 49; ++i) {
+        lc.record_latency(std::chrono::microseconds{i + 1});
+    }
+
+    EXPECT_FALSE(lc.is_warmed_up())
+        << "is_warmed_up() must return false when window < 50% full";
+}
+
+TEST(LatencyControllerTest, test_is_warmed_up_true_at_half_window) {
+    LatencyController lc(make_config(true, 100));  // window = 100
+
+    // Fill exactly 50% of the window.
+    for (int i = 0; i < 50; ++i) {
+        lc.record_latency(std::chrono::microseconds{i + 1});
+    }
+
+    EXPECT_TRUE(lc.is_warmed_up())
+        << "is_warmed_up() must return true once window is >= 50% full";
+}
+
+// ---------------------------------------------------------------------------
+// get_slo_breach_rate()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_slo_breach_rate_zero_with_no_breaches) {
+    LatencyController lc(make_config());  // target = 10 µs
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.record_latency(std::chrono::microseconds{10});
+    EXPECT_DOUBLE_EQ(lc.get_slo_breach_rate(), 0.0)
+        << "Breach rate must be 0.0 when all samples <= target";
+}
+
+TEST(LatencyControllerTest, test_slo_breach_rate_correct_fraction) {
+    LatencyController lc(make_config());  // target = 10 µs
+    // 2 below, 2 above.
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.record_latency(std::chrono::microseconds{8});
+    lc.record_latency(std::chrono::microseconds{11});
+    lc.record_latency(std::chrono::microseconds{20});
+
+    EXPECT_NEAR(lc.get_slo_breach_rate(), 0.5, 1e-9)
+        << "2 of 4 samples above target → breach rate = 0.5";
+}
+
 } // namespace
 } // namespace llmquant

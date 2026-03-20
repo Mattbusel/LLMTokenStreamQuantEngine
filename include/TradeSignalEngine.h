@@ -231,6 +231,25 @@ public:
     }
 
     /**
+     * @brief Compute the fraction of weight-processing calls that were suppressed.
+     *
+     * Returns signals_suppressed / (signals_generated + signals_suppressed), or
+     * 0.0 if no tokens have been processed yet.  A high suppression rate
+     * (approaching 1.0) indicates the min_bias_threshold is filtering most of
+     * the incoming signal energy.
+     *
+     * Thread-safe (atomic reads).
+     *
+     * @return Suppression rate in [0.0, 1.0].
+     */
+    double suppression_rate() const noexcept {
+        uint64_t gen  = stats_.signals_generated.load(std::memory_order_relaxed);
+        uint64_t supp = stats_.signals_suppressed.load(std::memory_order_relaxed);
+        uint64_t total = gen + supp;
+        return (total == 0) ? 0.0 : static_cast<double>(supp) / static_cast<double>(total);
+    }
+
+    /**
      * @brief Returns the current accumulated volatility (atomic read, instantaneous snapshot).
      *
      * @return Current accumulated volatility value.

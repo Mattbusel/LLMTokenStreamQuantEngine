@@ -135,6 +135,30 @@ public:
     bool contains_token(const std::string& token) const;
 
     /**
+     * @brief Remove a single token mapping from the dictionary.
+     *
+     * If the token does not exist, this is a no-op.
+     * Applies the same normalisation as map_token_to_weight().
+     *
+     * @param token Raw token string to remove.
+     * @return true if a mapping was removed; false if it did not exist.
+     */
+    bool remove_token_mapping(const std::string& token);
+
+    /**
+     * @brief Retrieve the SemanticWeight associated with a token.
+     *
+     * Applies the same normalisation as map_token_to_weight().
+     * Does NOT update stats counters.
+     *
+     * @param token  Raw token string.
+     * @param weight Output parameter populated with the mapping on success.
+     * @return true if found; false if the token is not in the dictionary
+     *         (weight is left unchanged on false return).
+     */
+    bool get_token_mapping(const std::string& token, SemanticWeight& weight) const;
+
+    /**
      * @brief Return the top N tokens sorted by absolute sentiment score.
      *
      * Useful for auditing which tokens are most influential in driving

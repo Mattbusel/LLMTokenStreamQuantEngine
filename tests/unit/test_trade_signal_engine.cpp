@@ -692,6 +692,43 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_tokens_processed_increments
     EXPECT_EQ(engine.get_stats().tokens_processed.load(), 3u);
 }
 
+// ---------------------------------------------------------------------------
+// suppression_rate()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_suppression_rate_zero_when_no_suppression) {
+    // With min_bias_threshold=0 nothing is suppressed by the noise filter.
+    // Attach a sink so signals have a destination and are not counted as suppressed.
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.add_output_sink(sink);
+
+    EXPECT_DOUBLE_EQ(engine.suppression_rate(), 0.0)
+        << "Rate must be 0.0 before any tokens are processed";
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.9};
+    engine.process_semantic_weight(w);  // should generate a signal, not suppress it
+
+    // After one generated signal with zero suppressions, rate must still be 0.
+    EXPECT_DOUBLE_EQ(engine.suppression_rate(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_suppression_rate_approaches_one_with_all_suppressed) {
+    // Set min_bias_threshold very high so every signal is suppressed.
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.95, 0);
+    cfg.min_bias_threshold = 100.0;  // suppress everything
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight w{0.1, 0.1, 0.1, 0.9};
+    for (int i = 0; i < 10; ++i) engine.process_semantic_weight(w);
+
+    double rate = engine.suppression_rate();
+    // All signals suppressed → rate should be 1.0 (or very close).
+    EXPECT_GE(rate, 0.5) << "Most signals should be suppressed when threshold is very high";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_tokens_processed_resets_on_reset) {
     TradeSignalEngine engine(make_config());
     engine.set_backtest_mode(true);

@@ -202,6 +202,14 @@ void LatencyController::profile_queue_lag() {
     // Hook for queue lag profiling
 }
 
+double LatencyController::get_slo_breach_rate() const noexcept {
+    uint64_t total = total_measurements_.load(std::memory_order_relaxed);
+    if (total == 0) return 0.0;
+    uint64_t breaches = target_breaches_.load(std::memory_order_relaxed);
+    double rate = static_cast<double>(breaches) / static_cast<double>(total);
+    return rate > 1.0 ? 1.0 : rate;
+}
+
 void LatencyController::update_ingestion_pressure(double arrival_rate_tps,
                                                    double max_rate_tps) {
     double p = (max_rate_tps > 0.0)

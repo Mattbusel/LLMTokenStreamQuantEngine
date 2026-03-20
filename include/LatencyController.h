@@ -178,6 +178,19 @@ public:
     PressureState get_pressure() const;
 
     /**
+     * @brief Return true once the sample window is at least 50% populated.
+     *
+     * Percentile estimates are unreliable with very few samples.  Callers can
+     * call is_warmed_up() before acting on p95/p99 alerts to suppress false
+     * positives during the first seconds of a trading session.
+     *
+     * Thread-safe (acquires samples_mutex_).
+     *
+     * @return true if get_window_fill_ratio() >= 0.5; false otherwise.
+     */
+    bool is_warmed_up() const { return get_window_fill_ratio() >= 0.5; }
+
+    /**
      * @brief Return the fraction of the sample window currently populated, in [0.0, 1.0].
      *
      * Rises from 0.0 to 1.0 as measurements are recorded up to the configured
@@ -187,6 +200,17 @@ public:
      * @return Sample window fill ratio in [0.0, 1.0].
      */
     double get_window_fill_ratio() const;
+
+    /**
+     * @brief Return the fraction of recorded samples that exceeded the configured
+     *        target latency, in [0.0, 1.0].
+     *
+     * Uses the atomic target_breaches_ counter divided by total_measurements_.
+     * Returns 0.0 if no measurements have been recorded yet.
+     *
+     * @return SLO breach rate in [0.0, 1.0].
+     */
+    double get_slo_breach_rate() const noexcept;
 
     /**
      * @brief Return the current exponential-backoff multiplier for source polling.

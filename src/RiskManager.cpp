@@ -178,6 +178,24 @@ void RiskManager::reset_stats() noexcept {
     stats_.signals_blocked_pnl.store(0, std::memory_order_relaxed);
 }
 
+void RiskManager::disable_all_gates() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.disable_magnitude_gate = true;
+    config_.disable_confidence_gate = true;
+    config_.disable_rate_gate = true;
+    config_.disable_drawdown_gate = true;
+    config_.disable_position_gate = true;
+}
+
+void RiskManager::enable_all_gates() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.disable_magnitude_gate = false;
+    config_.disable_confidence_gate = false;
+    config_.disable_rate_gate = false;
+    config_.disable_drawdown_gate = false;
+    config_.disable_position_gate = false;
+}
+
 void RiskManager::update_config(const Config& config) {
     if (config.max_bias_magnitude < 0.0)
         throw std::invalid_argument("RiskManager: max_bias_magnitude must be >= 0");
@@ -256,6 +274,14 @@ double RiskManager::get_drawdown_budget_remaining() const {
     std::lock_guard<std::mutex> lock(mutex_);
     double remaining = config_.max_drawdown - std::fabs(cumulative_bias_);
     return remaining < 0.0 ? 0.0 : remaining;
+}
+
+double RiskManager::get_rate_limit_utilization() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (config_.max_signals_per_second == 0) return 1.0;
+    double util = static_cast<double>(signals_in_window_)
+                  / static_cast<double>(config_.max_signals_per_second);
+    return util > 1.0 ? 1.0 : util;
 }
 
 } // namespace llmquant
