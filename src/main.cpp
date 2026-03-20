@@ -46,6 +46,7 @@ int main(int argc, char* argv[]) {
     bool        no_color       = false;
     bool        debug_raw      = false;
     bool        dry_run        = false;
+    bool        backtest_mode  = false;
     std::string oms_address;
     std::string fix_address;
     for (int i = 1; i < argc; ++i) {
@@ -59,6 +60,7 @@ int main(int argc, char* argv[]) {
                 "  --oms host:port   Connect to REST OMS adapter\n"
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
                 "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
+                "  --backtest        Enable backtest mode (emit signal on every token, no cooldown)\n"
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
                 "  --version         Print version and exit\n"
@@ -84,6 +86,8 @@ int main(int argc, char* argv[]) {
             debug_raw = true;
         } else if (arg == "--dry-run") {
             dry_run = true;
+        } else if (arg == "--backtest") {
+            backtest_mode = true;
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -185,6 +189,11 @@ int main(int argc, char* argv[]) {
         .signal_decay_rate = sys_config.trading.signal_decay_rate,
         .signal_cooldown = std::chrono::microseconds(sys_config.trading.signal_cooldown_us)
     });
+
+    // Backtest mode: emit on every token, ignoring the cooldown timer.
+    if (backtest_mode) {
+        trade_engine.set_backtest_mode(true);
+    }
 
     // Wire an in-memory sink for telemetry (signals accessible for inspection/export).
     auto memory_sink = std::make_shared<llmquant::MemoryOutputSink>();
@@ -654,7 +663,10 @@ int main(int argc, char* argv[]) {
                         std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
                  << "# TYPE llmquant_dry_run gauge\n"
-                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n";
+                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n"
+                 << "# HELP llmquant_dictionary_size Number of token mappings in the LLMAdapter dictionary\n"
+                 << "# TYPE llmquant_dictionary_size gauge\n"
+                 << "llmquant_dictionary_size " << llm_adapter.get_dictionary_size() << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

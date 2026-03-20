@@ -205,6 +205,31 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_confidence_reflects_input_w
         << "signal.confidence must reflect the confidence_score of the processed weight";
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_update_config_changes_sensitivity) {
+    TradeSignalEngine engine(make_config(1.0 /*bias_sens*/, 1.0 /*vol_sens*/, 0.95, 0));
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    // Baseline: bias_sensitivity=1.0 produces some delta_bias_shift.
+    SemanticWeight w{0.5, 1.0, 0.0, 0.5};
+    engine.process_semantic_weight(w);
+    double baseline = captured.delta_bias_shift;
+    EXPECT_GT(std::fabs(baseline), 0.0);
+
+    // Reset accumulators so the comparison is clean.
+    engine.reset();
+
+    // Double the bias sensitivity — same token should produce ~2x the shift.
+    TradeSignalEngine::Config cfg = make_config(2.0, 1.0, 0.95, 0);
+    engine.update_config(cfg);
+    engine.process_semantic_weight(w);
+    double scaled = captured.delta_bias_shift;
+    EXPECT_GT(std::fabs(scaled), std::fabs(baseline) * 1.5)
+        << "Doubling bias_sensitivity must produce a substantially larger bias shift";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_latency_us_is_populated) {
     TradeSignalEngine engine(make_config());
     engine.set_backtest_mode(true);
