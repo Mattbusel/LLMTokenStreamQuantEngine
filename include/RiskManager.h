@@ -195,6 +195,18 @@ public:
     void update_config(const Config& config);
 
     /**
+     * @brief Return a copy of the current risk configuration.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Copy of the current Config struct.
+     */
+    Config get_config() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return config_;
+    }
+
+    /**
      * @brief Return a read-only reference to live statistics.
      *
      * @return Const reference to the internal Stats struct.
