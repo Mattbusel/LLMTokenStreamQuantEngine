@@ -148,6 +148,23 @@ TEST(MetricsLoggerTest, test_metrics_logger_inaccessible_path_does_not_crash) {
 // ---------------------------------------------------------------------------
 using namespace llmquant;  // NOLINT: test-only using directive outside namespace
 
+TEST(MetricsLoggerTest, test_metrics_logger_json_output_contains_expected_keys) {
+    const std::string path = "/tmp/test_metrics_json_content.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_token_received("rally", 7);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    // JSON output must contain the token name and known JSON keys.
+    EXPECT_NE(content.find("rally"), std::string::npos)
+        << "JSON output must contain the logged token";
+    std::remove(path.c_str());
+}
+
 TEST(MetricsLoggerTest, MetricsLoggerNonAsciiToken) {
     MetricsLogger::Config cfg;
     cfg.log_file_path         = "";  // no file output

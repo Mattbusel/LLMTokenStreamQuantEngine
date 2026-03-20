@@ -131,6 +131,7 @@ TEST(ConfigTest, test_config_save_to_file_roundtrip_preserves_values) {
     EXPECT_DOUBLE_EQ(rel.trading.signal_decay_rate,      orig.trading.signal_decay_rate);
     EXPECT_EQ(rel.trading.signal_cooldown_us,              orig.trading.signal_cooldown_us);
     EXPECT_DOUBLE_EQ(rel.trading.max_signal_age_us,        orig.trading.max_signal_age_us);
+    EXPECT_DOUBLE_EQ(rel.trading.min_bias_threshold,       orig.trading.min_bias_threshold);
     EXPECT_EQ(rel.latency.target_latency_us,             orig.latency.target_latency_us);
     EXPECT_EQ(rel.latency.sample_window,                 orig.latency.sample_window);
     EXPECT_EQ(rel.latency.enable_profiling,              orig.latency.enable_profiling);

@@ -365,6 +365,17 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_preserves_dictionary) {
     EXPECT_GT(w.directional_bias, 0.0);
 }
 
+TEST(LLMAdapterTest, test_llm_adapter_normalizes_whitespace_and_case) {
+    LLMAdapter adapter;
+    // "  BULLISH  " should normalize to "bullish" and hit the dictionary.
+    SemanticWeight padded   = adapter.map_token_to_weight("  BULLISH  ");
+    SemanticWeight canonical = adapter.map_token_to_weight("bullish");
+
+    EXPECT_DOUBLE_EQ(padded.directional_bias,  canonical.directional_bias);
+    EXPECT_DOUBLE_EQ(padded.sentiment_score,   canonical.sentiment_score);
+    EXPECT_DOUBLE_EQ(padded.confidence_score,  canonical.confidence_score);
+}
+
 TEST(LLMAdapterTest, test_llm_adapter_add_token_mapping_overrides_existing) {
     LLMAdapter adapter;
     // "bullish" is a built-in positive token.
