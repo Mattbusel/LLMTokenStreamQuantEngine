@@ -146,6 +146,17 @@ private:
     void initialize_default_mappings();
 
     /**
+     * @brief Strip leading/trailing whitespace and lowercase a token string.
+     *
+     * Used by both map_token_to_weight() and add_token_mapping() to ensure
+     * lookups and insertions use the same canonical form.
+     *
+     * @param token Raw token string.
+     * @return Normalized lowercase token with no leading/trailing whitespace.
+     */
+    static std::string normalize_token(const std::string& token);
+
+    /**
      * @brief Scalar fallback for confidence-weighted aggregation over [begin, end).
      *
      * @param weights Vector of SemanticWeight values.

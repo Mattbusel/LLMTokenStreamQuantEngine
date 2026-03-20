@@ -2,6 +2,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <iomanip>
 #include <sstream>
+#include <spdlog/spdlog.h>
 
 namespace llmquant {
 
@@ -27,13 +28,18 @@ void MetricsLogger::initialize_loggers() {
             spdlog::drop(name);
             file_logger_ = spdlog::basic_logger_mt(name, config_.log_file_path);
             file_logger_->set_pattern("[%H:%M:%S.%f] %v");
-            file_logger_->flush_on(spdlog::level::info);
+            // Flush on warn/error only; periodic flush handled by flush_every below.
+            file_logger_->flush_on(spdlog::level::warn);
         } catch (const spdlog::spdlog_ex& ex) {
             // Cannot use file logger to report its own failure; use spdlog default sink.
             spdlog::warn("[MetricsLogger] file logger skipped: {}", ex.what());
             file_logger_.reset();
         }
     }
+
+    // Enable periodic flush at the configured interval so data reaches disk
+    // without flushing on every INFO message (which would harm throughput).
+    spdlog::flush_every(config_.flush_interval);
 
     // Console logger
     if (config_.enable_console_output) {

@@ -12,9 +12,21 @@ LLMAdapter::LLMAdapter() {
     initialize_default_mappings();
 }
 
+std::string LLMAdapter::normalize_token(const std::string& token) {
+    std::string norm;
+    norm.reserve(token.size());
+    size_t start = 0;
+    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) ++start;
+    size_t end = token.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) --end;
+    for (size_t i = start; i < end; ++i)
+        norm += static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
+    return norm;
+}
+
 SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     // tokens_processed is incremented AFTER the lookup so the invariant
-    // cache_hits + cache_misses == tokens_processed always holds (Improvement 12).
+    // cache_hits + cache_misses == tokens_processed always holds.
 
     // Fast-path: if the token is already normalized (lowercase ASCII letters,
     // digits, spaces or underscores, no leading/trailing whitespace) skip the
@@ -42,16 +54,9 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
         return SemanticWeight{0.0, 0.5, 0.1, 0.0};
     }
 
-    // Normalize: strip leading/trailing whitespace, lowercase.
+    // Normalize via shared helper: strip leading/trailing whitespace, lowercase.
     // GPT-4o streams tokens like " bullish" or "Bullish" that must map to "bullish".
-    std::string norm;
-    norm.reserve(token.size());
-    size_t start = 0;
-    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) ++start;
-    size_t end = token.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) --end;
-    for (size_t i = start; i < end; ++i)
-        norm += static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
+    std::string norm = normalize_token(token);
 
     auto it = token_weights_.find(norm);
     if (it != token_weights_.end()) {
@@ -119,17 +124,8 @@ void LLMAdapter::load_sentiment_dictionary(const std::string& filepath) {
 }
 
 void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeight& weight) {
-    // Normalise key to match map_token_to_weight() lookup behaviour:
-    // strip leading/trailing whitespace, then lowercase.
-    std::string key;
-    key.reserve(token.size());
-    size_t start = 0;
-    while (start < token.size() && std::isspace(static_cast<unsigned char>(token[start]))) ++start;
-    size_t end = token.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(token[end - 1]))) --end;
-    for (size_t i = start; i < end; ++i)
-        key += static_cast<char>(std::tolower(static_cast<unsigned char>(token[i])));
-    token_weights_[key] = weight;
+    // Normalise key via shared helper to match map_token_to_weight() lookup behaviour.
+    token_weights_[normalize_token(token)] = weight;
 }
 
 // SSE2-only horizontal add: returns [a[0]+a[1], b[0]+b[1]]
@@ -294,6 +290,46 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("choppy",    {0.0,  0.70, 0.88, 0.0});
     add_token_mapping("erratic",   {0.0,  0.65, 0.90, 0.0});
 
+    // Options market terms
+    add_token_mapping("calls",     { 0.5,  0.80, 0.55,  0.65});
+    add_token_mapping("puts",      {-0.5,  0.80, 0.55, -0.65});
+    add_token_mapping("straddle",  { 0.0,  0.70, 0.90,  0.0});
+    add_token_mapping("strangle",  { 0.0,  0.65, 0.88,  0.0});
+    add_token_mapping("gamma",     { 0.0,  0.75, 0.85,  0.0});
+    add_token_mapping("delta",     { 0.1,  0.65, 0.50,  0.1});
+    add_token_mapping("vega",      { 0.0,  0.70, 0.92,  0.0});
+    add_token_mapping("iv",        { 0.0,  0.75, 0.90,  0.0});  // implied volatility
+    add_token_mapping("dte",       { 0.0,  0.50, 0.40,  0.0});  // days to expiry
+
+    // Macroeconomic sentiment
+    add_token_mapping("inflation",  {-0.4,  0.85, 0.70, -0.35});
+    add_token_mapping("deflation",  {-0.3,  0.80, 0.60, -0.25});
+    add_token_mapping("recession",  {-0.8,  0.90, 0.75, -0.80});
+    add_token_mapping("stagflation",{-0.7,  0.85, 0.80, -0.70});
+    add_token_mapping("fed",        { 0.0,  0.75, 0.65,  0.0});
+    add_token_mapping("rate",       { 0.0,  0.65, 0.50,  0.0});
+    add_token_mapping("hike",       {-0.4,  0.80, 0.60, -0.40});
+    add_token_mapping("cut",        { 0.4,  0.80, 0.55,  0.40});
+    add_token_mapping("pivot",      { 0.5,  0.85, 0.65,  0.50});
+    add_token_mapping("gdp",        { 0.1,  0.65, 0.40,  0.10});
+
+    // Risk-off / safe-haven flows
+    add_token_mapping("liquidation",{-0.9,  0.90, 0.90, -0.90});
+    add_token_mapping("capitulation",{-0.8, 0.85, 0.85, -0.85});
+    add_token_mapping("squeeze",    { 0.6,  0.80, 0.80,  0.70});  // short squeeze
+    add_token_mapping("deleveraging",{-0.7, 0.85, 0.80, -0.75});
+    add_token_mapping("margin",     {-0.3,  0.70, 0.65, -0.30});  // margin call context
+
+    // Positive recovery / accumulation signals
+    add_token_mapping("accumulate", { 0.6,  0.80, 0.35,  0.65});
+    add_token_mapping("dip",        { 0.3,  0.75, 0.50,  0.40});  // buy the dip
+    add_token_mapping("rebound",    { 0.6,  0.80, 0.60,  0.65});
+    add_token_mapping("recovery",   { 0.5,  0.80, 0.45,  0.50});
+    add_token_mapping("uptrend",    { 0.6,  0.80, 0.40,  0.70});
+    add_token_mapping("downtrend",  {-0.6,  0.80, 0.40, -0.70});
+    add_token_mapping("oversold",   { 0.5,  0.75, 0.55,  0.55});
+    add_token_mapping("overbought", {-0.5,  0.75, 0.55, -0.55});
+
     // Neutral / Filler — zero-weight pass-through tokens
     add_token_mapping("the",       {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("and",       {0.0,  0.1,  0.0,  0.0});
@@ -303,6 +339,38 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("in",        {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("of",        {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("to",        {0.0,  0.1,  0.0,  0.0});
+
+    // Options / derivatives sentiment
+    add_token_mapping("calls",      { 0.6, 0.80, 0.50,  0.75});
+    add_token_mapping("puts",       {-0.6, 0.80, 0.50, -0.75});
+    add_token_mapping("squeeze",    { 0.5, 0.75, 0.85,  0.60});
+    add_token_mapping("gamma",      { 0.0, 0.65, 0.80,  0.0});
+    add_token_mapping("delta",      { 0.0, 0.60, 0.50,  0.0});
+    add_token_mapping("expiry",     { 0.0, 0.50, 0.70,  0.0});
+    add_token_mapping("strike",     { 0.0, 0.50, 0.40,  0.0});
+    add_token_mapping("hedge",      {-0.1, 0.70, 0.30, -0.10});
+
+    // Retail / crypto sentiment (increasingly common in Reddit feeds)
+    add_token_mapping("pump",       { 0.7, 0.75, 0.80,  0.80});
+    add_token_mapping("rug",        {-0.9, 0.85, 0.85, -0.90});
+    add_token_mapping("fud",        {-0.6, 0.70, 0.60, -0.55});
+    add_token_mapping("hodl",       { 0.3, 0.60, 0.20,  0.40});
+    add_token_mapping("rekt",       {-0.8, 0.85, 0.80, -0.80});
+    add_token_mapping("dip",        { 0.3, 0.70, 0.40,  0.35});
+    add_token_mapping("ath",        { 0.7, 0.75, 0.65,  0.70});
+
+    // Technical analysis — trend / exhaustion signals
+    add_token_mapping("overbought", {-0.4, 0.75, 0.50, -0.50});
+    add_token_mapping("oversold",   { 0.4, 0.75, 0.50,  0.50});
+    add_token_mapping("capitulation",{-0.8, 0.85, 0.85, -0.80});
+    add_token_mapping("accumulation",{ 0.5, 0.75, 0.35,  0.55});
+    add_token_mapping("distribution",{-0.4, 0.70, 0.45, -0.45});
+    add_token_mapping("reversal",   { 0.0, 0.70, 0.80,  0.0});
+    add_token_mapping("consolidate",{ 0.0, 0.55, 0.25,  0.0});
+    add_token_mapping("parabolic",  { 0.6, 0.75, 0.90,  0.65});
+    add_token_mapping("divergence", { 0.0, 0.65, 0.70,  0.0});
+    add_token_mapping("liquidated", {-0.7, 0.85, 0.85, -0.75});
+    add_token_mapping("margin",     { 0.0, 0.55, 0.65,  0.0});
 }
 
 } // namespace llmquant

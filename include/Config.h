@@ -64,6 +64,20 @@ struct LoggingConfig {
 };
 
 /**
+ * @brief Production risk threshold parameters (YAML key: risk_thresholds).
+ */
+struct RiskThresholdConfig {
+    double max_bias_magnitude{2.0};        ///< Maximum |delta_bias_shift| per signal.
+    double max_volatility_magnitude{2.0};  ///< Maximum |volatility_adjustment| per signal.
+    double max_spread_magnitude{0.5};      ///< Maximum |spread_modifier| per signal.
+    double min_confidence{0.1};            ///< Minimum signal confidence to emit.
+    size_t max_signals_per_second{500};    ///< Rate cap: signals per second.
+    double max_drawdown{10.0};             ///< Cumulative bias drawdown limit.
+    int    drawdown_window_s{60};          ///< Drawdown measurement window in seconds.
+    double position_warn_fraction{0.8};    ///< Soft-warn fraction of position_limit.
+};
+
+/**
  * @brief Risk gate override flags (for testing / debugging only).
  */
 struct RiskOverrideConfig {
@@ -88,12 +102,13 @@ struct PressureConfig {
  * @brief Top-level configuration object that aggregates all subsystem configs.
  */
 struct SystemConfig {
-    TokenStreamConfig  token_stream;
-    TradingConfig      trading;
-    LatencyConfig      latency;
-    LoggingConfig      logging;
-    PressureConfig     pressure;
-    RiskOverrideConfig risk_overrides;
+    TokenStreamConfig    token_stream;
+    TradingConfig        trading;
+    LatencyConfig        latency;
+    LoggingConfig        logging;
+    PressureConfig       pressure;
+    RiskThresholdConfig  risk_thresholds;
+    RiskOverrideConfig   risk_overrides;
 };
 
 /**

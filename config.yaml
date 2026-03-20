@@ -25,6 +25,17 @@ pressure:
   max_ingestion_rate_tps: 50
   backoff_scale_factor: 5.0
 
+# --- Risk thresholds (production gate values, hot-reloadable) ---
+risk_thresholds:
+  max_bias_magnitude: 2.0
+  max_volatility_magnitude: 2.0
+  max_spread_magnitude: 0.5
+  min_confidence: 0.1
+  max_signals_per_second: 500
+  max_drawdown: 10.0
+  drawdown_window_s: 60
+  position_warn_fraction: 0.8
+
 # --- Risk gate overrides (all false by default; set true for testing only) ---
 # risk:
 #   disable_magnitude_gate: false
@@ -32,11 +43,6 @@ pressure:
 #   disable_rate_gate: false
 #   disable_drawdown_gate: false
 #   disable_position_gate: false
-
-# --- Pressure system tuning ---
-# pressure:
-#   max_ingestion_rate_tps: 50
-#   backoff_scale_factor: 5.0
 
 # semantic_weights: (not yet wired — when added, extend LLMAdapter to accept
 #   per-category multipliers at construction time and parse them in Config.cpp
