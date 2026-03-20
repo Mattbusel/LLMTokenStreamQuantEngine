@@ -953,3 +953,59 @@ TEST(RiskManagerTest, test_try_evaluate_confidence_reason) {
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(*result, "confidence_below_minimum");
 }
+
+// ============================================================
+// Cycle 28: try_evaluate — remaining gates + consistency with evaluate_with_reason
+// ============================================================
+
+TEST(RiskManagerTest, test_try_evaluate_rate_limit_returns_reason) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 1;
+    RiskManager rm(cfg);
+
+    // First signal passes.
+    EXPECT_FALSE(rm.try_evaluate(make_signal()).has_value());
+
+    // Immediately fire another — rate limit.
+    auto result = rm.try_evaluate(make_signal());
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(*result, "rate_limit_exceeded");
+}
+
+TEST(RiskManagerTest, test_try_evaluate_position_limit_returns_reason) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.0;
+    pos.position_limit = 0.05;
+    pos.pnl            = 100.0;
+    pos.pnl_limit      = -100.0;
+    rm.update_position(pos);
+
+    TradeSignal s;
+    s.delta_bias_shift      = 0.1;
+    s.volatility_adjustment = 0.1;
+    s.spread_modifier       = 0.05;
+    s.confidence            = 0.8;
+    s.timestamp_ns          = 1;
+    auto result = rm.try_evaluate(s);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(*result, "position_limit");
+}
+
+TEST(RiskManagerTest, test_try_evaluate_agrees_with_evaluate_with_reason) {
+    // try_evaluate and evaluate_with_reason must agree on blocked/passed and reason.
+    RiskManager rm(default_config());
+    TradeSignal blocked_sig = make_signal(5.0, 0.1, 0.05, 0.8);
+
+    std::string reason_wr;
+    bool passed_wr = rm.evaluate_with_reason(blocked_sig, reason_wr);
+
+    // Reset rate-limit window before second call.
+    rm.reset();
+    auto result_te = rm.try_evaluate(blocked_sig);
+
+    EXPECT_FALSE(passed_wr);
+    EXPECT_TRUE(result_te.has_value());
+    EXPECT_EQ(reason_wr, *result_te)
+        << "try_evaluate and evaluate_with_reason must return the same reason";
+}
