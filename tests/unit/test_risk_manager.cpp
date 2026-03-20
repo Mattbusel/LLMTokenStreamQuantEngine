@@ -382,3 +382,20 @@ TEST(RiskManagerTest, test_risk_manager_update_config_tightens_and_relaxes_limit
     rm.update_config(default_config());
     EXPECT_TRUE(rm.evaluate(make_signal(0.9, 0.1, 0.05, 0.8)));
 }
+
+// ============================================================
+// Test 18: get_config() reflects the active configuration.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_get_config_reflects_update) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_config().max_bias_magnitude, default_config().max_bias_magnitude);
+
+    RiskManager::Config custom = default_config();
+    custom.max_bias_magnitude = 0.25;
+    custom.min_confidence     = 0.5;
+    rm.update_config(custom);
+
+    auto retrieved = rm.get_config();
+    EXPECT_DOUBLE_EQ(retrieved.max_bias_magnitude, 0.25);
+    EXPECT_DOUBLE_EQ(retrieved.min_confidence,     0.5);
+}
