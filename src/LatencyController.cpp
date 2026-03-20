@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <limits>
 #include <numeric>
+#include <sstream>
 #include <thread>
 
 namespace llmquant {
@@ -375,6 +376,22 @@ void LatencyController::recompute_composite() {
     } else if (c < 0.5) {
         backoff_multiplier_ = 1.0;
     }
+}
+
+std::string LatencyController::format_stats() const {
+    const auto stats = get_stats();
+    if (stats.measurements == 0) return "n=0 (no data)";
+    std::ostringstream oss;
+    oss << "n="        << stats.measurements
+        << " avg="     << stats.avg_latency.count()  << "µs"
+        << " p50="     << stats.p50_latency.count()  << "µs"
+        << " p95="     << stats.p95_latency.count()  << "µs"
+        << " p99="     << stats.p99_latency.count()  << "µs"
+        << " min="     << stats.min_latency.count()  << "µs"
+        << " max="     << stats.max_latency.count()  << "µs"
+        << " jitter="  << stats.jitter_ms            << "ms"
+        << " breaches=" << stats.target_breaches;
+    return oss.str();
 }
 
 } // namespace llmquant

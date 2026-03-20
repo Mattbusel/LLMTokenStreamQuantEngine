@@ -352,6 +352,19 @@ public:
      */
     double get_throughput_estimate() const noexcept;
 
+    /**
+     * @brief Return a human-readable summary of current latency statistics.
+     *
+     * Format: "n=<count> avg=<avg>µs p50=<p50>µs p95=<p95>µs p99=<p99>µs
+     *          min=<min>µs max=<max>µs jitter=<jitter>ms breaches=<breaches>"
+     * If no measurements have been recorded, returns "n=0 (no data)".
+     *
+     * Thread-safe (delegates to get_stats()).
+     *
+     * @return Single-line stats summary string.
+     */
+    std::string format_stats() const;
+
 private:
     Config config_;
     std::chrono::high_resolution_clock::time_point construction_time_{

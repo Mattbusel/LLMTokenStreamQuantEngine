@@ -979,5 +979,37 @@ TEST(LLMAdapterTest, test_count_neutral_tokens_basic) {
     EXPECT_EQ(adapter.count_neutral_tokens(), size_t{2});
 }
 
+TEST(LLMAdapterTest, test_get_cache_hit_rate_zero_before_processing) {
+    LLMAdapter adapter;
+    adapter.reset_stats();
+    EXPECT_DOUBLE_EQ(adapter.get_cache_hit_rate(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_cache_hit_rate_rises_after_repeated_lookup) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bull", {0.9, 0.9, 0.1, 0.8});
+    adapter.reset_stats();
+    // First lookup: cache miss; subsequent: cache hits.
+    adapter.map_token_to_weight("bull");
+    adapter.map_token_to_weight("bull");
+    adapter.map_token_to_weight("bull");
+    double rate = adapter.get_cache_hit_rate();
+    EXPECT_GT(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+}
+
+TEST(LLMAdapterTest, test_get_cache_hit_rate_in_range) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("tok", {0.5, 0.7, 0.2, 0.4});
+    adapter.reset_stats();
+    for (int i = 0; i < 10; ++i)
+        adapter.map_token_to_weight("tok");
+    double rate = adapter.get_cache_hit_rate();
+    EXPECT_GE(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+}
+
 } // namespace
 } // namespace llmquant

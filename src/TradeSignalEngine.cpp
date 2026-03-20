@@ -250,6 +250,9 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     double old_avg = stats_.avg_signal_strength.load();
     // Welford running mean: mean_n = mean_{n-1} + (x - mean_{n-1}) / n
     stats_.avg_signal_strength = old_avg + (std::fabs(signal.delta_bias_shift) - old_avg) / static_cast<double>(n);
+    // Welford running mean for signal_quality.
+    double old_q = stats_.avg_signal_quality.load();
+    stats_.avg_signal_quality  = old_q + (signal.signal_quality - old_q) / static_cast<double>(n);
     last_signal_time_ = now;
 }
 
@@ -289,6 +292,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.noise_filtered.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
+    stats_.avg_signal_quality.store(0.0, std::memory_order_relaxed);
     last_signal_quality_.store(0.0, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(0, std::memory_order_relaxed);
     reset_time_ = std::chrono::high_resolution_clock::now();

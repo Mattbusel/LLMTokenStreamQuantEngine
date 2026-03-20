@@ -151,6 +151,43 @@ public:
      */
     bool is_running() const noexcept { return running_.load(std::memory_order_relaxed); }
 
+    /**
+     * @brief Return the number of source tokens currently loaded.
+     *
+     * Thread-safe: acquires load_mutex_.
+     *
+     * @return Token count in the source token list.
+     */
+    size_t get_token_count() const {
+        std::lock_guard<std::mutex> lk(load_mutex_);
+        return source_tokens_.size();
+    }
+
+    /**
+     * @brief Return the total number of tokens emitted since construction or last reset_stats().
+     *
+     * Convenience alias for get_stats().tokens_emitted.  Thread-safe (atomic read).
+     *
+     * @return Tokens emitted so far.
+     */
+    uint64_t get_tokens_emitted() const noexcept {
+        return stats_.tokens_emitted.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Update the inter-token emission interval at runtime.
+     *
+     * The change takes effect at the next sleep in the worker thread.
+     * Thread-safe: config_.token_interval is only read by the worker while
+     * the field is held behind the load_mutex_.
+     *
+     * @param interval New minimum time between consecutive token emissions.
+     */
+    void set_token_interval(std::chrono::microseconds interval) {
+        std::lock_guard<std::mutex> lk(load_mutex_);
+        config_.token_interval = interval;
+    }
+
 private:
     /**
      * @brief Lock-free SPSC ring buffer for token strings.
@@ -233,7 +270,7 @@ private:
     TokenCallback callback_;
     RingBuffer ring_buffer_;
     std::vector<std::string> source_tokens_;   // master token list (filled once, read-only after load)
-    std::mutex load_mutex_;                    // protects source_tokens_ during load
+    mutable std::mutex load_mutex_;            // protects source_tokens_ during load
     std::atomic<bool> running_{false};
     std::atomic<uint64_t> current_sequence_{0};
     std::thread worker_thread_;

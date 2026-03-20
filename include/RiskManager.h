@@ -250,6 +250,15 @@ public:
     bool is_rate_limited() const;
 
     /**
+     * @brief Return elapsed milliseconds since the start of the current rate-limit window.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Elapsed time in the current rate window in milliseconds.
+     */
+    double get_window_time_elapsed_ms() const;
+
+    /**
      * @brief Return the remaining drawdown budget in the current window.
      *
      * Computes max_drawdown - |cumulative_bias_|, clamped to [0, max_drawdown].
@@ -401,6 +410,31 @@ public:
      * @return GateStatus snapshot.
      */
     GateStatus get_gate_status() const;
+
+    /**
+     * @brief Per-gate signal block counts since construction or last reset_stats().
+     *
+     * Each field holds the number of signals rejected by that specific gate.
+     * Note: pnl_count is a subset of position_count (both are incremented on PnL breach).
+     */
+    struct BlockedByGate {
+        uint64_t magnitude{0};
+        uint64_t confidence{0};
+        uint64_t rate{0};
+        uint64_t drawdown{0};
+        uint64_t position{0};
+        uint64_t pnl{0};
+    };
+
+    /**
+     * @brief Return the number of signals blocked by each individual risk gate.
+     *
+     * Provides finer-grained visibility than get_blocked_rate(), which only
+     * returns an aggregate.  Reads atomic counters with relaxed ordering.
+     *
+     * @return BlockedByGate snapshot.
+     */
+    BlockedByGate get_blocked_by_gate() const noexcept;
 
     /**
      * @brief Atomically replace the risk threshold configuration.

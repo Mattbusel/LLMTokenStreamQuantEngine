@@ -117,6 +117,8 @@ public:
         std::atomic<uint64_t> noise_filtered{0};
         std::atomic<double>   avg_signal_strength{0.0};
         std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
+        /// Welford running mean of signal_quality across emitted signals.
+        std::atomic<double>   avg_signal_quality{0.0};
 
         Stats() = default;
 
@@ -129,7 +131,8 @@ public:
             , tokens_processed{other.tokens_processed.load()}
             , noise_filtered{other.noise_filtered.load()}
             , avg_signal_strength{other.avg_signal_strength.load()}
-            , peak_bias{other.peak_bias.load()} {}
+            , peak_bias{other.peak_bias.load()}
+            , avg_signal_quality{other.avg_signal_quality.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
         Stats& operator=(const Stats& other) {
@@ -142,6 +145,7 @@ public:
                 noise_filtered.store(other.noise_filtered.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
                 peak_bias.store(other.peak_bias.load());
+                avg_signal_quality.store(other.avg_signal_quality.load());
             }
             return *this;
         }
@@ -319,6 +323,17 @@ public:
         uint64_t supp = stats_.signals_suppressed.load(std::memory_order_relaxed);
         uint64_t total = gen + supp;
         return (total == 0) ? 0.0 : static_cast<double>(supp) / static_cast<double>(total);
+    }
+
+    /**
+     * @brief Return the running average signal_quality across all emitted signals.
+     *
+     * Computed as a Welford running mean updated in emit_signal().
+     * Returns 0.0 if no signals have been emitted yet.
+     * Thread-safe (atomic read).
+     */
+    double get_avg_signal_quality() const noexcept {
+        return stats_.avg_signal_quality.load(std::memory_order_relaxed);
     }
 
     /**

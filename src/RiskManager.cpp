@@ -203,6 +203,17 @@ void RiskManager::enable_all_gates() {
     config_.disable_position_gate = false;
 }
 
+RiskManager::BlockedByGate RiskManager::get_blocked_by_gate() const noexcept {
+    BlockedByGate bg;
+    bg.magnitude  = stats_.signals_blocked_magnitude.load(std::memory_order_relaxed);
+    bg.confidence = stats_.signals_blocked_confidence.load(std::memory_order_relaxed);
+    bg.rate       = stats_.signals_blocked_rate.load(std::memory_order_relaxed);
+    bg.drawdown   = stats_.signals_blocked_drawdown.load(std::memory_order_relaxed);
+    bg.position   = stats_.signals_blocked_position.load(std::memory_order_relaxed);
+    bg.pnl        = stats_.signals_blocked_pnl.load(std::memory_order_relaxed);
+    return bg;
+}
+
 RiskManager::GateStatus RiskManager::get_gate_status() const {
     std::lock_guard<std::mutex> lock(mutex_);
     GateStatus gs;
@@ -310,6 +321,14 @@ double RiskManager::get_net_exposure() const {
 bool RiskManager::is_rate_limited() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return signals_in_window_ >= config_.max_signals_per_second;
+}
+
+double RiskManager::get_window_time_elapsed_ms() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto now = std::chrono::high_resolution_clock::now();
+    return static_cast<double>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - rate_window_start_).count());
 }
 
 double RiskManager::get_cumulative_bias() const {

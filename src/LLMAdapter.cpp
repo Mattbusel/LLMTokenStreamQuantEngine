@@ -246,6 +246,13 @@ size_t LLMAdapter::count_neutral_tokens() const {
     return count;
 }
 
+double LLMAdapter::get_avg_confidence() const {
+    if (token_weights_.empty()) return 0.0;
+    double sum = 0.0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; sum += wt.confidence_score; }
+    return sum / static_cast<double>(token_weights_.size());
+}
+
 std::vector<std::string> LLMAdapter::get_all_token_keys() const {
     std::vector<std::string> keys;
     keys.reserve(token_weights_.size());

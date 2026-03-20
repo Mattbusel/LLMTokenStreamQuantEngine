@@ -1342,3 +1342,57 @@ TEST(RiskManagerTest, test_is_rate_limited_true_when_window_full) {
     EXPECT_TRUE(rm.is_rate_limited())
         << "is_rate_limited must be true when max_signals_per_second is reached";
 }
+
+TEST(RiskManagerTest, test_get_blocked_by_gate_all_zero_initially) {
+    RiskManager rm(default_config());
+    auto bg = rm.get_blocked_by_gate();
+    EXPECT_EQ(bg.magnitude,  uint64_t{0});
+    EXPECT_EQ(bg.confidence, uint64_t{0});
+    EXPECT_EQ(bg.rate,       uint64_t{0});
+    EXPECT_EQ(bg.drawdown,   uint64_t{0});
+    EXPECT_EQ(bg.position,   uint64_t{0});
+    EXPECT_EQ(bg.pnl,        uint64_t{0});
+}
+
+TEST(RiskManagerTest, test_get_blocked_by_gate_magnitude_increments) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude = 0.1;
+    RiskManager rm(cfg);
+    TradeSignal sig;
+    sig.delta_bias_shift = 5.0;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier = 0.0;
+    sig.confidence = 0.9;
+    rm.evaluate(sig);
+    auto bg = rm.get_blocked_by_gate();
+    EXPECT_GE(bg.magnitude, uint64_t{1});
+}
+
+TEST(RiskManagerTest, test_get_blocked_by_gate_confidence_increments) {
+    RiskManager::Config cfg = default_config();
+    cfg.min_confidence = 0.9;
+    RiskManager rm(cfg);
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier = 0.0;
+    sig.confidence = 0.5;
+    rm.evaluate(sig);
+    auto bg = rm.get_blocked_by_gate();
+    EXPECT_GE(bg.confidence, uint64_t{1});
+}
+
+TEST(RiskManagerTest, test_get_blocked_by_gate_resets_with_reset_stats) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude = 0.1;
+    RiskManager rm(cfg);
+    TradeSignal sig;
+    sig.delta_bias_shift = 5.0;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier = 0.0;
+    sig.confidence = 0.9;
+    rm.evaluate(sig);
+    rm.reset_stats();
+    auto bg = rm.get_blocked_by_gate();
+    EXPECT_EQ(bg.magnitude, uint64_t{0});
+}

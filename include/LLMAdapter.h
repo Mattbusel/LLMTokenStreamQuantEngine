@@ -157,6 +157,16 @@ public:
     size_t count_neutral_tokens() const;
 
     /**
+     * @brief Return the mean confidence_score across all tokens in the dictionary.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Average confidence_score in [0.0, 1.0].
+     */
+    double get_avg_confidence() const;
+
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this
@@ -329,6 +339,21 @@ public:
         stats_.tokens_processed.store(0, std::memory_order_relaxed);
         stats_.cache_hits.store(0, std::memory_order_relaxed);
         stats_.cache_misses.store(0, std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the fraction of token lookups served from the cache, in [0.0, 1.0].
+     *
+     * Returns 0.0 if no tokens have been processed yet.
+     * Thread-safe: reads atomic counters with relaxed ordering.
+     *
+     * @return Cache hit rate in [0.0, 1.0].
+     */
+    double get_cache_hit_rate() const noexcept {
+        uint64_t processed = stats_.tokens_processed.load(std::memory_order_relaxed);
+        if (processed == 0) return 0.0;
+        return static_cast<double>(stats_.cache_hits.load(std::memory_order_relaxed))
+             / static_cast<double>(processed);
     }
 
     /**
