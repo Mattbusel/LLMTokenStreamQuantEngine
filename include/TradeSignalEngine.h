@@ -157,6 +157,17 @@ public:
     void process_semantic_weight(const SemanticWeight& weight);
 
     /**
+     * @brief Process a batch of SemanticWeights in sequence.
+     *
+     * Equivalent to calling process_semantic_weight() for each element in
+     * order.  Useful in backtest mode where an entire token sequence is
+     * available ahead of time.
+     *
+     * @param weights Ordered sequence of SemanticWeights to process.
+     */
+    void process_batch(const std::vector<SemanticWeight>& weights);
+
+    /**
      * @brief Register the callback invoked when a signal is emitted.
      *
      * @param callback Callable matching TradeSignalCallback; stored by value.

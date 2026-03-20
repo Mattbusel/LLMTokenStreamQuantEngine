@@ -124,6 +124,30 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
     return true;
 }
 
+bool RiskManager::evaluate_with_reason(const TradeSignal& signal, std::string& reason) {
+    reason.clear();
+    // Temporarily wrap the alert callback to capture the rejection reason,
+    // then restore the original after evaluate() returns.
+    AlertCallback saved_cb;
+    std::string captured;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        saved_cb = alert_cb_;
+        AlertCallback sc_copy = saved_cb;
+        alert_cb_ = [&captured, sc_copy](const std::string& r, const TradeSignal& s) {
+            captured = r;
+            if (sc_copy) sc_copy(r, s);
+        };
+    }
+    bool result = evaluate(signal);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        alert_cb_ = std::move(saved_cb);
+    }
+    reason = std::move(captured);
+    return result;
+}
+
 void RiskManager::set_alert_callback(AlertCallback cb) {
     std::lock_guard<std::mutex> lock(mutex_);
     alert_cb_ = std::move(cb);

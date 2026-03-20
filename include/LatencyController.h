@@ -96,6 +96,15 @@ public:
     void reset_stats();
 
     /**
+     * @brief Return the configured target latency.
+     *
+     * @return Target latency as set at construction time.
+     */
+    std::chrono::microseconds get_target_latency() const noexcept {
+        return config_.target_latency;
+    }
+
+    /**
      * @brief Profile hook: marks the beginning of token-processing for the next
      *        start_measurement() call. No-op if profiling is disabled.
      */

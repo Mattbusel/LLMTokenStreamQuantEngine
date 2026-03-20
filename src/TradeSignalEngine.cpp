@@ -265,6 +265,12 @@ void TradeSignalEngine::clear_output_sinks() {
     filtered_sinks_.clear();
 }
 
+void TradeSignalEngine::process_batch(const std::vector<SemanticWeight>& weights) {
+    for (const auto& w : weights) {
+        process_semantic_weight(w);
+    }
+}
+
 void TradeSignalEngine::flush_sinks() {
     for (const auto& sink : output_sinks_) {
         try { sink->flush(); } catch (...) {}

@@ -131,6 +131,19 @@ public:
     bool evaluate(const TradeSignal& signal);
 
     /**
+     * @brief Evaluate a signal and return the decision with a rejection reason.
+     *
+     * Identical logic to evaluate(), but also populates a human-readable
+     * reason string on rejection.  The reason is empty on pass.
+     *
+     * @param signal The TradeSignal to evaluate.
+     * @param reason Output parameter: populated with the rejection reason on failure,
+     *               cleared on pass.
+     * @return true if the signal passes all checks; false if blocked.
+     */
+    bool evaluate_with_reason(const TradeSignal& signal, std::string& reason);
+
+    /**
      * @brief Register a callback to be invoked when a signal is blocked.
      *
      * @warning Callbacks are invoked OUTSIDE the evaluate() mutex. Callbacks
