@@ -169,3 +169,40 @@ TEST(PrometheusExporterTest, test_prom_exporter_concurrent_scrapes_no_crash) {
     // Neither connection should have crashed the server; both may have received data.
     SUCCEED();
 }
+
+// ---------------------------------------------------------------------------
+// Static format helpers
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_gauge_no_help_produces_metric_line) {
+    auto result = PrometheusExporter::format_gauge("my_gauge", 3.14);
+    EXPECT_NE(result.find("my_gauge"), std::string::npos);
+    EXPECT_NE(result.find("3.14"), std::string::npos);
+    // Without help, no HELP/TYPE comments should be emitted.
+    EXPECT_EQ(result.find("# HELP"), std::string::npos);
+}
+
+TEST(PrometheusExporterTest, test_format_gauge_with_help_includes_type_comment) {
+    auto result = PrometheusExporter::format_gauge("llmquant_bias", 0.5, "Accumulated bias");
+    EXPECT_NE(result.find("# HELP llmquant_bias"), std::string::npos);
+    EXPECT_NE(result.find("# TYPE llmquant_bias gauge"), std::string::npos);
+    EXPECT_NE(result.find("llmquant_bias 0.5"), std::string::npos);
+}
+
+TEST(PrometheusExporterTest, test_format_counter_produces_correct_output) {
+    auto result = PrometheusExporter::format_counter("llmquant_signals_total", 42u, "Signal count");
+    EXPECT_NE(result.find("# TYPE llmquant_signals_total counter"), std::string::npos);
+    EXPECT_NE(result.find("llmquant_signals_total 42"), std::string::npos);
+}
+
+TEST(PrometheusExporterTest, test_format_histogram_includes_bucket_sum_count) {
+    using Bucket = PrometheusExporter::HistogramBucket;
+    std::vector<Bucket> buckets = {{1.0, 10}, {10.0, 50}, {100.0, 90}};
+    auto result = PrometheusExporter::format_histogram("llmquant_latency_us", buckets,
+                                                        500.0, 100u, "Latency histogram");
+    EXPECT_NE(result.find("_bucket{le=\"1"), std::string::npos);
+    EXPECT_NE(result.find("_bucket{le=\"+Inf\"} 100"), std::string::npos);
+    EXPECT_NE(result.find("_sum 500"), std::string::npos);
+    EXPECT_NE(result.find("_count 100"), std::string::npos);
+    EXPECT_NE(result.find("# TYPE llmquant_latency_us histogram"), std::string::npos);
+}

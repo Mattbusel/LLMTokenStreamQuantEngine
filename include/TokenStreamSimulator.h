@@ -131,6 +131,26 @@ public:
      */
     const Stats& get_stats() const { return stats_; }
 
+    /**
+     * @brief Reset all emission statistics to zero.
+     *
+     * Useful at session boundaries to restart counters without stopping
+     * and restarting the simulator. Thread-safe: each counter is atomic.
+     */
+    void reset_stats() noexcept {
+        stats_.tokens_emitted.store(0, std::memory_order_relaxed);
+        stats_.avg_latency_us.store(0, std::memory_order_relaxed);
+        stats_.max_latency_us.store(0, std::memory_order_relaxed);
+        stats_.ring_buffer_drops.store(0, std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Returns true while the background worker thread is active.
+     *
+     * @return true between a successful start() and the completion of stop().
+     */
+    bool is_running() const noexcept { return running_.load(std::memory_order_relaxed); }
+
 private:
     /**
      * @brief Lock-free SPSC ring buffer for token strings.

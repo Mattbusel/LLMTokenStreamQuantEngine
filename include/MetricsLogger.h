@@ -111,6 +111,18 @@ public:
      */
     void flush();
 
+    /**
+     * @brief Return the total number of log entries written since construction.
+     *
+     * Thread-safe (atomic load). Counts every call to any log_* method that
+     * successfully writes an entry.
+     *
+     * @return Total log entry count.
+     */
+    uint64_t get_log_entry_count() const noexcept {
+        return log_entries_.load(std::memory_order_relaxed);
+    }
+
 private:
     void initialize_loggers();
     void write_csv_header();

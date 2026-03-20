@@ -1,4 +1,6 @@
 #include "PrometheusExporter.h"
+#include <cmath>
+#include <sstream>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -200,6 +202,51 @@ void PrometheusExporter::server_thread() {
     }
 
     running_ = false;
+}
+
+// ---------------------------------------------------------------------------
+// Static text-format helpers
+// ---------------------------------------------------------------------------
+
+std::string PrometheusExporter::format_gauge(const std::string& name, double value,
+                                              const std::string& help) {
+    std::ostringstream ss;
+    if (!help.empty()) {
+        ss << "# HELP " << name << " " << help << "\n";
+        ss << "# TYPE " << name << " gauge\n";
+    }
+    ss << name << " " << value << "\n";
+    return ss.str();
+}
+
+std::string PrometheusExporter::format_counter(const std::string& name, uint64_t value,
+                                                const std::string& help) {
+    std::ostringstream ss;
+    if (!help.empty()) {
+        ss << "# HELP " << name << " " << help << "\n";
+        ss << "# TYPE " << name << " counter\n";
+    }
+    ss << name << " " << value << "\n";
+    return ss.str();
+}
+
+std::string PrometheusExporter::format_histogram(const std::string& name,
+                                                   const std::vector<HistogramBucket>& buckets,
+                                                   double sum_us, uint64_t count,
+                                                   const std::string& help) {
+    std::ostringstream ss;
+    if (!help.empty()) {
+        ss << "# HELP " << name << " " << help << "\n";
+        ss << "# TYPE " << name << " histogram\n";
+    }
+    for (const auto& b : buckets) {
+        if (std::isinf(b.upper_bound_us)) continue;  // +Inf is emitted explicitly below
+        ss << name << "_bucket{le=\"" << b.upper_bound_us << "\"} " << b.count << "\n";
+    }
+    ss << name << "_bucket{le=\"+Inf\"} " << count << "\n";
+    ss << name << "_sum " << sum_us << "\n";
+    ss << name << "_count " << count << "\n";
+    return ss.str();
 }
 
 } // namespace llmquant

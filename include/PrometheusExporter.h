@@ -3,8 +3,11 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <limits>
+#include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace llmquant {
 
@@ -75,6 +78,68 @@ public:
      * @return Running state.
      */
     bool is_running() const { return running_.load(); }
+
+    // -----------------------------------------------------------------------
+    // Static text-format helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * @brief Format a single Prometheus gauge line with optional HELP/TYPE comments.
+     *
+     * Output example:
+     * @code
+     * # HELP llmquant_bias Current accumulated bias
+     * # TYPE llmquant_bias gauge
+     * llmquant_bias 0.42
+     * @endcode
+     *
+     * @param name  Metric name (must be a valid Prometheus identifier).
+     * @param value Current gauge value.
+     * @param help  Optional HELP string (omitted if empty).
+     * @return Formatted Prometheus text block (ends with newline).
+     */
+    static std::string format_gauge(const std::string& name, double value,
+                                     const std::string& help = "");
+
+    /**
+     * @brief Format a single Prometheus counter line with optional HELP/TYPE comments.
+     *
+     * @param name  Metric name.
+     * @param value Monotonically increasing counter value.
+     * @param help  Optional HELP string (omitted if empty).
+     * @return Formatted Prometheus text block (ends with newline).
+     */
+    static std::string format_counter(const std::string& name, uint64_t value,
+                                       const std::string& help = "");
+
+    /**
+     * @brief One histogram bucket entry (upper bound + cumulative count).
+     *
+     * Compatible with LatencyController::HistogramBucket — same field names
+     * and semantics — but declared here to avoid a header dependency loop.
+     */
+    struct HistogramBucket {
+        double   upper_bound_us;
+        uint64_t count{0};
+    };
+
+    /**
+     * @brief Format a Prometheus histogram metric block from pre-computed buckets.
+     *
+     * Emits `_bucket`, `_sum`, and `_count` lines as required by the exposition
+     * format.  The +Inf bucket is always appended automatically using `count`.
+     *
+     * @param name    Base metric name (e.g. "llmquant_latency_us").
+     * @param buckets Ordered bucket vector (must NOT include a +Inf entry).
+     * @param sum_us  Total sum of all observed values (in microseconds).
+     * @param count   Total number of observations (== +Inf bucket count).
+     * @param help    Optional HELP string (omitted if empty).
+     * @return Formatted Prometheus histogram text block (ends with newline).
+     */
+    static std::string format_histogram(const std::string& name,
+                                         const std::vector<HistogramBucket>& buckets,
+                                         double sum_us, uint64_t count,
+                                         const std::string& help = "");
 
 private:
     void server_thread();

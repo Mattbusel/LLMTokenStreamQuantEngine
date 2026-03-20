@@ -201,5 +201,41 @@ TEST(TokenStreamSimulatorTest, test_token_stream_simulator_double_start_is_idemp
     sim.stop();
 }
 
+// ---------------------------------------------------------------------------
+// reset_stats and is_running
+// ---------------------------------------------------------------------------
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_is_running_false_before_start) {
+    TokenStreamSimulator sim(make_config());
+    EXPECT_FALSE(sim.is_running());
+}
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_is_running_true_after_start) {
+    TokenStreamSimulator sim(make_config(50000));
+    sim.load_tokens_from_memory({"tok"});
+    sim.set_token_callback([](const Token&) {});
+    sim.start();
+    EXPECT_TRUE(sim.is_running());
+    sim.stop();
+    EXPECT_FALSE(sim.is_running());
+}
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_reset_stats_zeros_emitted_count) {
+    TokenStreamSimulator sim(make_config(1000));
+    sim.load_tokens_from_memory({"a", "b", "c"});
+    std::atomic<int> count{0};
+    sim.set_token_callback([&count](const Token&) { ++count; });
+    sim.start();
+    // Wait until at least one token is emitted.
+    for (int i = 0; i < 100 && count.load() == 0; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    sim.stop();
+
+    EXPECT_GT(sim.get_stats().tokens_emitted.load(), 0u);
+    sim.reset_stats();
+    EXPECT_EQ(sim.get_stats().tokens_emitted.load(), 0u);
+    EXPECT_EQ(sim.get_stats().ring_buffer_drops.load(), 0u);
+}
+
 } // namespace
 } // namespace llmquant
