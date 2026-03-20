@@ -230,6 +230,16 @@ public:
     double get_cumulative_bias() const;
 
     /**
+     * @brief Return the current net position value directly.
+     *
+     * Equivalent to get_position().net_position but avoids copying the entire
+     * PositionState struct.  Thread-safe (acquires mutex_).
+     *
+     * @return Current net_position from the most recent update_position() call.
+     */
+    double get_net_exposure() const;
+
+    /**
      * @brief Return the remaining drawdown budget in the current window.
      *
      * Computes max_drawdown - |cumulative_bias_|, clamped to [0, max_drawdown].
@@ -357,6 +367,32 @@ public:
     void enable_all_gates();
 
     /**
+     * @brief Snapshot of which risk gates are currently enabled.
+     *
+     * A gate is enabled when its corresponding disable_*_gate flag is false.
+     * Disabled gates are bypassed and let every signal through.
+     */
+    struct GateStatus {
+        bool magnitude_gate{true};   ///< true = gate is active (not bypassed).
+        bool confidence_gate{true};
+        bool rate_gate{true};
+        bool drawdown_gate{true};
+        bool position_gate{true};
+    };
+
+    /**
+     * @brief Return the current enabled/disabled state of every risk gate.
+     *
+     * Useful for health dashboards, observability endpoints, and tests that
+     * verify gate configuration changes have taken effect.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return GateStatus snapshot.
+     */
+    GateStatus get_gate_status() const;
+
+    /**
      * @brief Atomically replace the risk threshold configuration.
      *
      * Safe to call from any thread; takes the internal mutex.  Gate disable
@@ -439,6 +475,23 @@ public:
      * @return Vector of bool; true = passed, false = blocked.
      */
     std::vector<bool> evaluate_batch(const std::vector<TradeSignal>& signals);
+
+    /**
+     * @brief Return the fraction of the absolute position limit currently consumed.
+     *
+     * Computed as |net_position| / position_limit, clamped to [0.0, 1.0].
+     * Returns 0.0 if position_limit is zero.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Position utilization in [0.0, 1.0].
+     */
+    double get_position_utilization() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (position_.position_limit <= 0.0) return 0.0;
+        double util = std::fabs(position_.net_position) / position_.position_limit;
+        return util > 1.0 ? 1.0 : util;
+    }
 
 private:
     bool check_magnitude(const TradeSignal& signal);

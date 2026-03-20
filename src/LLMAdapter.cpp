@@ -228,6 +228,18 @@ size_t LLMAdapter::get_dictionary_size() const {
     return token_weights_.size();
 }
 
+size_t LLMAdapter::count_bullish_tokens() const {
+    size_t count = 0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.sentiment_score > 0.0) ++count; }
+    return count;
+}
+
+size_t LLMAdapter::count_bearish_tokens() const {
+    size_t count = 0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.sentiment_score < 0.0) ++count; }
+    return count;
+}
+
 std::vector<std::string> LLMAdapter::get_all_token_keys() const {
     std::vector<std::string> keys;
     keys.reserve(token_weights_.size());
@@ -256,6 +268,13 @@ void LLMAdapter::clear_custom_mappings() {
 
 bool LLMAdapter::contains_token(const std::string& token) const {
     return token_weights_.count(normalize_token(token)) > 0;
+}
+
+bool LLMAdapter::contains_any_of(const std::vector<std::string>& tokens) const {
+    for (const auto& tok : tokens) {
+        if (token_weights_.count(normalize_token(tok)) > 0) return true;
+    }
+    return false;
 }
 
 bool LLMAdapter::remove_token_mapping(const std::string& token) {

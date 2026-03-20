@@ -340,8 +340,22 @@ public:
      */
     std::vector<HistogramBucket> histogram_buckets() const;
 
+    /**
+     * @brief Estimate measurement throughput since construction or last reset_stats().
+     *
+     * Computed as total_measurements_ / elapsed_seconds since construction.
+     * Returns 0.0 if less than 1 ms has elapsed (avoids divide-by-near-zero).
+     *
+     * Thread-safe (atomic read + construction_time_ written only at construction).
+     *
+     * @return Measurements recorded per second.
+     */
+    double get_throughput_estimate() const noexcept;
+
 private:
     Config config_;
+    std::chrono::high_resolution_clock::time_point construction_time_{
+        std::chrono::high_resolution_clock::now()};
 
     std::atomic<uint64_t> total_measurements_{0};
     std::atomic<uint64_t> total_latency_us_{0};

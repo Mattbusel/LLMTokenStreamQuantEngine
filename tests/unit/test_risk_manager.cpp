@@ -1238,3 +1238,89 @@ TEST(RiskManagerTest, test_get_signals_per_second_non_negative_after_passing) {
     EXPECT_GE(rm.get_signals_per_second(), 0.0)
         << "get_signals_per_second must be >= 0 after signals pass";
 }
+
+TEST(RiskManagerTest, test_get_position_utilization_zero_initially) {
+    RiskManager rm(default_config());
+    // Default position is 0.0 with limit 1.0, so utilization = 0.
+    EXPECT_DOUBLE_EQ(rm.get_position_utilization(), 0.0)
+        << "position utilization must be 0 when net_position is 0";
+}
+
+TEST(RiskManagerTest, test_get_position_utilization_at_limit) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState ps;
+    ps.net_position   = 1.0;
+    ps.position_limit = 1.0;
+    ps.pnl            = 0.0;
+    ps.pnl_limit      = -10.0;
+    rm.update_position(ps);
+    EXPECT_DOUBLE_EQ(rm.get_position_utilization(), 1.0)
+        << "position utilization must be 1.0 when net_position == position_limit";
+}
+
+TEST(RiskManagerTest, test_get_position_utilization_half_limit) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState ps;
+    ps.net_position   = 0.5;
+    ps.position_limit = 1.0;
+    ps.pnl            = 0.0;
+    ps.pnl_limit      = -10.0;
+    rm.update_position(ps);
+    EXPECT_DOUBLE_EQ(rm.get_position_utilization(), 0.5)
+        << "position utilization must be 0.5 when net_position is half the limit";
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 37: get_gate_status()
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_get_gate_status_all_enabled_by_default) {
+    RiskManager rm(default_config());
+    auto gs = rm.get_gate_status();
+    EXPECT_TRUE(gs.magnitude_gate)  << "magnitude gate must be enabled by default";
+    EXPECT_TRUE(gs.confidence_gate) << "confidence gate must be enabled by default";
+    EXPECT_TRUE(gs.rate_gate)       << "rate gate must be enabled by default";
+    EXPECT_TRUE(gs.drawdown_gate)   << "drawdown gate must be enabled by default";
+    EXPECT_TRUE(gs.position_gate)   << "position gate must be enabled by default";
+}
+
+TEST(RiskManagerTest, test_get_gate_status_all_false_after_disable_all_gates) {
+    RiskManager rm(default_config());
+    rm.disable_all_gates();
+    auto gs = rm.get_gate_status();
+    EXPECT_FALSE(gs.magnitude_gate);
+    EXPECT_FALSE(gs.confidence_gate);
+    EXPECT_FALSE(gs.rate_gate);
+    EXPECT_FALSE(gs.drawdown_gate);
+    EXPECT_FALSE(gs.position_gate);
+}
+
+TEST(RiskManagerTest, test_get_gate_status_restored_after_enable_all_gates) {
+    RiskManager rm(default_config());
+    rm.disable_all_gates();
+    rm.enable_all_gates();
+    auto gs = rm.get_gate_status();
+    EXPECT_TRUE(gs.magnitude_gate);
+    EXPECT_TRUE(gs.confidence_gate);
+    EXPECT_TRUE(gs.rate_gate);
+    EXPECT_TRUE(gs.drawdown_gate);
+    EXPECT_TRUE(gs.position_gate);
+}
+
+TEST(RiskManagerTest, test_get_net_exposure_default_is_zero) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_net_exposure(), 0.0)
+        << "net_exposure must be 0 before any position update";
+}
+
+TEST(RiskManagerTest, test_get_net_exposure_reflects_update_position) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState ps;
+    ps.net_position    = 3.5;
+    ps.position_limit  = 10.0;
+    ps.pnl             = 0.0;
+    ps.pnl_limit       = -5.0;
+    rm.update_position(ps);
+    EXPECT_DOUBLE_EQ(rm.get_net_exposure(), 3.5)
+        << "get_net_exposure must reflect the last update_position call";
+}

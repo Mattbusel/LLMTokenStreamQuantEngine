@@ -934,5 +934,20 @@ TEST(LatencyControllerTest, test_get_health_state_backoff_rises_under_pressure) 
         << "backoff_multiplier must rise above 1.0 under full pressure";
 }
 
+TEST(LatencyControllerTest, test_get_throughput_estimate_zero_initially) {
+    LatencyController lc(make_config());
+    // No measurements yet — throughput must be 0.
+    EXPECT_DOUBLE_EQ(lc.get_throughput_estimate(), 0.0)
+        << "throughput estimate must be 0 when no measurements have been recorded";
+}
+
+TEST(LatencyControllerTest, test_get_throughput_estimate_non_negative_after_recording) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 10; ++i)
+        lc.record_latency(std::chrono::microseconds{5});
+    EXPECT_GE(lc.get_throughput_estimate(), 0.0)
+        << "throughput estimate must be >= 0 after recording measurements";
+}
+
 } // namespace
 } // namespace llmquant

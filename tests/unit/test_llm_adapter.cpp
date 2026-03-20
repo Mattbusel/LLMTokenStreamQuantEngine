@@ -924,5 +924,51 @@ TEST(LLMAdapterTest, test_batch_map_tokens_unknown_token_returns_neutral) {
     EXPECT_DOUBLE_EQ(batch[0].sentiment_score, 0.0);
 }
 
+TEST(LLMAdapterTest, test_count_bullish_tokens_basic) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bull", {0.8, 0.9, 0.1, 0.7});
+    adapter.add_token_mapping("neutral", {0.0, 0.5, 0.1, 0.0});
+    adapter.add_token_mapping("bear",   {-0.6, 0.8, 0.2, -0.5});
+    EXPECT_EQ(adapter.count_bullish_tokens(), size_t{1});
+    EXPECT_EQ(adapter.count_bearish_tokens(), size_t{1});
+}
+
+TEST(LLMAdapterTest, test_count_bullish_bearish_zero_when_empty) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_EQ(adapter.count_bullish_tokens(), size_t{0});
+    EXPECT_EQ(adapter.count_bearish_tokens(), size_t{0});
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 37: contains_any_of()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_contains_any_of_empty_list_returns_false) {
+    LLMAdapter adapter;
+    EXPECT_FALSE(adapter.contains_any_of({}))
+        << "contains_any_of must return false for an empty input list";
+}
+
+TEST(LLMAdapterTest, test_contains_any_of_known_token_returns_true) {
+    LLMAdapter adapter;
+    EXPECT_TRUE(adapter.contains_any_of({"completely_unknown_xyz", "bullish"}))
+        << "contains_any_of must return true when at least one token is in the dict";
+}
+
+TEST(LLMAdapterTest, test_contains_any_of_all_unknown_returns_false) {
+    LLMAdapter adapter;
+    EXPECT_FALSE(adapter.contains_any_of({"xyz_unknown_1", "xyz_unknown_2"}))
+        << "contains_any_of must return false when no tokens are in the dictionary";
+}
+
+TEST(LLMAdapterTest, test_contains_any_of_short_circuits_on_first_match) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("first", {0.5, 0.8, 0.2, 0.4});
+    EXPECT_TRUE(adapter.contains_any_of({"first", "second"}));
+}
+
 } // namespace
 } // namespace llmquant

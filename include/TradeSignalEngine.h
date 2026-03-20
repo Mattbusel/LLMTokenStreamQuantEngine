@@ -277,6 +277,18 @@ public:
     }
 
     /**
+     * @brief Return the directional sign of the current accumulated bias.
+     *
+     * @return +1 if accumulated bias > 0 (bullish), -1 if < 0 (bearish), 0 if zero.
+     */
+    int get_bias_direction() const noexcept {
+        double b = accumulated_bias_.load(std::memory_order_relaxed);
+        if (b > 0.0) return  1;
+        if (b < 0.0) return -1;
+        return 0;
+    }
+
+    /**
      * @brief Compute the fraction of weight-processing calls that were suppressed.
      *
      * Returns signals_suppressed / (signals_generated + signals_suppressed), or
@@ -397,6 +409,34 @@ public:
      * @return Noise filter rate in [0.0, 1.0].
      */
     double get_noise_filter_rate() const noexcept;
+
+    /**
+     * @brief Return the peak absolute accumulated bias observed since construction or last reset().
+     *
+     * Thread-safe (atomic read).
+     *
+     * @return Maximum |accumulated_bias| observed since last reset, in signal units.
+     */
+    double get_peak_bias() const noexcept {
+        return stats_.peak_bias.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the fraction of processed tokens where the accumulator was clamped.
+     *
+     * Computed as accumulator_clamped / tokens_processed.  Returns 0.0 when no
+     * tokens have been processed or max_accumulated_bias is disabled (0.0).
+     * A high rate indicates the accumulator cap is frequently hit.
+     *
+     * Thread-safe (atomic reads).
+     *
+     * @return Accumulator clamp rate in [0.0, 1.0].
+     */
+    double get_accumulator_clamp_rate() const noexcept {
+        uint64_t total   = stats_.tokens_processed.load(std::memory_order_relaxed);
+        uint64_t clamped = stats_.accumulator_clamped.load(std::memory_order_relaxed);
+        return (total == 0) ? 0.0 : static_cast<double>(clamped) / static_cast<double>(total);
+    }
 
     /**
      * @brief Return elapsed milliseconds since construction or the last reset() call.

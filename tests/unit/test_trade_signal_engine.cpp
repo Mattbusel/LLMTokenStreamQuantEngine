@@ -1110,5 +1110,56 @@ TEST(TradeSignalEngineTest, test_get_noise_filter_rate_one_when_all_filtered) {
         << "noise filter rate must be 1.0 when all tokens are below the threshold";
 }
 
+TEST(TradeSignalEngineTest, test_get_peak_bias_zero_initially) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_peak_bias(), 0.0)
+        << "peak_bias must be 0 before any tokens are processed";
+}
+
+TEST(TradeSignalEngineTest, test_get_peak_bias_non_negative_after_tokens) {
+    auto cfg = make_config();
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.5, 0.9, 0.2, 0.8});
+    EXPECT_GE(engine.get_peak_bias(), 0.0)
+        << "peak_bias must be >= 0 after processing tokens";
+}
+
+TEST(TradeSignalEngineTest, test_get_accumulator_clamp_rate_zero_no_tokens) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_accumulator_clamp_rate(), 0.0)
+        << "accumulator_clamp_rate must be 0 before any tokens processed";
+}
+
+TEST(TradeSignalEngineTest, test_get_accumulator_clamp_rate_zero_no_cap) {
+    auto cfg = make_config();
+    cfg.max_accumulated_bias = 0.0;  // disabled
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.2, 0.8});
+    // No cap applied — clamp rate should be 0.
+    EXPECT_DOUBLE_EQ(engine.get_accumulator_clamp_rate(), 0.0)
+        << "accumulator_clamp_rate must be 0 when max_accumulated_bias is disabled";
+}
+
+TEST(TradeSignalEngineTest, test_get_bias_direction_positive) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.5, 0.9, 0.1, 0.8};  // positive directional_bias
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(engine.get_bias_direction(), 1)
+        << "positive accumulated bias must yield direction +1";
+}
+
+TEST(TradeSignalEngineTest, test_get_bias_direction_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_bias_direction(), 0)
+        << "bias direction must be 0 before any processing";
+}
+
 } // namespace
 } // namespace llmquant

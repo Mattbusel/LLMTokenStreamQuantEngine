@@ -350,6 +350,17 @@ std::vector<LatencyController::HistogramBucket> LatencyController::histogram_buc
     return buckets;
 }
 
+double LatencyController::get_throughput_estimate() const noexcept {
+    uint64_t total = total_measurements_.load(std::memory_order_relaxed);
+    if (total == 0) return 0.0;
+    auto now = std::chrono::high_resolution_clock::now();
+    double elapsed_ms = static_cast<double>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - construction_time_).count());
+    if (elapsed_ms < 1.0) return 0.0;
+    return static_cast<double>(total) / (elapsed_ms / 1000.0);
+}
+
 void LatencyController::recompute_composite() {
     double c = std::max({pressure_.ingestion_pressure,
                          pressure_.semantic_pressure,

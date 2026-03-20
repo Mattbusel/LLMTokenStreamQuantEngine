@@ -139,6 +139,18 @@ public:
     std::vector<std::string> get_all_token_keys() const;
 
     /**
+     * @brief Count tokens with positive sentiment_score (> 0).
+     * @return Number of bullish tokens in the dictionary.
+     */
+    size_t count_bullish_tokens() const;
+
+    /**
+     * @brief Count tokens with negative sentiment_score (< 0).
+     * @return Number of bearish tokens in the dictionary.
+     */
+    size_t count_bearish_tokens() const;
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this
@@ -157,6 +169,17 @@ public:
      * @return true if a mapping exists; false otherwise.
      */
     bool contains_token(const std::string& token) const;
+
+    /**
+     * @brief Return true if the dictionary contains at least one of the given tokens.
+     *
+     * Short-circuits on the first match; tokens are normalised the same way as
+     * map_token_to_weight().  Returns false for an empty input list.
+     *
+     * @param tokens Candidate token strings (raw / unnormalised).
+     * @return true if any of @p tokens is found in the dictionary.
+     */
+    bool contains_any_of(const std::vector<std::string>& tokens) const;
 
     /**
      * @brief Remove a single token mapping from the dictionary.

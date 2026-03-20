@@ -203,6 +203,17 @@ void RiskManager::enable_all_gates() {
     config_.disable_position_gate = false;
 }
 
+RiskManager::GateStatus RiskManager::get_gate_status() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    GateStatus gs;
+    gs.magnitude_gate  = !config_.disable_magnitude_gate;
+    gs.confidence_gate = !config_.disable_confidence_gate;
+    gs.rate_gate       = !config_.disable_rate_gate;
+    gs.drawdown_gate   = !config_.disable_drawdown_gate;
+    gs.position_gate   = !config_.disable_position_gate;
+    return gs;
+}
+
 void RiskManager::update_config(const Config& config) {
     if (config.max_bias_magnitude < 0.0)
         throw std::invalid_argument("RiskManager: max_bias_magnitude must be >= 0");
@@ -289,6 +300,11 @@ void RiskManager::set_oms_callback(OmsCallback cb) {
 RiskManager::PositionState RiskManager::get_position() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return position_;
+}
+
+double RiskManager::get_net_exposure() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return position_.net_position;
 }
 
 double RiskManager::get_cumulative_bias() const {
