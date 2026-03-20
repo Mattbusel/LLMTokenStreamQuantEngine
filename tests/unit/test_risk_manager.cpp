@@ -1447,3 +1447,20 @@ TEST(RiskManagerTest, test_get_drawdown_utilization_in_range) {
     EXPECT_GE(util, 0.0);
     EXPECT_LE(util, 1.0);
 }
+
+TEST(RiskManagerTest, test_get_rejection_rate_zero_before_any_signals) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_rejection_rate(), 0.0);
+}
+
+TEST(RiskManagerTest, test_get_rejection_rate_in_range_after_mix) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude = 0.5;
+    RiskManager rm(cfg);
+    rm.evaluate(make_signal(0.1));  // passes
+    rm.evaluate(make_signal(9.9));  // blocked
+    double rate = rm.get_rejection_rate();
+    EXPECT_GE(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+    EXPECT_GT(rate, 0.0);
+}

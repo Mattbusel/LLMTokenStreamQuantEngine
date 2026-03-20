@@ -107,6 +107,38 @@ public:
      */
     uint64_t error_count() const { return error_count_.load(); }
 
+    /**
+     * @brief Return the fraction of all poll requests that resulted in errors, in [0.0, 1.0].
+     *
+     * Computed as error_count / (update_count + error_count).
+     * Returns 0.0 if no requests have been made.
+     * Thread-safe (atomic reads).
+     *
+     * @return Error rate in [0.0, 1.0].
+     */
+    double get_error_rate() const noexcept {
+        uint64_t errs    = error_count_.load(std::memory_order_relaxed);
+        uint64_t updates = update_count_.load(std::memory_order_relaxed);
+        uint64_t total   = errs + updates;
+        return (total == 0) ? 0.0 : static_cast<double>(errs) / static_cast<double>(total);
+    }
+
+    /**
+     * @brief Return the fraction of all poll requests that succeeded, in [0.0, 1.0].
+     *
+     * Complement of get_error_rate(): success_rate + error_rate == 1.0.
+     * Returns 0.0 if no requests have been made.
+     * Thread-safe (atomic reads).
+     *
+     * @return Success rate in [0.0, 1.0].
+     */
+    double get_success_rate() const noexcept {
+        uint64_t errs    = error_count_.load(std::memory_order_relaxed);
+        uint64_t updates = update_count_.load(std::memory_order_relaxed);
+        uint64_t total   = errs + updates;
+        return (total == 0) ? 0.0 : static_cast<double>(updates) / static_cast<double>(total);
+    }
+
 protected:
     /**
      * @brief Parse a minimal JSON position object from an HTTP response.

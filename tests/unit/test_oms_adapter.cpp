@@ -487,3 +487,32 @@ TEST(MockOmsAdapterTest, MockOmsAdapterRapidCycle) {
     }
     EXPECT_FALSE(adapter.is_running());
 }
+
+TEST(RestOmsAdapterParsingTest, test_get_error_rate_zero_initially) {
+    RestOmsAdapter::Config cfg;
+    cfg.host = "127.0.0.1"; cfg.port = 19999; cfg.path = "/pos";
+    cfg.poll_interval = std::chrono::milliseconds{250};
+    RestOmsAdapter adapter(cfg);
+    EXPECT_DOUBLE_EQ(adapter.get_error_rate(), 0.0)
+        << "get_error_rate must be 0 before any requests";
+}
+
+TEST(RestOmsAdapterParsingTest, test_get_success_rate_zero_initially) {
+    RestOmsAdapter::Config cfg;
+    cfg.host = "127.0.0.1"; cfg.port = 19999; cfg.path = "/pos";
+    cfg.poll_interval = std::chrono::milliseconds{250};
+    RestOmsAdapter adapter(cfg);
+    EXPECT_DOUBLE_EQ(adapter.get_success_rate(), 0.0)
+        << "get_success_rate must be 0 before any requests";
+}
+
+TEST(RestOmsAdapterParsingTest, test_error_rate_plus_success_rate_equals_one) {
+    RestOmsAdapter::Config cfg;
+    cfg.host = "127.0.0.1"; cfg.port = 19999; cfg.path = "/pos";
+    cfg.poll_interval = std::chrono::milliseconds{250};
+    RestOmsAdapter adapter(cfg);
+    // No requests yet — both should be 0.
+    double sum = adapter.get_error_rate() + adapter.get_success_rate();
+    EXPECT_DOUBLE_EQ(sum, 0.0)
+        << "error_rate + success_rate must be 0 when no requests made";
+}
