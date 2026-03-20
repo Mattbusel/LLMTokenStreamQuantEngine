@@ -493,6 +493,33 @@ TEST(ConfigTest, test_config_metrics_port_zero_returns_false) {
     EXPECT_FALSE(ok) << "stats_port: 0 must fail validation";
 }
 
+TEST(ConfigTest, test_config_min_bias_threshold_parsed_from_yaml) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "  min_bias_threshold: 0.15\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    ASSERT_TRUE(ok);
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.min_bias_threshold, 0.15);
+}
+
+TEST(ConfigTest, test_config_negative_min_bias_threshold_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "  min_bias_threshold: -0.1\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    EXPECT_FALSE(ok) << "Negative min_bias_threshold must fail validation";
+}
+
 TEST(ConfigTest, test_config_metrics_defaults_when_section_absent) {
     Config cfg;
     bool ok = cfg.load_from_yaml_string(

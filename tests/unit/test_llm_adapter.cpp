@@ -365,5 +365,20 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_preserves_dictionary) {
     EXPECT_GT(w.directional_bias, 0.0);
 }
 
+TEST(LLMAdapterTest, test_llm_adapter_add_token_mapping_overrides_existing) {
+    LLMAdapter adapter;
+    // "bullish" is a built-in positive token.
+    SemanticWeight original = adapter.map_token_to_weight("bullish");
+    ASSERT_GT(original.directional_bias, 0.0);
+
+    // Override with a strongly negative mapping.
+    SemanticWeight override_weight{-1.0, 1.0, 0.8, -0.9};
+    adapter.add_token_mapping("bullish", override_weight);
+
+    SemanticWeight after_override = adapter.map_token_to_weight("bullish");
+    EXPECT_DOUBLE_EQ(after_override.directional_bias, -0.9)
+        << "add_token_mapping must override the existing entry for 'bullish'";
+}
+
 } // namespace
 } // namespace llmquant

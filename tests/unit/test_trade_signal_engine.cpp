@@ -387,5 +387,39 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_min_bias_threshold_disabled
     EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 0u);
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_multiple_sinks_all_receive_signal) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    auto sink1 = std::make_shared<MemoryOutputSink>();
+    auto sink2 = std::make_shared<MemoryOutputSink>();
+    engine.add_output_sink(sink1);
+    engine.add_output_sink(sink2);
+
+    SemanticWeight w{0.5, 0.7, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(sink1->size(), 1u) << "First sink must receive the signal";
+    EXPECT_EQ(sink2->size(), 1u) << "Second sink must receive the signal";
+    // Both sinks must have the same signal content.
+    EXPECT_DOUBLE_EQ(sink1->get_signals()[0].delta_bias_shift,
+                     sink2->get_signals()[0].delta_bias_shift);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_clear_sinks_removes_all) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.add_output_sink(sink);
+    engine.clear_output_sinks();
+
+    // No callback, no sinks → signals must be suppressed.
+    SemanticWeight w{0.5, 0.7, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(sink->size(), 0u) << "Sink removed by clear_output_sinks must not receive signals";
+    EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 1u);
+}
+
 } // namespace
 } // namespace llmquant
