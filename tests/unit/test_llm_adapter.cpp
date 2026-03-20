@@ -1009,6 +1009,29 @@ TEST(LLMAdapterTest, test_get_avg_volatility_matches_manual_average) {
     EXPECT_NEAR(adapter.get_avg_volatility(), expected, 1e-12);
 }
 
+TEST(LLMAdapterTest, test_get_avg_directional_bias_zero_on_empty_dictionary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_avg_directional_bias(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_avg_directional_bias_matches_manual_average) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("buy", {0.8, 0.9, 0.2, 0.6});
+    adapter.add_token_mapping("sell", {-0.6, 0.8, 0.3, -0.4});
+    double expected = (0.6 + (-0.4)) / 2.0;
+    EXPECT_NEAR(adapter.get_avg_directional_bias(), expected, 1e-12);
+}
+
+TEST(LLMAdapterTest, test_get_avg_directional_bias_all_bearish_is_negative) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("crash", {-0.9, 0.8, 0.7, -0.8});
+    adapter.add_token_mapping("panic", {-0.7, 0.7, 0.6, -0.6});
+    EXPECT_LT(adapter.get_avg_directional_bias(), 0.0);
+}
+
 TEST(LLMAdapterTest, test_get_cache_hit_rate_zero_before_processing) {
     LLMAdapter adapter;
     adapter.reset_stats();
@@ -1055,6 +1078,28 @@ TEST(LLMAdapterTest, test_get_avg_confidence_matches_added_tokens) {
     adapter.add_token_mapping("b", {0.0, 0.6, 0.0, 0.0});
     double avg = adapter.get_avg_confidence();
     EXPECT_NEAR(avg, 0.5, 1e-9);
+}
+
+TEST(LLMAdapterTest, test_get_min_sentiment_empty_returns_zero) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_min_sentiment(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_min_sentiment_returns_lowest) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("x", {-0.8, 0.9, 0.1, 0.0});
+    adapter.add_token_mapping("y", {0.5,  0.9, 0.1, 0.0});
+    EXPECT_NEAR(adapter.get_min_sentiment(), -0.8, 1e-12);
+}
+
+TEST(LLMAdapterTest, test_get_max_sentiment_returns_highest) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bull", {0.9, 0.8, 0.1, 0.8});
+    adapter.add_token_mapping("bear", {-0.7, 0.8, 0.3, -0.7});
+    EXPECT_NEAR(adapter.get_max_sentiment(), 0.9, 1e-12);
 }
 
 } // namespace

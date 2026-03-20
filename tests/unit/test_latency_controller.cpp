@@ -976,5 +976,43 @@ TEST(LatencyControllerTest, test_format_stats_measurement_count_matches) {
         << "format_stats measurement count must match recorded count";
 }
 
+TEST(LatencyControllerTest, test_get_sample_variance_zero_with_no_samples) {
+    LatencyController lc(make_config());
+    EXPECT_DOUBLE_EQ(lc.get_sample_variance_us(), 0.0);
+}
+
+TEST(LatencyControllerTest, test_get_sample_variance_zero_with_one_sample) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{10});
+    EXPECT_DOUBLE_EQ(lc.get_sample_variance_us(), 0.0);
+}
+
+TEST(LatencyControllerTest, test_get_sample_variance_non_negative_after_recording) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.record_latency(std::chrono::microseconds{10});
+    lc.record_latency(std::chrono::microseconds{15});
+    EXPECT_GE(lc.get_sample_variance_us(), 0.0);
+}
+
+TEST(LatencyControllerTest, test_get_sample_variance_zero_for_identical_samples) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 5; ++i)
+        lc.record_latency(std::chrono::microseconds{7});
+    EXPECT_NEAR(lc.get_sample_variance_us(), 0.0, 1e-9);
+}
+
+TEST(LatencyControllerTest, test_get_sample_count_zero_initially) {
+    LatencyController lc(make_config());
+    EXPECT_EQ(lc.get_sample_count(), size_t{0});
+}
+
+TEST(LatencyControllerTest, test_get_sample_count_increments_per_record) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.record_latency(std::chrono::microseconds{5});
+    EXPECT_EQ(lc.get_sample_count(), size_t{2});
+}
+
 } // namespace
 } // namespace llmquant

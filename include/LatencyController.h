@@ -365,6 +365,28 @@ public:
      */
     std::string format_stats() const;
 
+    /**
+     * @brief Return the sample variance of the current window in microseconds².
+     *
+     * Uses Bessel's correction (divides by n-1).  Returns 0.0 if fewer than
+     * two samples are in the window or if profiling is disabled.
+     *
+     * Thread-safe (acquires samples_mutex_).
+     *
+     * @return Sample variance in µs².
+     */
+    double get_sample_variance_us() const;
+
+    /**
+     * @brief Return the number of valid samples currently in the window.
+     *
+     * Saturates at sample_window once the ring buffer is full.
+     * Thread-safe (acquires samples_mutex_).
+     *
+     * @return Number of valid samples in [0, sample_window].
+     */
+    size_t get_sample_count() const;
+
 private:
     Config config_;
     std::chrono::high_resolution_clock::time_point construction_time_{

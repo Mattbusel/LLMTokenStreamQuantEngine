@@ -394,4 +394,26 @@ std::string LatencyController::format_stats() const {
     return oss.str();
 }
 
+double LatencyController::get_sample_variance_us() const {
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    if (sample_count_ < 2) return 0.0;
+    // Compute mean.
+    double sum = 0.0;
+    for (size_t i = 0; i < sample_count_; ++i)
+        sum += static_cast<double>(latency_samples_[i].count());
+    double mean = sum / static_cast<double>(sample_count_);
+    // Compute variance with Bessel's correction.
+    double sq_sum = 0.0;
+    for (size_t i = 0; i < sample_count_; ++i) {
+        double diff = static_cast<double>(latency_samples_[i].count()) - mean;
+        sq_sum += diff * diff;
+    }
+    return sq_sum / static_cast<double>(sample_count_ - 1);
+}
+
+size_t LatencyController::get_sample_count() const {
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    return sample_count_;
+}
+
 } // namespace llmquant

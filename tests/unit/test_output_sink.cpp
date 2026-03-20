@@ -266,5 +266,49 @@ TEST(OutputSinkTest, test_json_sink_emit_count_tracks_records_written) {
     std::remove(path.c_str());
 }
 
+TEST(OutputSinkTest, test_memory_sink_emit_count_tracks_all_including_dropped) {
+    MemoryOutputSink sink(2);  // capacity of 2
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
+    sink.emit(sig); sink.emit(sig); sink.emit(sig);  // 3 emits, 1 dropped
+    EXPECT_EQ(sink.emit_count(), 3u)
+        << "emit_count must count all emits including dropped ones";
+    EXPECT_EQ(sink.dropped_count(), 1u)
+        << "dropped_count must reflect the one evicted signal";
+    EXPECT_EQ(sink.size(), 2u)
+        << "size must not exceed capacity";
+}
+
+TEST(OutputSinkTest, test_memory_sink_drop_rate_correct) {
+    MemoryOutputSink sink(2);
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
+    sink.emit(sig); sink.emit(sig); sink.emit(sig); sink.emit(sig);  // 4 emits, 2 dropped
+    EXPECT_DOUBLE_EQ(sink.drop_rate(), 0.5)
+        << "drop_rate must be 0.5 when half of emits are dropped";
+}
+
+TEST(OutputSinkTest, test_memory_sink_drop_rate_zero_no_drops) {
+    MemoryOutputSink sink(0);  // unlimited
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
+    sink.emit(sig); sink.emit(sig);
+    EXPECT_DOUBLE_EQ(sink.drop_rate(), 0.0)
+        << "drop_rate must be 0 when no signals are dropped";
+}
+
+TEST(OutputSinkTest, test_memory_sink_clear_resets_emit_count) {
+    MemoryOutputSink sink(0);
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
+    sink.emit(sig); sink.emit(sig);
+    EXPECT_EQ(sink.emit_count(), 2u);
+    sink.clear();
+    EXPECT_EQ(sink.emit_count(), 0u)
+        << "clear() must reset emit_count to 0";
+    EXPECT_EQ(sink.size(), 0u)
+        << "clear() must empty the signal buffer";
+}
+
 } // namespace
 } // namespace llmquant

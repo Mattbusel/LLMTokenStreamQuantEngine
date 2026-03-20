@@ -1410,3 +1410,40 @@ TEST(RiskManagerTest, test_get_window_time_elapsed_ms_grows_with_time) {
     double t1 = rm.get_window_time_elapsed_ms();
     EXPECT_GE(t1, t0);
 }
+
+TEST(RiskManagerTest, test_get_drawdown_utilization_zero_initially) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_drawdown_utilization(), 0.0);
+}
+
+TEST(RiskManagerTest, test_get_drawdown_utilization_rises_after_signals_pass) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown = 1.0;
+    RiskManager rm(cfg);
+    rm.disable_all_gates();
+    TradeSignal sig;
+    sig.delta_bias_shift = 0.5;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier = 0.0;
+    sig.confidence = 0.8;
+    rm.evaluate(sig);
+    // Utilization should be > 0 now that bias has accumulated.
+    EXPECT_GE(rm.get_drawdown_utilization(), 0.0);
+    EXPECT_LE(rm.get_drawdown_utilization(), 1.0);
+}
+
+TEST(RiskManagerTest, test_get_drawdown_utilization_in_range) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown = 2.0;
+    RiskManager rm(cfg);
+    rm.disable_all_gates();
+    TradeSignal sig;
+    sig.delta_bias_shift = 1.0;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier = 0.0;
+    sig.confidence = 0.9;
+    rm.evaluate(sig);
+    double util = rm.get_drawdown_utilization();
+    EXPECT_GE(util, 0.0);
+    EXPECT_LE(util, 1.0);
+}

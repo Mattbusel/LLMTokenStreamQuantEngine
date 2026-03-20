@@ -183,6 +183,7 @@ public:
             ++dropped_count_;
         }
         signals_.push_back(sig);
+        ++emit_count_;
     }
 
     /**
@@ -213,13 +214,36 @@ public:
      */
     size_t dropped_count() const noexcept { return dropped_count_; }
 
-    /// @brief Clear the internal signal buffer and reset the drop counter.
-    void clear() { signals_.clear(); dropped_count_ = 0; }
+    /**
+     * @brief Return the total number of emit() calls since construction or last clear().
+     *
+     * Unlike size(), this includes signals that were dropped due to capacity.
+     *
+     * @return Total signals received.
+     */
+    size_t emit_count() const noexcept { return emit_count_; }
+
+    /**
+     * @brief Return the fraction of emitted signals that were dropped, in [0.0, 1.0].
+     *
+     * Returns 0.0 if no signals have been emitted.
+     *
+     * @return Drop rate in [0.0, 1.0].
+     */
+    double drop_rate() const noexcept {
+        return (emit_count_ == 0)
+            ? 0.0
+            : static_cast<double>(dropped_count_) / static_cast<double>(emit_count_);
+    }
+
+    /// @brief Clear the internal signal buffer and reset all counters.
+    void clear() { signals_.clear(); dropped_count_ = 0; emit_count_ = 0; }
 
 private:
     std::vector<TradeSignal> signals_;
     size_t max_capacity_{0};
     size_t dropped_count_{0};
+    size_t emit_count_{0};
 };
 
 } // namespace llmquant

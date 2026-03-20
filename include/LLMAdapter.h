@@ -395,6 +395,24 @@ public:
      *
      * @return Multi-line TSV string; empty string if the dictionary is empty.
      */
+    /**
+     * @brief Return the minimum sentiment_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Minimum sentiment_score.
+     */
+    double get_min_sentiment() const;
+
+    /**
+     * @brief Return the maximum sentiment_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Maximum sentiment_score.
+     */
+    double get_max_sentiment() const;
+
     std::string export_dictionary() const;
 
     /**

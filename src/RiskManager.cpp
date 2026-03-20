@@ -342,6 +342,13 @@ double RiskManager::get_drawdown_budget_remaining() const {
     return remaining < 0.0 ? 0.0 : remaining;
 }
 
+double RiskManager::get_drawdown_utilization() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (config_.max_drawdown <= 0.0) return 0.0;
+    double util = std::fabs(cumulative_bias_) / config_.max_drawdown;
+    return util > 1.0 ? 1.0 : util;
+}
+
 RiskManager::Snapshot RiskManager::snapshot() const {
     Snapshot snap;
     {

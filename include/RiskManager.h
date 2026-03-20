@@ -271,6 +271,19 @@ public:
     double get_drawdown_budget_remaining() const;
 
     /**
+     * @brief Return the fraction of the drawdown budget currently consumed, in [0.0, 1.0].
+     *
+     * Computed as |cumulative_bias| / max_drawdown.  Returns 0.0 if max_drawdown
+     * is zero (to avoid division by zero).  Clamped to [0.0, 1.0] so values
+     * are always safe to display on a dashboard gauge.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Drawdown utilization in [0.0, 1.0].
+     */
+    double get_drawdown_utilization() const;
+
+    /**
      * @brief Return the fraction of the per-second rate limit consumed in the
      *        current window, in [0.0, 1.0].
      *
