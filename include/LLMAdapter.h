@@ -184,6 +184,17 @@ public:
     double get_avg_volatility() const;
 
     /**
+     * @brief Return the mean directional_bias across all tokens in the dictionary.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     * A positive value indicates an overall bullish dictionary bias;
+     * a negative value indicates a bearish bias.
+     *
+     * @return Average directional_bias in [-1.0, 1.0].
+     */
+    double get_avg_directional_bias() const;
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this
