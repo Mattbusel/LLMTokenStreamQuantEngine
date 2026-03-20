@@ -228,6 +228,12 @@ int main(int argc, char* argv[]) {
         new_risk_cfg.disable_drawdown_gate    = updated.risk_overrides.disable_drawdown_gate;
         new_risk_cfg.disable_position_gate    = updated.risk_overrides.disable_position_gate;
         risk_mgr.update_config(new_risk_cfg);
+        llmquant::TradeSignalEngine::Config new_eng_cfg;
+        new_eng_cfg.bias_sensitivity       = updated.trading.bias_sensitivity;
+        new_eng_cfg.volatility_sensitivity = updated.trading.volatility_sensitivity;
+        new_eng_cfg.signal_decay_rate      = updated.trading.signal_decay_rate;
+        new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
+        trade_engine.update_config(new_eng_cfg);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
                   << "  max_bias=" << u.max_bias_magnitude
@@ -541,6 +547,9 @@ int main(int argc, char* argv[]) {
             snap << "# HELP llmquant_signals_generated_total Total trade signals generated\n"
                  << "# TYPE llmquant_signals_generated_total counter\n"
                  << "llmquant_signals_generated_total " << eng_stats.signals_generated.load() << "\n"
+                 << "# HELP llmquant_signals_suppressed_total Signals with no callback or sink (fully suppressed)\n"
+                 << "# TYPE llmquant_signals_suppressed_total counter\n"
+                 << "llmquant_signals_suppressed_total " << eng_stats.signals_suppressed.load() << "\n"
                  << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
                  << "# TYPE llmquant_signals_blocked_total counter\n"
                  << "llmquant_signals_blocked_total " << blocked << "\n"
@@ -722,8 +731,11 @@ int main(int argc, char* argv[]) {
     std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
     std::cout << "  Min latency      : " << final_stats.min_latency.count() << "us\n";
     std::cout << "  P50 latency      : " << final_stats.p50_latency.count() << "us\n";
+    std::cout << "  P95 latency      : " << final_stats.p95_latency.count() << "us\n";
     std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";
     std::cout << "  Max latency      : " << final_stats.max_latency.count() << "us\n";
+    std::cout << "  Avg sig strength : " << std::fixed << std::setprecision(4)
+              << trade_engine.get_stats().avg_signal_strength.load() << "\n";
     std::cout << "  Jitter           : " << std::fixed << std::setprecision(3)
               << final_stats.jitter_ms << "ms\n";
     {

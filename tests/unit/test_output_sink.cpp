@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <sstream>
 
@@ -143,6 +144,44 @@ TEST(OutputSinkTest, test_json_sink_nonexistent_directory_throws) {
         JsonOutputSink sink("/nonexistent_dir_xyz/out.json"),
         std::runtime_error
     );
+}
+
+TEST(OutputSinkTest, test_csv_sink_nan_and_inf_replaced_with_zero) {
+    const std::string path = "/tmp/test_output_sink_nan.csv";
+    {
+        CsvOutputSink sink(path);
+        TradeSignal s = make_signal(0.0, 0.0);
+        s.delta_bias_shift      = std::numeric_limits<double>::quiet_NaN();
+        s.volatility_adjustment = std::numeric_limits<double>::infinity();
+        s.latency_us            = -std::numeric_limits<double>::infinity();
+        sink.emit(s);
+        sink.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    // NaN and Inf must have been replaced with 0 — no "nan" or "inf" in output.
+    EXPECT_EQ(content.find("nan"), std::string::npos);
+    EXPECT_EQ(content.find("inf"), std::string::npos);
+    std::remove(path.c_str());
+}
+
+TEST(OutputSinkTest, test_json_sink_nan_and_inf_replaced_with_zero) {
+    const std::string path = "/tmp/test_output_sink_nan.json";
+    {
+        JsonOutputSink sink(path);
+        TradeSignal s = make_signal(0.0, 0.0);
+        s.delta_bias_shift      = std::numeric_limits<double>::quiet_NaN();
+        s.volatility_adjustment = std::numeric_limits<double>::infinity();
+        sink.emit(s);
+        sink.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_EQ(content.find("nan"), std::string::npos);
+    EXPECT_EQ(content.find("inf"), std::string::npos);
+    std::remove(path.c_str());
 }
 
 TEST(OutputSinkTest, test_memory_sink_size_tracks_signal_count) {
