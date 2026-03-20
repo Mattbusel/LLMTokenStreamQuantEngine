@@ -277,6 +277,17 @@ size_t LLMAdapter::batch_add_token_mappings(
     return inserted;
 }
 
+std::vector<std::pair<std::string, double>>
+LLMAdapter::filter_tokens_by_sentiment(double min_sentiment, double max_sentiment) const {
+    std::vector<std::pair<std::string, double>> result;
+    for (const auto& [tok, weight] : token_weights_) {
+        if (weight.sentiment_score >= min_sentiment && weight.sentiment_score <= max_sentiment) {
+            result.emplace_back(tok, weight.sentiment_score);
+        }
+    }
+    return result;
+}
+
 LLMAdapter::SentimentDistribution LLMAdapter::get_sentiment_distribution() const {
     SentimentDistribution dist;
     if (token_weights_.empty()) return dist;

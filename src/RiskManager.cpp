@@ -252,6 +252,12 @@ void RiskManager::update_drawdown(const TradeSignal& signal) {
     cumulative_bias_ += signal.delta_bias_shift;
 }
 
+void RiskManager::set_position_limit(double position_limit, double pnl_limit) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    position_.position_limit = position_limit;
+    position_.pnl_limit      = pnl_limit;
+}
+
 void RiskManager::set_metrics_logger(MetricsLogger* logger) {
     std::lock_guard<std::mutex> lock(mutex_);
     logger_ = logger;
@@ -320,6 +326,15 @@ double RiskManager::get_rate_limit_utilization() const {
     double util = static_cast<double>(signals_in_window_)
                   / static_cast<double>(config_.max_signals_per_second);
     return util > 1.0 ? 1.0 : util;
+}
+
+std::vector<bool> RiskManager::evaluate_batch(const std::vector<TradeSignal>& signals) {
+    std::vector<bool> results;
+    results.reserve(signals.size());
+    for (const auto& sig : signals) {
+        results.push_back(evaluate(sig));
+    }
+    return results;
 }
 
 } // namespace llmquant

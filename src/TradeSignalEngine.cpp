@@ -287,6 +287,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
     last_signal_quality_.store(0.0, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(0, std::memory_order_relaxed);
+    reset_time_ = std::chrono::high_resolution_clock::now();
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
@@ -307,6 +308,31 @@ void TradeSignalEngine::process_batch(const std::vector<SemanticWeight>& weights
     for (const auto& w : weights) {
         process_semantic_weight(w);
     }
+}
+
+double TradeSignalEngine::get_tokens_per_second() const noexcept {
+    uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
+    if (tokens == 0) return 0.0;
+    auto now = std::chrono::high_resolution_clock::now();
+    // Use nanoseconds to avoid false-zero on sub-microsecond elapsed times.
+    double elapsed_ns = static_cast<double>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now - reset_time_).count());
+    if (elapsed_ns < 1.0) return 0.0;
+    return static_cast<double>(tokens) / (elapsed_ns / 1e9);
+}
+
+TradeSignalEngine::Snapshot TradeSignalEngine::snapshot() const noexcept {
+    Snapshot snap;
+    snap.config                = config_;
+    snap.stats                 = stats_;
+    snap.accumulated_bias      = accumulated_bias_.load(std::memory_order_relaxed);
+    snap.accumulated_volatility= accumulated_volatility_.load(std::memory_order_relaxed);
+    snap.last_signal_quality   = last_signal_quality_.load(std::memory_order_relaxed);
+    snap.signal_age_us         = get_signal_age_us();
+    snap.suppression_rate_val  = suppression_rate();
+    snap.tokens_per_second     = get_tokens_per_second();
+    snap.realtime_mode         = realtime_mode_.load(std::memory_order_relaxed);
+    return snap;
 }
 
 void TradeSignalEngine::flush_sinks() {

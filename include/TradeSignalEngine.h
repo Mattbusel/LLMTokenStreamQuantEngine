@@ -360,12 +360,53 @@ public:
     void reset() noexcept;
 
     /**
+     * @brief Return the average token processing throughput since construction or last reset().
+     *
+     * Computed as tokens_processed / elapsed_seconds.  Returns 0.0 if no
+     * tokens have been processed or if less than 1 microsecond has elapsed
+     * (to avoid division by near-zero).
+     *
+     * Not thread-safe for the elapsed-time computation; call from the same
+     * thread as process_semantic_weight().
+     *
+     * @return Tokens processed per second.
+     */
+    double get_tokens_per_second() const noexcept;
+
+    /**
      * @brief Flush all registered output sinks.
      *
      * Call this at shutdown to ensure any buffered file-sink output is written
      * to disk.  Not thread-safe — call from the same thread as emit_signal().
      */
     void flush_sinks();
+
+    /**
+     * @brief Immutable state snapshot for dashboards and health checks.
+     */
+    struct Snapshot {
+        Config   config;
+        Stats    stats;
+        double   accumulated_bias{0.0};
+        double   accumulated_volatility{0.0};
+        double   last_signal_quality{0.0};
+        double   signal_age_us{0.0};
+        double   suppression_rate_val{0.0};
+        double   tokens_per_second{0.0};
+        bool     realtime_mode{true};
+    };
+
+    /**
+     * @brief Capture all current engine state in a single consistent call.
+     *
+     * Reads each field via their existing thread-safe accessors.  Suitable
+     * for dashboards and health-check endpoints.
+     *
+     * Thread-safe (atomic reads only).
+     *
+     * @return Snapshot of all current TradeSignalEngine state.
+     */
+    Snapshot snapshot() const noexcept;
 
 private:
     bool should_emit_signal() const;
@@ -387,6 +428,9 @@ private:
     /// Set at the start of process_semantic_weight() to allow emit_signal() to
     /// compute the token-to-signal latency for the TradeSignal::latency_us field.
     std::chrono::high_resolution_clock::time_point processing_start_;
+    /// Set at construction and reset() to support get_tokens_per_second().
+    std::chrono::high_resolution_clock::time_point reset_time_{
+        std::chrono::high_resolution_clock::now()};
     Stats stats_;
     /// signal_quality of the last emitted signal; updated by emit_signal().
     std::atomic<double>   last_signal_quality_{0.0};

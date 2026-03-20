@@ -102,6 +102,23 @@ public:
     void log_risk_rejection(const std::string& reason, double bias, double confidence);
 
     /**
+     * @brief Record a structured trade signal emission event.
+     *
+     * Writes a single row (CSV) or JSON object containing the key fields of
+     * the emitted signal.  Does not require a TradeSignal include — callers
+     * extract the relevant fields before calling.
+     *
+     * @param bias         delta_bias_shift of the emitted signal.
+     * @param volatility   volatility_adjustment of the emitted signal.
+     * @param confidence   Confidence score in [0, 1].
+     * @param latency_us   Token-to-signal latency in microseconds.
+     * @param quality      Composite signal_quality score in [0, 1].
+     */
+    void log_trade_signal(double bias, double volatility,
+                          double confidence, double latency_us,
+                          double quality);
+
+    /**
      * @brief Write a human-readable performance summary to the console (if enabled).
      */
     void log_performance_summary();

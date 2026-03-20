@@ -277,3 +277,46 @@ TEST(MetricsLoggerTest, test_metrics_logger_reset_counters_zeroes_entry_count) {
     }
     std::remove(path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// log_trade_signal
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_log_trade_signal_increments_entry_count_csv) {
+    const std::string path = "/tmp/test_metrics_trade_signal_csv.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        ASSERT_EQ(logger.get_log_entry_count(), uint64_t{0});
+        logger.log_trade_signal(0.6, 0.2, 0.85, 3.5, 0.7);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{1})
+            << "log_trade_signal must increment the entry count";
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_log_trade_signal_increments_entry_count_json) {
+    const std::string path = "/tmp/test_metrics_trade_signal_json.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_trade_signal(-0.4, 0.1, 0.9, 2.1, 0.5);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{1})
+            << "log_trade_signal must increment the entry count in JSON mode";
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_log_trade_signal_json_contains_event_key) {
+    const std::string path = "/tmp/test_metrics_trade_signal_json_content.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_trade_signal(0.3, 0.15, 0.75, 5.0, 0.4);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("trade_signal"), std::string::npos)
+        << "JSON output must contain the trade_signal event key";
+    std::remove(path.c_str());
+}

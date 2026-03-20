@@ -699,5 +699,49 @@ TEST(LLMAdapterTest, test_llm_adapter_get_all_token_keys_empty_after_clear) {
     EXPECT_TRUE(adapter.get_all_token_keys().empty());
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 33: filter_tokens_by_sentiment()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_filter_tokens_by_sentiment_returns_matching_tokens) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bullish", { 0.8, 0.9, 0.1, 0.8});
+    adapter.add_token_mapping("bearish", {-0.7, 0.9, 0.2, -0.7});
+    adapter.add_token_mapping("neutral", { 0.0, 0.5, 0.0, 0.0});
+
+    // Filter for positive sentiment only.
+    auto pos_tokens = adapter.filter_tokens_by_sentiment(0.1, 1.0);
+    ASSERT_EQ(pos_tokens.size(), 1u);
+    EXPECT_EQ(pos_tokens[0].first, "bullish");
+    EXPECT_NEAR(pos_tokens[0].second, 0.8, 1e-9);
+}
+
+TEST(LLMAdapterTest, test_filter_tokens_by_sentiment_empty_range_returns_nothing) {
+    LLMAdapter adapter;
+    // Filter with min > max should return nothing.
+    auto result = adapter.filter_tokens_by_sentiment(0.5, -0.5);
+    EXPECT_TRUE(result.empty())
+        << "Inverted range [0.5, -0.5] should return no tokens";
+}
+
+TEST(LLMAdapterTest, test_filter_tokens_by_sentiment_full_range_returns_all) {
+    LLMAdapter adapter;
+    auto all = adapter.filter_tokens_by_sentiment(-1.0, 1.0);
+    EXPECT_EQ(all.size(), adapter.get_dictionary_size())
+        << "Full range [-1, 1] must return all tokens";
+}
+
+TEST(LLMAdapterTest, test_filter_tokens_by_sentiment_negative_range) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("crash",   {-0.9, 0.9, 0.8, -0.7});
+    adapter.add_token_mapping("bullish", { 0.8, 0.9, 0.1,  0.8});
+
+    auto neg = adapter.filter_tokens_by_sentiment(-1.0, -0.1);
+    ASSERT_EQ(neg.size(), 1u);
+    EXPECT_EQ(neg[0].first, "crash");
+}
+
 } // namespace
 } // namespace llmquant

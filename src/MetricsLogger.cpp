@@ -167,6 +167,34 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
     }
 }
 
+void MetricsLogger::log_trade_signal(double bias, double volatility,
+                                      double confidence, double latency_us,
+                                      double quality) {
+    log_entries_++;
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+
+    if (config_.format == OutputFormat::CSV) {
+        std::ostringstream oss;
+        oss << timestamp << ",TRADE_SIGNAL,,"
+            << std::fixed << std::setprecision(3)
+            << bias << "," << volatility << "," << confidence << ","
+            << latency_us << "," << quality;
+        if (file_logger_) file_logger_->info(oss.str());
+        if (console_logger_)
+            console_logger_->info("Signal bias={:+.3f} vol={:.3f} conf={:.3f} lat={:.1f}μs q={:.3f}",
+                                  bias, volatility, confidence, latency_us, quality);
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"trade_signal","bias":{:.3f},"volatility":{:.3f},"confidence":{:.3f},"latency_us":{:.1f},"quality":{:.3f},"timestamp":{}}})",
+                bias, volatility, confidence, latency_us, quality, timestamp);
+        if (console_logger_)
+            console_logger_->info("Signal bias={:+.3f} vol={:.3f} conf={:.3f} lat={:.1f}μs q={:.3f}",
+                                  bias, volatility, confidence, latency_us, quality);
+    }
+}
+
 void MetricsLogger::log_performance_summary() {
     if (console_logger_) {
         console_logger_->info("=== Performance Summary ===");

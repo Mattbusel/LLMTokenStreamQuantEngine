@@ -274,6 +274,21 @@ public:
     uint64_t get_total_evaluated() const noexcept;
 
     /**
+     * @brief Convenience setter to update the position and PnL limits without
+     *        replacing the entire PositionState.
+     *
+     * Equivalent to: get_position() + modify fields + update_position(), but
+     * atomic and without the extra copy.  The net_position and pnl fields of the
+     * stored PositionState are left unchanged.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @param position_limit Maximum allowed absolute position.
+     * @param pnl_limit      Maximum tolerated loss (should be negative or zero).
+     */
+    void set_position_limit(double position_limit, double pnl_limit = -10.0);
+
+    /**
      * @brief Attach a MetricsLogger for structured rejection logging.
      *
      * @param logger Pointer to an active MetricsLogger; must outlive this
@@ -381,6 +396,21 @@ public:
      * @return Snapshot of all current RiskManager state.
      */
     Snapshot snapshot() const;
+
+    /**
+     * @brief Evaluate a batch of signals in order, returning one result per signal.
+     *
+     * Equivalent to calling evaluate() for each element but cheaper when all
+     * signals share the same lock acquisition pattern.  The returned vector has
+     * the same size as @p signals; element i is true iff signal i passed all
+     * enabled gates.
+     *
+     * Thread-safe (each evaluate() call acquires mutex_ independently).
+     *
+     * @param signals Ordered sequence of signals to evaluate.
+     * @return Vector of bool; true = passed, false = blocked.
+     */
+    std::vector<bool> evaluate_batch(const std::vector<TradeSignal>& signals);
 
 private:
     bool check_magnitude(const TradeSignal& signal);

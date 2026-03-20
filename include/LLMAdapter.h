@@ -216,6 +216,19 @@ public:
     SentimentDistribution get_sentiment_distribution() const;
 
     /**
+     * @brief Return all tokens whose sentiment_score falls within [min_sentiment, max_sentiment].
+     *
+     * Useful for debugging and auditing which tokens will drive bullish or
+     * bearish signal energy.  Both bounds are inclusive.
+     *
+     * @param min_sentiment Lower bound (inclusive) on sentiment_score.
+     * @param max_sentiment Upper bound (inclusive) on sentiment_score.
+     * @return Vector of (token, sentiment_score) pairs in unspecified order.
+     */
+    std::vector<std::pair<std::string, double>>
+        filter_tokens_by_sentiment(double min_sentiment, double max_sentiment) const;
+
+    /**
      * @brief Return the top N tokens sorted by absolute sentiment score.
      *
      * Useful for auditing which tokens are most influential in driving
