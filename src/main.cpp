@@ -677,7 +677,14 @@ int main(int argc, char* argv[]) {
                         std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
                  << "# TYPE llmquant_dry_run gauge\n"
-                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n";
+                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n"
+                 << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
+                 << "# TYPE llmquant_avg_signal_strength gauge\n"
+                 << "llmquant_avg_signal_strength " << std::setprecision(6)
+                     << eng_stats.avg_signal_strength.load() << "\n"
+                 << "# HELP llmquant_latency_measurements_total Total latency samples recorded\n"
+                 << "# TYPE llmquant_latency_measurements_total counter\n"
+                 << "llmquant_latency_measurements_total " << stats.measurements << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

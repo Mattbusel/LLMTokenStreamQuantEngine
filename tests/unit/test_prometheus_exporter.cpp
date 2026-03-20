@@ -122,3 +122,50 @@ TEST(PrometheusExporterTest, test_prom_exporter_no_callback_serves_empty_body) {
     // No assertion on content — just verify no crash.
     SUCCEED();
 }
+
+TEST(PrometheusExporterTest, test_prom_exporter_callback_reflects_updated_values) {
+    PrometheusExporter::Config cfg;
+    cfg.port = kTestPort + 4;
+    PrometheusExporter exporter(cfg);
+
+    std::atomic<int> counter{0};
+    exporter.set_metrics_callback([&counter] {
+        return "llmquant_test_counter " + std::to_string(counter.load()) + "\n";
+    });
+    ASSERT_TRUE(exporter.start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+    // First scrape — counter = 0.
+    std::string body1 = http_get(kTestPort + 4);
+    EXPECT_NE(body1.find("llmquant_test_counter 0"), std::string::npos)
+        << "First scrape body: " << body1;
+
+    // Update counter and scrape again.
+    counter = 42;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::string body2 = http_get(kTestPort + 4);
+    EXPECT_NE(body2.find("llmquant_test_counter 42"), std::string::npos)
+        << "Second scrape body: " << body2;
+
+    exporter.stop();
+}
+
+TEST(PrometheusExporterTest, test_prom_exporter_concurrent_scrapes_no_crash) {
+    PrometheusExporter::Config cfg;
+    cfg.port = kTestPort + 5;
+    PrometheusExporter exporter(cfg);
+    exporter.set_metrics_callback([] { return "llmquant_test 1\n"; });
+    ASSERT_TRUE(exporter.start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+    // Fire two back-to-back scrapes from different threads.
+    std::string r1, r2;
+    std::thread t1([&r1] { r1 = http_get(kTestPort + 5); });
+    std::thread t2([&r2] { r2 = http_get(kTestPort + 5); });
+    t1.join();
+    t2.join();
+
+    exporter.stop();
+    // Neither connection should have crashed the server; both may have received data.
+    SUCCEED();
+}

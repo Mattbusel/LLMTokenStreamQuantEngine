@@ -92,6 +92,10 @@ TEST(LatencyControllerTest, test_latency_controller_reset_clears_all_stats) {
     EXPECT_EQ(stats.measurements, 0u);
     EXPECT_EQ(stats.avg_latency.count(), 0);
     EXPECT_EQ(stats.max_latency.count(), 0);
+    EXPECT_EQ(stats.p50_latency.count(), 0);
+    EXPECT_EQ(stats.p95_latency.count(), 0);
+    EXPECT_EQ(stats.p99_latency.count(), 0);
+    EXPECT_EQ(stats.min_latency.count(), 0);
 }
 
 TEST(LatencyControllerTest, test_latency_controller_get_stats_with_no_measurements_returns_zero) {

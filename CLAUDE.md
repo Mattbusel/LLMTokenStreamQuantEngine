@@ -107,20 +107,26 @@ clang-format --dry-run src/*.cpp include/*.h
 ## Test Coverage Summary
 | Test File | Count | Coverage |
 |-----------|-------|----------|
-| test_config.cpp | 7 | YAML parse, missing fields, hot-reload |
-| test_llm_adapter.cpp | 11 | Token lookup, sequences, SIMD |
-| test_latency_controller.cpp | 11 | Stats, percentiles, pressure, backoff |
-| test_metrics_logger.cpp | 7 | Construction, log events, flush |
+| test_config.cpp | 20 | YAML parse, missing fields, hot-reload, risk_thresholds, pressure validation, concurrent hot-reload |
+| test_llm_adapter.cpp | 25 | Token lookup, sequences, SIMD, dictionary, load_sentiment_dictionary |
+| test_latency_controller.cpp | 16 | Stats, percentiles, p50, pressure, backoff, reset, concurrent |
+| test_metrics_logger.cpp | 9 | Construction, log events, flush |
 | test_token_stream_simulator.cpp | 9 | Load, callback, ring buffer |
-| test_trade_signal_engine.cpp | 10 | Signals, fields, backtest, cooldown |
-| test_output_sink.cpp | 6 | CSV, JSON, memory sink |
-| test_risk_manager.cpp | 16 | Magnitude, confidence, rate, drawdown, OMS hard breach, OMS soft warn, PnL breach, OMS event string |
+| test_trade_signal_engine.cpp | 16 | Signals, fields, backtest, cooldown, reset, latency_us, update_config, get_config, flush_sinks |
+| test_output_sink.cpp | 13 | CSV, JSON, memory sink, NaN/Inf guard, capacity cap |
+| test_risk_manager.cpp | 19 | Magnitude, confidence, rate, drawdown, OMS gates, update_config, get_config, concurrent evaluate |
 | test_pipeline.cpp (integration) | 5 | End-to-end, latency, accumulation |
 | bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput |
-| test_llm_stream_client.cpp | 5 | Connect/stop lifecycle, done callback |
-| test_deduplicator.cpp | 14 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
+| test_llm_stream_client.cpp | 14 | Connect/stop lifecycle, done callback, error paths |
+| test_deduplicator.cpp | 19 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
 | test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline, concurrent dedup+signal |
 | test_invariants.cpp (unit) | 6 | Dedup key determinism, sentiment sign, risk counter identity, latency avg bounds, signal confidence interval, dedup novel+dup sum |
-| test_oms_adapter.cpp (unit) | 12 | Mock emit all/order/stop/self-stop/double-start/stop-before-start; REST refused/error-count/description/update-count-zero; Mock→RiskManager feed; empty list |
+| test_oms_adapter.cpp (unit) | 21 | Mock/REST/FIX OMS adapter full coverage |
 | test_oms_pipeline.cpp (integration) | 4 | Position overlimit blocks signals; safe position allows signals; PnL breach blocks all; OMS callback fires on approach |
-| **Total** | **134** | |
+| test_prometheus_exporter.cpp | 4 | Start/stop, double-start, scrape serves metrics, no-callback |
+| test_edge_cases.cpp | 33 | Empty/null inputs, overflow, NaN, invalid params across all major APIs |
+| test_network_error_paths.cpp | 23 | Network error paths for LLMStreamClient and OMS adapters |
+| test_production_readiness.cpp | 26 | Production path coverage for all modules |
+| test_fix_oms_adapter.cpp | 21 | FIX 4.2 session management, heartbeats, sequence recovery |
+| test_full_pipeline.cpp (integration) | 16 | 5-stage pipeline end-to-end, all risk gates |
+| **Total** | **~341** | |

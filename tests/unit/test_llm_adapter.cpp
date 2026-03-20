@@ -2,6 +2,9 @@
 #include "LLMAdapter.h"
 
 #include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -269,6 +272,61 @@ TEST(LLMAdapterTest, test_llm_adapter_tokens_processed_increments_per_call) {
     auto after = adapter.get_stats();
     EXPECT_EQ(after.tokens_processed, before.tokens_processed + 3u)
         << "tokens_processed must increment by exactly 1 per map_token_to_weight call";
+}
+
+// ---------------------------------------------------------------------------
+// load_sentiment_dictionary tests (zero coverage before this cycle)
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_load_sentiment_dictionary_valid_file) {
+    const std::string tmp = "/tmp/llmquant_test_dict.txt";
+    {
+        std::ofstream f(tmp);
+        f << "moon     0.8  0.9  0.6  0.85\n";
+        f << "doom    -0.9  0.9  0.8 -0.90\n";
+        f << "  \n";                         // blank line — must be skipped
+        f << "# comment line\n";            // comment — must be skipped (iss >> fails)
+    }
+
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    ASSERT_NO_THROW(adapter.load_sentiment_dictionary(tmp));
+
+    SemanticWeight moon = adapter.map_token_to_weight("moon");
+    EXPECT_NEAR(moon.sentiment_score,  0.8,  1e-9);
+    EXPECT_NEAR(moon.confidence_score, 0.9,  1e-9);
+    EXPECT_NEAR(moon.directional_bias, 0.85, 1e-9);
+
+    SemanticWeight doom = adapter.map_token_to_weight("doom");
+    EXPECT_LT(doom.sentiment_score,  0.0);
+    EXPECT_LT(doom.directional_bias, 0.0);
+
+    std::remove(tmp.c_str());
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_load_sentiment_dictionary_nonexistent_file_throws) {
+    LLMAdapter adapter;
+    EXPECT_THROW(
+        adapter.load_sentiment_dictionary("/does/not/exist/vocab.txt"),
+        std::runtime_error);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_load_sentiment_dictionary_case_normalises_tokens) {
+    const std::string tmp = "/tmp/llmquant_test_dict_case.txt";
+    {
+        std::ofstream f(tmp);
+        f << "SURGE  0.5 0.8 0.7 0.6\n";  // uppercase — must normalize to "surge"
+    }
+
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.load_sentiment_dictionary(tmp);
+
+    // Lookup via lowercase must find the mapping.
+    SemanticWeight w = adapter.map_token_to_weight("surge");
+    EXPECT_NEAR(w.sentiment_score, 0.5, 1e-9);
+
+    std::remove(tmp.c_str());
 }
 
 } // namespace
