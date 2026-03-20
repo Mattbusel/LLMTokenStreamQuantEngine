@@ -1014,5 +1014,41 @@ TEST(LatencyControllerTest, test_get_sample_count_increments_per_record) {
     EXPECT_EQ(lc.get_sample_count(), size_t{2});
 }
 
+TEST(LatencyControllerTest, test_get_stddev_us_zero_for_uniform_samples) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 5; ++i)
+        lc.record_latency(std::chrono::microseconds{10});
+    EXPECT_NEAR(lc.get_stddev_us(), 0.0, 1e-9);
+}
+
+TEST(LatencyControllerTest, test_get_stddev_us_positive_for_varied_samples) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{1});
+    lc.record_latency(std::chrono::microseconds{9});
+    EXPECT_GT(lc.get_stddev_us(), 0.0);
+}
+
+TEST(LatencyControllerTest, test_get_stddev_us_zero_with_no_samples) {
+    LatencyController lc(make_config());
+    EXPECT_DOUBLE_EQ(lc.get_stddev_us(), 0.0);
+}
+
+TEST(LatencyControllerTest, test_get_stddev_us_equals_sqrt_variance) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{4});
+    lc.record_latency(std::chrono::microseconds{8});
+    lc.record_latency(std::chrono::microseconds{12});
+    double variance = lc.get_sample_variance_us();
+    double stddev   = lc.get_stddev_us();
+    EXPECT_NEAR(stddev * stddev, variance, 1e-9);
+}
+
+TEST(LatencyControllerTest, test_get_stddev_us_non_negative) {
+    LatencyController lc(make_config());
+    for (int i = 1; i <= 5; ++i)
+        lc.record_latency(std::chrono::microseconds{i * 3});
+    EXPECT_GE(lc.get_stddev_us(), 0.0);
+}
+
 } // namespace
 } // namespace llmquant

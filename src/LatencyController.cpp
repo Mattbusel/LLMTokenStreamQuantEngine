@@ -1,5 +1,6 @@
 #include "LatencyController.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -414,6 +415,10 @@ double LatencyController::get_sample_variance_us() const {
 size_t LatencyController::get_sample_count() const {
     std::lock_guard<std::mutex> lock(samples_mutex_);
     return sample_count_;
+}
+
+double LatencyController::get_stddev_us() const {
+    return std::sqrt(get_sample_variance_us());
 }
 
 } // namespace llmquant

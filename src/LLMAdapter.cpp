@@ -632,4 +632,12 @@ double LLMAdapter::get_max_directional_bias() const {
     return mx;
 }
 
+double LLMAdapter::get_volatility_range() const {
+    return get_max_volatility() - get_min_volatility();
+}
+
+double LLMAdapter::get_directional_bias_range() const {
+    return get_max_directional_bias() - get_min_directional_bias();
+}
+
 } // namespace llmquant

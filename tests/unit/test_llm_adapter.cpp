@@ -1074,6 +1074,52 @@ TEST(LLMAdapterTest, test_get_min_max_directional_bias_correct) {
     EXPECT_NEAR(adapter.get_max_directional_bias(),  0.7, 1e-12);
 }
 
+TEST(LLMAdapterTest, test_get_volatility_range_zero_on_empty_dictionary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_volatility_range(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_volatility_range_is_non_negative) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("a", {0.3, 0.8, 0.2, 0.1});
+    adapter.add_token_mapping("b", {-0.4, 0.7, 0.8, -0.2});
+    EXPECT_GE(adapter.get_volatility_range(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_volatility_range_matches_max_minus_min) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("low", {0.1, 0.9, 0.1, 0.0});
+    adapter.add_token_mapping("high", {-0.3, 0.8, 0.9, -0.1});
+    double expected = adapter.get_max_volatility() - adapter.get_min_volatility();
+    EXPECT_NEAR(adapter.get_volatility_range(), expected, 1e-12);
+}
+
+TEST(LLMAdapterTest, test_get_directional_bias_range_zero_on_empty_dictionary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_directional_bias_range(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_directional_bias_range_is_non_negative) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bull", {0.8, 0.9, 0.2, 0.7});
+    adapter.add_token_mapping("bear", {-0.7, 0.8, 0.3, -0.5});
+    EXPECT_GE(adapter.get_directional_bias_range(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_directional_bias_range_matches_max_minus_min) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("x", {0.5, 0.9, 0.3, 0.6});
+    adapter.add_token_mapping("y", {-0.4, 0.7, 0.2, -0.3});
+    double expected = adapter.get_max_directional_bias() - adapter.get_min_directional_bias();
+    EXPECT_NEAR(adapter.get_directional_bias_range(), expected, 1e-12);
+}
+
 TEST(LLMAdapterTest, test_get_cache_hit_rate_zero_before_processing) {
     LLMAdapter adapter;
     adapter.reset_stats();
