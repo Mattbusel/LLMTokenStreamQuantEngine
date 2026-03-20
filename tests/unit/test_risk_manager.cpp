@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
+#include "MetricsLogger.h"
 #include "RiskManager.h"
+#include <cstdio>
 #include <stdexcept>
 #include <thread>
 #include <chrono>
@@ -818,4 +820,107 @@ TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_caps_at_one) {
     auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
     for (int i = 0; i < 5; ++i) rm.evaluate(sig);
     EXPECT_LE(rm.get_rate_limit_utilization(), 1.0);
+}
+
+// ============================================================
+// Cycle 25: evaluate_with_reason — position and PnL gates
+// ============================================================
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_position_limit_reason) {
+    RiskManager rm(default_config());
+
+    // Set a tight position limit so the projected position exceeds it.
+    RiskManager::PositionState pos;
+    pos.net_position    = 0.0;
+    pos.position_limit  = 0.05;  // tiny limit
+    pos.pnl             = 100.0; // healthy PnL so PnL gate doesn't fire first
+    pos.pnl_limit       = -100.0;
+    rm.update_position(pos);
+
+    std::string reason;
+    // Signal with delta_bias_shift=0.1 projects net_position to 0.1 > 0.05 limit.
+    TradeSignal s;
+    s.delta_bias_shift      = 0.1;
+    s.volatility_adjustment = 0.1;
+    s.spread_modifier       = 0.05;
+    s.confidence            = 0.8;
+    s.timestamp_ns          = 1;
+    bool result = rm.evaluate_with_reason(s, reason);
+    EXPECT_FALSE(result);
+    EXPECT_EQ(reason, "position_limit");
+}
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_pnl_limit_reason) {
+    RiskManager rm(default_config());
+
+    RiskManager::PositionState pos;
+    pos.net_position    = 0.0;
+    pos.position_limit  = 100.0;  // generous limit
+    pos.pnl             = -999.0; // well below PnL limit
+    pos.pnl_limit       = -1.0;   // PnL limit
+    rm.update_position(pos);
+
+    std::string reason;
+    bool result = rm.evaluate_with_reason(make_signal(), reason);
+    EXPECT_FALSE(result);
+    EXPECT_EQ(reason, "pnl_limit");
+}
+
+// ============================================================
+// Cycle 25: MetricsLogger + RiskManager integration
+// ============================================================
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_integrates_with_metrics_logger) {
+    // When a signal is blocked, pass the reason to MetricsLogger::log_risk_rejection.
+    // Verify both components work together without throwing.
+    RiskManager rm(default_config());
+
+    MetricsLogger::Config mlcfg;
+    mlcfg.log_file_path         = "/tmp/test_rm_metrics_integration.log";
+    mlcfg.format                = MetricsLogger::OutputFormat::JSON;
+    mlcfg.enable_console_output = false;
+    mlcfg.flush_interval        = std::chrono::milliseconds{10};
+    MetricsLogger logger(mlcfg);
+
+    std::string reason;
+    bool passed = rm.evaluate_with_reason(make_signal(5.0, 0.1, 0.05, 0.8), reason);
+    ASSERT_FALSE(passed);
+    ASSERT_FALSE(reason.empty());
+
+    // Log the rejection — must not throw.
+    EXPECT_NO_THROW(logger.log_risk_rejection(reason, 5.0, 0.8));
+    EXPECT_EQ(logger.get_log_entry_count(), uint64_t{1});
+
+    std::remove("/tmp/test_rm_metrics_integration.log");
+}
+
+// ============================================================
+// Test: Stats::blocked_total() sums gate counters correctly.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_stats_blocked_total_sums_all_gates) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 1000;
+    RiskManager rm(cfg);
+
+    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.01)); // confidence block
+
+    uint64_t total = rm.get_stats().blocked_total();
+    EXPECT_EQ(total, 2u) << "blocked_total must equal magnitude + confidence blocks";
+}
+
+TEST(RiskManagerTest, test_risk_manager_blocked_rate_zero_when_all_pass) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+    EXPECT_DOUBLE_EQ(rm.get_blocked_rate(), 0.0)
+        << "Blocked rate must be 0 when all signals pass";
+}
+
+TEST(RiskManagerTest, test_risk_manager_blocked_rate_correct_fraction) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
+
+    // 1 blocked out of 2 evaluated -> 0.5
+    EXPECT_NEAR(rm.get_blocked_rate(), 0.5, 1e-9);
 }
