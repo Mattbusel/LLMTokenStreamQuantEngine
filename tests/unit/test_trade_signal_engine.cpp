@@ -205,6 +205,38 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_confidence_reflects_input_w
         << "signal.confidence must reflect the confidence_score of the processed weight";
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_get_config_returns_active_config) {
+    auto cfg = make_config(1.5, 2.5, 0.9, 500);
+    TradeSignalEngine engine(cfg);
+    auto retrieved = engine.get_config();
+    EXPECT_DOUBLE_EQ(retrieved.bias_sensitivity,       1.5);
+    EXPECT_DOUBLE_EQ(retrieved.volatility_sensitivity, 2.5);
+    EXPECT_DOUBLE_EQ(retrieved.signal_decay_rate,      0.9);
+    EXPECT_EQ(retrieved.signal_cooldown, std::chrono::microseconds{500});
+
+    // After update_config the accessor must reflect the new values.
+    engine.update_config(make_config(3.0, 4.0, 0.8, 0));
+    auto updated = engine.get_config();
+    EXPECT_DOUBLE_EQ(updated.bias_sensitivity,       3.0);
+    EXPECT_DOUBLE_EQ(updated.volatility_sensitivity, 4.0);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_update_config_invalid_params_throw) {
+    TradeSignalEngine engine(make_config());
+
+    TradeSignalEngine::Config bad_bias = make_config();
+    bad_bias.bias_sensitivity = 0.0;
+    EXPECT_THROW(engine.update_config(bad_bias), std::invalid_argument);
+
+    TradeSignalEngine::Config bad_vol = make_config();
+    bad_vol.volatility_sensitivity = -1.0;
+    EXPECT_THROW(engine.update_config(bad_vol), std::invalid_argument);
+
+    TradeSignalEngine::Config bad_decay = make_config();
+    bad_decay.signal_decay_rate = 0.0;
+    EXPECT_THROW(engine.update_config(bad_decay), std::invalid_argument);
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_update_config_changes_sensitivity) {
     TradeSignalEngine engine(make_config(1.0 /*bias_sens*/, 1.0 /*vol_sens*/, 0.95, 0));
     engine.set_backtest_mode(true);

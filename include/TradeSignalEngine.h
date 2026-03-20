@@ -163,6 +163,13 @@ public:
     void update_config(const Config& config);
 
     /**
+     * @brief Return a copy of the current engine configuration.
+     *
+     * @return Copy of the active Config struct.
+     */
+    Config get_config() const noexcept { return config_; }
+
+    /**
      * @brief Return a copy of the current signal statistics.
      *
      * Thread-safe atomic snapshot.

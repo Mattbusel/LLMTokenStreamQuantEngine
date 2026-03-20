@@ -195,5 +195,49 @@ TEST(OutputSinkTest, test_memory_sink_size_tracks_signal_count) {
     EXPECT_EQ(sink.size(), 0u);
 }
 
+TEST(OutputSinkTest, test_memory_sink_capacity_cap_drops_oldest) {
+    MemoryOutputSink sink(3);  // max 3 signals
+    EXPECT_EQ(sink.dropped_count(), 0u);
+
+    sink.emit(make_signal(0.1, 0.1, 100));
+    sink.emit(make_signal(0.2, 0.1, 200));
+    sink.emit(make_signal(0.3, 0.1, 300));
+    EXPECT_EQ(sink.size(), 3u);
+    EXPECT_EQ(sink.dropped_count(), 0u);
+
+    // 4th signal evicts the oldest (ts=100).
+    sink.emit(make_signal(0.4, 0.1, 400));
+    EXPECT_EQ(sink.size(), 3u);
+    EXPECT_EQ(sink.dropped_count(), 1u);
+    EXPECT_EQ(sink.get_signals()[0].timestamp_ns, 200u);
+    EXPECT_EQ(sink.get_signals()[2].timestamp_ns, 400u);
+
+    // 5th signal evicts ts=200.
+    sink.emit(make_signal(0.5, 0.1, 500));
+    EXPECT_EQ(sink.size(), 3u);
+    EXPECT_EQ(sink.dropped_count(), 2u);
+    EXPECT_EQ(sink.get_signals()[0].timestamp_ns, 300u);
+}
+
+TEST(OutputSinkTest, test_memory_sink_capacity_zero_is_unlimited) {
+    MemoryOutputSink sink(0);  // 0 = unlimited
+    for (int i = 0; i < 1000; ++i) {
+        sink.emit(make_signal(0.1, 0.1, static_cast<uint64_t>(i)));
+    }
+    EXPECT_EQ(sink.size(), 1000u);
+    EXPECT_EQ(sink.dropped_count(), 0u);
+}
+
+TEST(OutputSinkTest, test_memory_sink_clear_resets_dropped_count) {
+    MemoryOutputSink sink(2);
+    sink.emit(make_signal(0.1, 0.1, 1));
+    sink.emit(make_signal(0.2, 0.1, 2));
+    sink.emit(make_signal(0.3, 0.1, 3));  // drops ts=1
+    EXPECT_EQ(sink.dropped_count(), 1u);
+    sink.clear();
+    EXPECT_EQ(sink.dropped_count(), 0u);
+    EXPECT_EQ(sink.size(), 0u);
+}
+
 } // namespace
 } // namespace llmquant

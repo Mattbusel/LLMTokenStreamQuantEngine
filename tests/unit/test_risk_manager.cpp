@@ -399,3 +399,36 @@ TEST(RiskManagerTest, test_risk_manager_get_config_reflects_update) {
     EXPECT_DOUBLE_EQ(retrieved.max_bias_magnitude, 0.25);
     EXPECT_DOUBLE_EQ(retrieved.min_confidence,     0.5);
 }
+
+// ============================================================
+// Test 19: concurrent evaluate() from multiple threads — no crash / no UB.
+// All gates disabled except magnitude; all signals pass.
+// Total passed must equal N_THREADS * N_CALLS exactly.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_concurrent_evaluate_no_crash) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 100000;  // remove rate interference
+    cfg.disable_drawdown_gate  = true;    // remove drawdown interference
+    cfg.disable_position_gate  = true;    // remove position interference
+    RiskManager rm(cfg);
+
+    constexpr int N_THREADS = 8;
+    constexpr int N_CALLS   = 100;
+    std::vector<std::thread> threads;
+    threads.reserve(N_THREADS);
+
+    for (int t = 0; t < N_THREADS; ++t) {
+        threads.emplace_back([&]() {
+            for (int i = 0; i < N_CALLS; ++i) {
+                rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+            }
+        });
+    }
+    for (auto& th : threads) th.join();
+
+    // All signals are within limits so every call must have passed.
+    EXPECT_EQ(rm.get_stats().signals_passed.load(),
+              static_cast<uint64_t>(N_THREADS * N_CALLS));
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_confidence.load(), 0u);
+}
