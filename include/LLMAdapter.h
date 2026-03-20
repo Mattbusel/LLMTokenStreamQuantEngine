@@ -165,6 +165,23 @@ public:
      */
     double get_avg_confidence() const;
 
+    /**
+     * @brief Return the mean sentiment_score across all tokens in the dictionary.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Average sentiment_score in [-1.0, 1.0].
+     */
+    double get_avg_sentiment() const;
+
+    /**
+     * @brief Return the mean volatility_score across all tokens in the dictionary.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Average volatility_score in [0.0, 1.0].
+     */
+    double get_avg_volatility() const;
 
     /**
      * @brief Removes all mappings from the dictionary.

@@ -979,6 +979,36 @@ TEST(LLMAdapterTest, test_count_neutral_tokens_basic) {
     EXPECT_EQ(adapter.count_neutral_tokens(), size_t{2});
 }
 
+TEST(LLMAdapterTest, test_get_avg_sentiment_zero_on_empty_dictionary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_avg_sentiment(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_avg_sentiment_matches_manual_average) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("a", {0.4, 0.8, 0.1, 0.3});
+    adapter.add_token_mapping("b", {-0.2, 0.6, 0.2, -0.1});
+    double expected = (0.4 + (-0.2)) / 2.0;
+    EXPECT_NEAR(adapter.get_avg_sentiment(), expected, 1e-12);
+}
+
+TEST(LLMAdapterTest, test_get_avg_volatility_zero_on_empty_dictionary) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_DOUBLE_EQ(adapter.get_avg_volatility(), 0.0);
+}
+
+TEST(LLMAdapterTest, test_get_avg_volatility_matches_manual_average) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("a", {0.5, 0.9, 0.3, 0.4});
+    adapter.add_token_mapping("b", {-0.3, 0.7, 0.7, -0.2});
+    double expected = (0.3 + 0.7) / 2.0;
+    EXPECT_NEAR(adapter.get_avg_volatility(), expected, 1e-12);
+}
+
 TEST(LLMAdapterTest, test_get_cache_hit_rate_zero_before_processing) {
     LLMAdapter adapter;
     adapter.reset_stats();

@@ -306,3 +306,40 @@ TEST(DeduplicatorTest, test_in_process_dedup_get_stats_reset_reflects_cleared_st
     EXPECT_EQ(after.total_duplicates, uint64_t{0}) << "total_duplicates must be 0 after reset";
     EXPECT_EQ(after.current_size,     static_cast<size_t>(0)) << "current_size must be 0 after reset";
 }
+
+TEST(DeduplicatorTest, test_get_duplicate_rate_zero_before_any_checks) {
+    InProcessDeduplicator dedup;
+    EXPECT_DOUBLE_EQ(dedup.get_duplicate_rate(), 0.0);
+}
+
+TEST(DeduplicatorTest, test_get_duplicate_rate_correct_after_mixed_checks) {
+    using ms = std::chrono::milliseconds;
+    InProcessDeduplicator dedup;
+    auto key = DedupKey::from_token("alpha");
+    dedup.check_and_register(key, ms{5000}); // novel
+    dedup.check_and_register(key, ms{5000}); // dup
+    dedup.check_and_register(key, ms{5000}); // dup
+    double rate = dedup.get_duplicate_rate();
+    EXPECT_DOUBLE_EQ(rate, 2.0 / 3.0);
+}
+
+TEST(DeduplicatorTest, test_get_novel_rate_plus_duplicate_rate_equals_one) {
+    using ms = std::chrono::milliseconds;
+    InProcessDeduplicator dedup;
+    auto k1 = DedupKey::from_token("x");
+    auto k2 = DedupKey::from_token("y");
+    dedup.check_and_register(k1, ms{5000});
+    dedup.check_and_register(k2, ms{5000});
+    dedup.check_and_register(k1, ms{5000});
+    double sum = dedup.get_duplicate_rate() + dedup.get_novel_rate();
+    EXPECT_NEAR(sum, 1.0, 1e-12);
+}
+
+TEST(DeduplicatorTest, test_total_checked_equals_novel_plus_duplicates) {
+    using ms = std::chrono::milliseconds;
+    InProcessDeduplicator dedup;
+    auto key = DedupKey::from_token("beta");
+    dedup.check_and_register(key, ms{5000});
+    dedup.check_and_register(key, ms{5000});
+    EXPECT_EQ(dedup.total_checked(), dedup.total_novel() + dedup.total_duplicates());
+}

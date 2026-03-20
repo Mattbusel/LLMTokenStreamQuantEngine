@@ -1177,5 +1177,22 @@ TEST(TradeSignalEngineTest, test_has_pending_bias_true_after_processing) {
         << "has_pending_bias must be true after accumulating non-zero bias";
 }
 
+TEST(TradeSignalEngineTest, test_get_avg_signal_quality_zero_before_signals) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_avg_signal_quality(), 0.0)
+        << "avg_signal_quality must be 0 before any signals are emitted";
+}
+
+TEST(TradeSignalEngineTest, test_get_avg_signal_quality_in_range_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.8, 0.9, 0.3, 0.7};
+    engine.process_semantic_weight(w);
+    double q = engine.get_avg_signal_quality();
+    EXPECT_GE(q, 0.0);
+    EXPECT_LE(q, 1.0);
+}
+
 } // namespace
 } // namespace llmquant

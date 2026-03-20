@@ -253,6 +253,20 @@ double LLMAdapter::get_avg_confidence() const {
     return sum / static_cast<double>(token_weights_.size());
 }
 
+double LLMAdapter::get_avg_sentiment() const {
+    if (token_weights_.empty()) return 0.0;
+    double sum = 0.0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; sum += wt.sentiment_score; }
+    return sum / static_cast<double>(token_weights_.size());
+}
+
+double LLMAdapter::get_avg_volatility() const {
+    if (token_weights_.empty()) return 0.0;
+    double sum = 0.0;
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; sum += wt.volatility_score; }
+    return sum / static_cast<double>(token_weights_.size());
+}
+
 std::vector<std::string> LLMAdapter::get_all_token_keys() const {
     std::vector<std::string> keys;
     keys.reserve(token_weights_.size());

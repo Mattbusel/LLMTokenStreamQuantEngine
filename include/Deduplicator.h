@@ -181,6 +181,51 @@ public:
     uint64_t total_novel() const noexcept { return total_novel_.load(); }
 
     /**
+     * @brief Return the fraction of all seen keys that were duplicates, in [0.0, 1.0].
+     *
+     * Computed as total_duplicates / (total_duplicates + total_novel).
+     * Returns 0.0 if no keys have been seen yet.
+     * Thread-safe: reads atomic counters with relaxed ordering.
+     *
+     * @return Duplicate rate in [0.0, 1.0].
+     */
+    double get_duplicate_rate() const noexcept {
+        uint64_t dups  = total_duplicates_.load(std::memory_order_relaxed);
+        uint64_t novel = total_novel_.load(std::memory_order_relaxed);
+        uint64_t total = dups + novel;
+        return (total == 0) ? 0.0 : static_cast<double>(dups) / static_cast<double>(total);
+    }
+
+    /**
+     * @brief Return the fraction of all seen keys that were novel, in [0.0, 1.0].
+     *
+     * Complement of get_duplicate_rate(): novel_rate + duplicate_rate == 1.0.
+     * Returns 0.0 if no keys have been seen yet.
+     * Thread-safe: reads atomic counters with relaxed ordering.
+     *
+     * @return Novel rate in [0.0, 1.0].
+     */
+    double get_novel_rate() const noexcept {
+        uint64_t dups  = total_duplicates_.load(std::memory_order_relaxed);
+        uint64_t novel = total_novel_.load(std::memory_order_relaxed);
+        uint64_t total = dups + novel;
+        return (total == 0) ? 0.0 : static_cast<double>(novel) / static_cast<double>(total);
+    }
+
+    /**
+     * @brief Return the total number of check_and_register() calls since construction.
+     *
+     * Equivalent to total_duplicates() + total_novel().
+     * Thread-safe: reads atomic counters with relaxed ordering.
+     *
+     * @return Total keys checked.
+     */
+    uint64_t total_checked() const noexcept {
+        return total_duplicates_.load(std::memory_order_relaxed)
+             + total_novel_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Aggregated statistics snapshot.
      */
     struct Stats {
