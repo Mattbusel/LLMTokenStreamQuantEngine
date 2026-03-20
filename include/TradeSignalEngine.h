@@ -453,6 +453,26 @@ public:
     }
 
     /**
+     * @brief Return signals emitted per second since last reset() or construction.
+     *
+     * Computed as signals_generated / elapsed_seconds since reset_time_.
+     * Returns 0.0 if fewer than 1 ns has elapsed (avoids divide-by-near-zero).
+     *
+     * Thread-safe (reads atomic counter and construction time).
+     *
+     * @return Signal velocity in signals/second.
+     */
+    double get_signal_velocity() const noexcept {
+        uint64_t generated = stats_.signals_generated.load(std::memory_order_relaxed);
+        if (generated == 0) return 0.0;
+        auto now = std::chrono::high_resolution_clock::now();
+        double elapsed_ns = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now - reset_time_).count());
+        if (elapsed_ns < 1.0) return 0.0;
+        return static_cast<double>(generated) / (elapsed_ns / 1e9);
+    }
+
+    /**
      * @brief Register an OutputSink to receive all emitted signals.
      *
      * The sink is called synchronously inside emit_signal() after the

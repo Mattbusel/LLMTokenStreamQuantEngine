@@ -216,6 +216,43 @@ void MetricsLogger::log_config_reload(const std::string& source_path, bool succe
     }
 }
 
+void MetricsLogger::log_pipeline_health(bool healthy, double slo_breach_rate,
+                                         double backoff_multiplier) {
+    log_entries_++;
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    const char* status = healthy ? "ok" : "degraded";
+    if (config_.format == OutputFormat::CSV) {
+        std::ostringstream oss;
+        oss << ts << ",PIPELINE_HEALTH," << status
+            << ",slo_breach_rate=" << slo_breach_rate
+            << ",backoff_multiplier=" << backoff_multiplier << ",,";
+        if (file_logger_) file_logger_->info(oss.str());
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"pipeline_health","status":"{}","slo_breach_rate":{},"backoff_multiplier":{},"timestamp":{}}})",
+                status, slo_breach_rate, backoff_multiplier, ts);
+    }
+}
+
+void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
+    log_entries_++;
+    auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    const char* kind = is_duplicate ? "duplicate" : "novel";
+    if (config_.format == OutputFormat::CSV) {
+        std::ostringstream oss;
+        oss << ts << ",DEDUP," << kind << "," << key << ",,,,";
+        if (file_logger_) file_logger_->info(oss.str());
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"dedup","kind":"{}","key":"{}","timestamp":{}}})",
+                kind, key, ts);
+    }
+}
+
 void MetricsLogger::log_performance_summary() {
     if (console_logger_) {
         console_logger_->info("=== Performance Summary ===");

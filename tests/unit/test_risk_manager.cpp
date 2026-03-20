@@ -1521,3 +1521,22 @@ TEST(RiskManagerTest, test_format_stats_zero_evaluated_before_any_signals) {
     std::string s = rm.format_stats();
     EXPECT_NE(s.find("evaluated=0"), std::string::npos);
 }
+
+TEST(RiskManagerTest, test_get_confidence_block_rate_zero_before_any_signals) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_confidence_block_rate(), 0.0);
+}
+
+TEST(RiskManagerTest, test_get_confidence_block_rate_rises_after_low_confidence_signal) {
+    RiskManager::Config cfg = default_config();
+    cfg.min_confidence = 0.9;
+    RiskManager rm(cfg);
+    TradeSignal sig;
+    sig.delta_bias_shift      = 0.1;
+    sig.volatility_adjustment = 0.0;
+    sig.spread_modifier       = 0.0;
+    sig.confidence            = 0.5;  // below min_confidence
+    rm.evaluate(sig);
+    EXPECT_GT(rm.get_confidence_block_rate(), 0.0);
+    EXPECT_LE(rm.get_confidence_block_rate(), 1.0);
+}

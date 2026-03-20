@@ -683,4 +683,13 @@ LLMAdapter::top_tokens_by_volatility(size_t n) const {
     return result;
 }
 
+size_t LLMAdapter::count_tokens_above_volatility(double threshold) const {
+    size_t count = 0;
+    for (const auto& [tok, wt] : token_weights_) {
+        (void)tok;
+        if (wt.volatility_score > threshold) ++count;
+    }
+    return count;
+}
+
 } // namespace llmquant

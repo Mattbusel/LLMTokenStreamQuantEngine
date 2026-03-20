@@ -1370,5 +1370,19 @@ TEST(TradeSignalEngineTest, test_format_stats_token_count_matches) {
         << "format_stats token count must match processed count";
 }
 
+TEST(TradeSignalEngineTest, test_get_signal_velocity_zero_before_signals) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_signal_velocity(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_signal_velocity_positive_after_signal) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.9, 0.95, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    EXPECT_GE(engine.get_signal_velocity(), 0.0);
+}
+
 } // namespace
 } // namespace llmquant

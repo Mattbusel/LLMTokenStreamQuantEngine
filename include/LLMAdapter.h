@@ -223,6 +223,14 @@ public:
     double get_avg_directional_bias() const;
 
     /**
+     * @brief Count tokens with volatility_score strictly above @p threshold.
+     *
+     * @param threshold Volatility threshold in [0.0, 1.0].
+     * @return Number of tokens where volatility_score > threshold.
+     */
+    size_t count_tokens_above_volatility(double threshold) const;
+
+    /**
      * @brief Removes all mappings from the dictionary.
      *
      * Note: this clears both built-in and custom mappings. After calling this

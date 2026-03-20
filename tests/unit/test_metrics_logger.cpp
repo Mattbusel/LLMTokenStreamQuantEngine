@@ -409,3 +409,41 @@ TEST(MetricsLoggerTest, test_get_log_rate_positive_after_entries) {
     EXPECT_GE(rate, 0.0) << "get_log_rate must be >= 0 after entries";
     std::remove("tmp_log_rate_entries_test.log");
 }
+
+TEST(MetricsLoggerTest, test_log_pipeline_health_increments_entry_count) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path = "tmp_pipeline_health_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    uint64_t before = logger.get_log_entry_count();
+    logger.log_pipeline_health(true, 0.02, 1.0);
+    EXPECT_EQ(logger.get_log_entry_count(), before + 1);
+    std::remove("tmp_pipeline_health_test.log");
+}
+
+TEST(MetricsLoggerTest, test_log_dedup_event_increments_entry_count) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path = "tmp_dedup_event_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    uint64_t before = logger.get_log_entry_count();
+    logger.log_dedup_event("token_key_abc", false);
+    logger.log_dedup_event("token_key_abc", true);
+    EXPECT_EQ(logger.get_log_entry_count(), before + 2);
+    std::remove("tmp_dedup_event_test.log");
+}
+
+TEST(MetricsLoggerTest, test_log_pipeline_health_json_contains_event_key) {
+    MetricsLogger::Config cfg;
+    cfg.format = MetricsLogger::OutputFormat::JSON;
+    cfg.log_file_path = "tmp_pipeline_health_json_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    logger.log_pipeline_health(false, 0.15, 2.5);
+    logger.flush();
+    std::ifstream file("tmp_pipeline_health_json_test.log");
+    std::string content((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("pipeline_health"), std::string::npos);
+    std::remove("tmp_pipeline_health_json_test.log");
+}

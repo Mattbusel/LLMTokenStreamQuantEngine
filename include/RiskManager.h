@@ -614,6 +614,23 @@ public:
              / static_cast<double>(total);
     }
 
+    /**
+     * @brief Return the fraction of total evaluations blocked by the confidence gate.
+     *
+     * Computed as signals_blocked_confidence / total_evaluated.
+     * Returns 0.0 if no signals have been evaluated.
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Confidence block rate in [0.0, 1.0].
+     */
+    double get_confidence_block_rate() const noexcept {
+        uint64_t total = get_total_signals_evaluated();
+        if (total == 0) return 0.0;
+        return static_cast<double>(stats_.signals_blocked_confidence.load(std::memory_order_relaxed))
+             / static_cast<double>(total);
+    }
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);

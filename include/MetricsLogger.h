@@ -131,6 +131,29 @@ public:
     void log_config_reload(const std::string& source_path, bool success);
 
     /**
+     * @brief Log a pipeline health snapshot.
+     *
+     * Records latency SLO health, the current SLO breach rate, and the
+     * backoff multiplier.  Useful for periodic health-check logging.
+     *
+     * @param healthy          true if the latency p99 is within the SLO target.
+     * @param slo_breach_rate  Fraction of samples exceeding the target latency [0, 1].
+     * @param backoff_multiplier Current backoff multiplier from LatencyController [1, 5].
+     */
+    void log_pipeline_health(bool healthy, double slo_breach_rate, double backoff_multiplier);
+
+    /**
+     * @brief Log a deduplication decision.
+     *
+     * Records whether a key was novel or a duplicate.  Useful for auditing
+     * dedup behaviour in replay or integration scenarios.
+     *
+     * @param key          String representation of the dedup key.
+     * @param is_duplicate true if the key was already registered (a duplicate).
+     */
+    void log_dedup_event(const std::string& key, bool is_duplicate);
+
+    /**
      * @brief Write a human-readable performance summary to the console (if enabled).
      */
     void log_performance_summary();

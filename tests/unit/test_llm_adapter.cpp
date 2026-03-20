@@ -1317,5 +1317,20 @@ TEST(LLMAdapterTest, test_get_confidence_range_non_negative) {
     EXPECT_LE(adapter.get_max_confidence(), 1.0);
 }
 
+TEST(LLMAdapterTest, test_count_tokens_above_volatility_empty_returns_zero) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_EQ(adapter.count_tokens_above_volatility(0.5), size_t{0});
+}
+
+TEST(LLMAdapterTest, test_count_tokens_above_volatility_filters_correctly) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("panic", {-0.8, 0.9, 0.9, -0.8});
+    adapter.add_token_mapping("calm",  {0.3, 0.7, 0.1, 0.2});
+    EXPECT_EQ(adapter.count_tokens_above_volatility(0.5), size_t{1});
+    EXPECT_EQ(adapter.count_tokens_above_volatility(0.0), size_t{2});
+}
+
 } // namespace
 } // namespace llmquant
