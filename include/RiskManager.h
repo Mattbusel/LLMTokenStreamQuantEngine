@@ -194,6 +194,18 @@ public:
     double get_cumulative_bias() const;
 
     /**
+     * @brief Return the remaining drawdown budget in the current window.
+     *
+     * Computes max_drawdown - |cumulative_bias_|, clamped to [0, max_drawdown].
+     * A value of 0.0 means the drawdown gate will block the next signal.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Remaining drawdown headroom in the same units as max_drawdown.
+     */
+    double get_drawdown_budget_remaining() const;
+
+    /**
      * @brief Attach a MetricsLogger for structured rejection logging.
      *
      * @param logger Pointer to an active MetricsLogger; must outlive this

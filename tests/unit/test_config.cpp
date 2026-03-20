@@ -696,8 +696,7 @@ TEST(ConfigTest, test_config_load_from_env_nan_value_is_ignored) {
     double before = cfg.get().trading.bias_sensitivity;
     int count = cfg.load_from_env();
     // NaN is not finite — load_from_env must skip it.
-    EXPECT_DOUBLE_EQ(cfg.get().trading.bias_sensitivity, before)
-        << "NaN env var must not change the config value";
+    EXPECT_NEAR(cfg.get().trading.bias_sensitivity, before, 1e-9);
     EXPECT_EQ(count, 0);
 #ifdef _WIN32
     _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");

@@ -252,4 +252,10 @@ double RiskManager::get_cumulative_bias() const {
     return cumulative_bias_;
 }
 
+double RiskManager::get_drawdown_budget_remaining() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    double remaining = config_.max_drawdown - std::fabs(cumulative_bias_);
+    return remaining < 0.0 ? 0.0 : remaining;
+}
+
 } // namespace llmquant
