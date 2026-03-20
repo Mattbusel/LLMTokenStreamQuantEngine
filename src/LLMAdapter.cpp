@@ -256,6 +256,17 @@ bool LLMAdapter::update_token_weight(const std::string& token, const SemanticWei
     return true;
 }
 
+size_t LLMAdapter::batch_add_token_mappings(
+    const std::unordered_map<std::string, SemanticWeight>& mappings) {
+    size_t inserted = 0;
+    for (const auto& [tok, wt] : mappings) {
+        auto key = normalize_token(tok);
+        if (token_weights_.find(key) == token_weights_.end()) ++inserted;
+        token_weights_[key] = wt;
+    }
+    return inserted;
+}
+
 std::vector<std::pair<std::string, double>>
 LLMAdapter::top_tokens_by_sentiment(size_t n) const {
     std::vector<std::pair<std::string, double>> result;

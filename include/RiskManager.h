@@ -265,6 +265,15 @@ public:
     double get_blocked_rate() const noexcept;
 
     /**
+     * @brief Return the total number of signals evaluated (passed + all blocked).
+     *
+     * Thread-safe (reads atomic stats).
+     *
+     * @return Total signals evaluated since construction or last reset_stats().
+     */
+    uint64_t get_total_evaluated() const noexcept;
+
+    /**
      * @brief Attach a MetricsLogger for structured rejection logging.
      *
      * @param logger Pointer to an active MetricsLogger; must outlive this

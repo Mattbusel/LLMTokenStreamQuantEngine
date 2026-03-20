@@ -309,6 +309,11 @@ double RiskManager::get_blocked_rate() const noexcept {
     return (total == 0) ? 0.0 : static_cast<double>(blocked) / static_cast<double>(total);
 }
 
+uint64_t RiskManager::get_total_evaluated() const noexcept {
+    return stats_.blocked_total()
+         + stats_.signals_passed.load(std::memory_order_relaxed);
+}
+
 double RiskManager::get_rate_limit_utilization() const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (config_.max_signals_per_second == 0) return 1.0;

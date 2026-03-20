@@ -587,5 +587,38 @@ TEST(LLMAdapterTest, test_llm_adapter_remove_makes_token_return_neutral) {
         << "After removal, crash must return neutral (zero) directional_bias";
 }
 
+// ---------------------------------------------------------------------------
+// batch_add_token_mappings
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_batch_add_inserts_new_tokens) {
+    LLMAdapter adapter;
+    size_t before = adapter.get_dictionary_size();
+    std::unordered_map<std::string, SemanticWeight> batch = {
+        {"new_tok_a", {0.5, 0.8, 0.1, 0.6}},
+        {"new_tok_b", {-0.3, 0.7, 0.2, -0.4}},
+    };
+    size_t inserted = adapter.batch_add_token_mappings(batch);
+    EXPECT_EQ(inserted, 2u);
+    EXPECT_EQ(adapter.get_dictionary_size(), before + 2);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_batch_add_overwrites_existing) {
+    LLMAdapter adapter;
+    std::unordered_map<std::string, SemanticWeight> batch = {{"crash", {0.9, 0.5, 0.1, 0.9}}};
+    size_t inserted = adapter.batch_add_token_mappings(batch);
+    EXPECT_EQ(inserted, 0u) << "Overwrite must not count as new insertion";
+    SemanticWeight w;
+    ASSERT_TRUE(adapter.get_token_mapping("crash", w));
+    EXPECT_DOUBLE_EQ(w.sentiment_score, 0.9);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_batch_add_empty_batch) {
+    LLMAdapter adapter;
+    size_t before = adapter.get_dictionary_size();
+    EXPECT_EQ(adapter.batch_add_token_mappings({}), 0u);
+    EXPECT_EQ(adapter.get_dictionary_size(), before);
+}
+
 } // namespace
 } // namespace llmquant
