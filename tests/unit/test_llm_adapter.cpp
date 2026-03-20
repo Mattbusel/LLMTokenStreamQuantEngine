@@ -1011,5 +1011,21 @@ TEST(LLMAdapterTest, test_get_cache_hit_rate_in_range) {
     EXPECT_LE(rate, 1.0);
 }
 
+TEST(LLMAdapterTest, test_get_avg_confidence_in_range) {
+    LLMAdapter adapter;
+    double avg = adapter.get_avg_confidence();
+    EXPECT_GE(avg, 0.0);
+    EXPECT_LE(avg, 1.0);
+}
+
+TEST(LLMAdapterTest, test_get_avg_confidence_matches_added_tokens) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("a", {0.0, 0.4, 0.0, 0.0});
+    adapter.add_token_mapping("b", {0.0, 0.6, 0.0, 0.0});
+    double avg = adapter.get_avg_confidence();
+    EXPECT_NEAR(avg, 0.5, 1e-9);
+}
+
 } // namespace
 } // namespace llmquant

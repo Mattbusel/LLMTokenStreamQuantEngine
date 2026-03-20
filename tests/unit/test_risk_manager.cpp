@@ -1396,3 +1396,17 @@ TEST(RiskManagerTest, test_get_blocked_by_gate_resets_with_reset_stats) {
     auto bg = rm.get_blocked_by_gate();
     EXPECT_EQ(bg.magnitude, uint64_t{0});
 }
+
+TEST(RiskManagerTest, test_get_window_time_elapsed_ms_non_negative) {
+    RiskManager rm(default_config());
+    double elapsed = rm.get_window_time_elapsed_ms();
+    EXPECT_GE(elapsed, 0.0);
+}
+
+TEST(RiskManagerTest, test_get_window_time_elapsed_ms_grows_with_time) {
+    RiskManager rm(default_config());
+    double t0 = rm.get_window_time_elapsed_ms();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    double t1 = rm.get_window_time_elapsed_ms();
+    EXPECT_GE(t1, t0);
+}
