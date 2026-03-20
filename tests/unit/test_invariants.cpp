@@ -397,3 +397,66 @@ TEST(Invariants, test_invariant_dedup_reset_restores_identity) {
     EXPECT_EQ(dedup.total_duplicates(), 0u)
         << "no duplicates expected in the first pass after reset";
 }
+// ---------------------------------------------------------------------------
+// Cycle 31: New invariants for RiskManager counters and LLMAdapter dict size
+// ---------------------------------------------------------------------------
+
+TEST(Invariants, test_invariant_risk_manager_total_evaluated_equals_passed_plus_blocked) {
+    // Invariant: get_total_evaluated() == signals_passed + blocked_total() at all times.
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude       = 0.5;  // tight to cause some blocks
+    cfg.max_volatility_magnitude = 0.5;
+    cfg.max_spread_magnitude     = 0.5;
+    cfg.min_confidence           = 0.4;
+    cfg.max_signals_per_second   = 100;
+    cfg.max_drawdown             = 10.0;
+    RiskManager rm(cfg);
+
+    // Mix of passing and blocking signals.
+    struct TestSig { double bias; double vol; double conf; };
+    const std::vector<TestSig> sigs = {
+        {0.1, 0.1, 0.9},   // pass
+        {2.0, 0.1, 0.9},   // block (magnitude)
+        {0.1, 0.1, 0.9},   // pass
+        {0.1, 0.1, 0.1},   // block (confidence)
+        {0.2, 0.2, 0.8},   // pass
+    };
+
+    for (const auto& s : sigs) {
+        TradeSignal sig;
+        sig.delta_bias_shift      = s.bias;
+        sig.volatility_adjustment = s.vol;
+        sig.spread_modifier       = 0.05;
+        sig.confidence            = s.conf;
+        sig.timestamp_ns          = 1;
+        rm.evaluate(sig);
+    }
+
+    const auto& stats = rm.get_stats();
+    uint64_t passed  = stats.signals_passed.load();
+    uint64_t blocked = stats.blocked_total();
+    uint64_t total   = rm.get_total_evaluated();
+
+    EXPECT_EQ(total, passed + blocked)
+        << "get_total_evaluated() must equal signals_passed + blocked_total()";
+    EXPECT_EQ(total, static_cast<uint64_t>(sigs.size()))
+        << "total evaluated must equal number of evaluate() calls";
+}
+
+TEST(Invariants, test_invariant_llm_adapter_dict_size_tracks_additions_and_removals) {
+    // Invariant: dictionary_size() decrements on remove, increments on add.
+    LLMAdapter adapter;
+    size_t initial = adapter.get_dictionary_size();
+    EXPECT_GT(initial, 0u) << "Default dictionary must not be empty";
+
+    // Add a token that doesn't exist.
+    SemanticWeight w{0.5, 0.5, 0.3, 0.8};
+    adapter.add_token_mapping("__cycle31_novel_token__", w);
+    EXPECT_EQ(adapter.get_dictionary_size(), initial + 1)
+        << "dictionary_size must increment after add_token_mapping";
+
+    // Remove it.
+    EXPECT_TRUE(adapter.remove_token_mapping("__cycle31_novel_token__"));
+    EXPECT_EQ(adapter.get_dictionary_size(), initial)
+        << "dictionary_size must decrement after remove_token_mapping";
+}
