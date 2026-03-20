@@ -138,6 +138,16 @@ void RiskManager::reset() {
     cumulative_bias_       = 0.0;
 }
 
+void RiskManager::reset_stats() noexcept {
+    stats_.signals_passed.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_magnitude.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_confidence.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_rate.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_drawdown.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_position.store(0, std::memory_order_relaxed);
+    stats_.signals_blocked_pnl.store(0, std::memory_order_relaxed);
+}
+
 void RiskManager::update_config(const Config& config) {
     std::lock_guard<std::mutex> lock(mutex_);
     config_ = config;

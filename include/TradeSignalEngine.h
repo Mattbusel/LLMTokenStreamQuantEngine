@@ -80,6 +80,10 @@ public:
         double signal_decay_rate{0.95};
         /// Minimum time between consecutive signal emissions in realtime mode.
         std::chrono::microseconds signal_cooldown{std::chrono::microseconds{1000}};
+        /// Maximum allowed token-to-signal processing time in microseconds.
+        /// Signals with latency_us > this value are suppressed as stale.
+        /// Set to 0.0 to disable the guard (default).
+        double max_signal_age_us{0.0};
     };
 
     /**
@@ -88,6 +92,7 @@ public:
     struct Stats {
         std::atomic<uint64_t> signals_generated{0};
         std::atomic<uint64_t> signals_suppressed{0};
+        std::atomic<uint64_t> signals_aged_out{0};  ///< Signals suppressed by staleness guard.
         std::atomic<double>   avg_signal_strength{0.0};
 
         Stats() = default;
@@ -96,6 +101,7 @@ public:
         Stats(const Stats& other)
             : signals_generated{other.signals_generated.load()}
             , signals_suppressed{other.signals_suppressed.load()}
+            , signals_aged_out{other.signals_aged_out.load()}
             , avg_signal_strength{other.avg_signal_strength.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
@@ -103,6 +109,7 @@ public:
             if (this != &other) {
                 signals_generated.store(other.signals_generated.load());
                 signals_suppressed.store(other.signals_suppressed.load());
+                signals_aged_out.store(other.signals_aged_out.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
             }
             return *this;

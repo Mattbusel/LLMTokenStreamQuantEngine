@@ -146,6 +146,16 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     // Populate latency_us: time from start of process_semantic_weight() to now.
     signal.latency_us = std::chrono::duration<double, std::micro>(
         now - processing_start_).count();
+
+    // Staleness guard: suppress signals that took too long to process.
+    // When max_signal_age_us > 0 and latency_us exceeds the threshold the
+    // signal is discarded and counted in signals_aged_out rather than emitted.
+    if (config_.max_signal_age_us > 0.0 && signal.latency_us > config_.max_signal_age_us) {
+        if (stats_.signals_aged_out.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+            stats_.signals_aged_out.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
     signal.spread_modifier = (std::fabs(signal.delta_bias_shift) > 0.5)
                                  ? -0.1 * signal.delta_bias_shift
                                  : 0.0;
@@ -193,6 +203,7 @@ void TradeSignalEngine::reset() noexcept {
     last_signal_time_ = std::chrono::high_resolution_clock::time_point{};
     stats_.signals_generated.store(0, std::memory_order_relaxed);
     stats_.signals_suppressed.store(0, std::memory_order_relaxed);
+    stats_.signals_aged_out.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
 }
 

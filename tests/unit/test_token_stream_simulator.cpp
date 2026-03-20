@@ -3,6 +3,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -157,6 +160,45 @@ TEST(TokenStreamSimulatorTest, test_ring_buffer_fills_and_cycles_source) {
         EXPECT_TRUE(t == "a" || t == "b");
     }
     EXPECT_FALSE(received.empty());
+}
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_load_from_file_valid) {
+    const std::string tmp = "/tmp/llmquant_test_tokens.txt";
+    {
+        std::ofstream f(tmp);
+        f << "bullish bearish\n";
+        f << "crash\n";
+        f << "rally surge\n";
+    }
+
+    TokenStreamSimulator sim(make_config(500));
+    ASSERT_NO_THROW(sim.load_tokens_from_file(tmp));
+
+    std::atomic<int> count{0};
+    sim.set_token_callback([&count](const Token&) { count++; });
+    sim.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    sim.stop();
+
+    EXPECT_GT(count.load(), 0);
+    std::remove(tmp.c_str());
+}
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_load_from_file_nonexistent_throws) {
+    TokenStreamSimulator sim(make_config());
+    EXPECT_THROW(sim.load_tokens_from_file("/does/not/exist/tokens.txt"),
+                 std::runtime_error);
+}
+
+TEST(TokenStreamSimulatorTest, test_token_stream_simulator_double_start_is_idempotent) {
+    TokenStreamSimulator sim(make_config(5000));
+    sim.load_tokens_from_memory({"a"});
+    sim.set_token_callback([](const Token&) {});
+
+    sim.start();
+    EXPECT_NO_THROW(sim.start());  // Second start must be a no-op, not a crash.
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    sim.stop();
 }
 
 } // namespace

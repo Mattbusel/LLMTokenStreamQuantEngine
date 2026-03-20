@@ -436,5 +436,48 @@ TEST(ConfigTest, test_config_save_and_reload_preserves_risk_thresholds) {
     std::remove(tmp_path.c_str());
 }
 
+TEST(ConfigTest, test_config_metrics_port_parsed_from_yaml) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n"
+        "metrics:\n  stats_port: 9200\n  bind_address: \"127.0.0.1\"\n");
+    ASSERT_TRUE(ok);
+    const auto& m = cfg.get_config().metrics;
+    EXPECT_EQ(m.stats_port, 9200);
+    EXPECT_EQ(m.bind_address, "127.0.0.1");
+}
+
+TEST(ConfigTest, test_config_metrics_port_zero_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n"
+        "metrics:\n  stats_port: 0\n");
+    EXPECT_FALSE(ok) << "stats_port: 0 must fail validation";
+}
+
+TEST(ConfigTest, test_config_metrics_defaults_when_section_absent) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    ASSERT_TRUE(ok);
+    EXPECT_EQ(cfg.get_config().metrics.stats_port, 9100u);
+    EXPECT_EQ(cfg.get_config().metrics.bind_address, "0.0.0.0");
+}
+
 } // namespace
 } // namespace llmquant

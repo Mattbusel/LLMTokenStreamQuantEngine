@@ -89,6 +89,16 @@ struct RiskOverrideConfig {
 };
 
 /**
+ * @brief Configuration for the metrics / observability endpoint.
+ */
+struct MetricsConfig {
+    /** @brief TCP port on which the Prometheus /metrics HTTP endpoint listens. */
+    uint16_t stats_port{9100};
+    /** @brief Address to bind the metrics server (default: all interfaces). */
+    std::string bind_address{"0.0.0.0"};
+};
+
+/**
  * @brief Configuration for the pressure / back-pressure tuning subsystem.
  */
 struct PressureConfig {
@@ -106,6 +116,7 @@ struct SystemConfig {
     TradingConfig        trading;
     LatencyConfig        latency;
     LoggingConfig        logging;
+    MetricsConfig        metrics;
     PressureConfig       pressure;
     RiskThresholdConfig  risk_thresholds;
     RiskOverrideConfig   risk_overrides;

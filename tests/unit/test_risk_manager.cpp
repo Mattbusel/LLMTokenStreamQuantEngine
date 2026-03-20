@@ -432,3 +432,31 @@ TEST(RiskManagerTest, test_risk_manager_concurrent_evaluate_no_crash) {
     EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 0u);
     EXPECT_EQ(rm.get_stats().signals_blocked_confidence.load(), 0u);
 }
+
+// ============================================================
+// Test 20: reset_stats() clears all signal counters.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_reset_stats_clears_counters) {
+    RiskManager rm(default_config());
+
+    // Block some signals to populate the counters.
+    rm.evaluate(make_signal(0.5, 0.1, 0.05, 0.8));  // passes
+    rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // blocked magnitude
+    ASSERT_GT(rm.get_stats().signals_passed.load(),             0u);
+    ASSERT_GT(rm.get_stats().signals_blocked_magnitude.load(),  0u);
+
+    rm.reset_stats();
+
+    // All stat counters must be zero after reset.
+    EXPECT_EQ(rm.get_stats().signals_passed.load(),             0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(),  0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_confidence.load(), 0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_rate.load(),       0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_drawdown.load(),   0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(),   0u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_pnl.load(),        0u);
+
+    // Engine must still work normally after reset_stats().
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+    EXPECT_EQ(rm.get_stats().signals_passed.load(), 1u);
+}

@@ -21,6 +21,10 @@ logging:
   enable_console: true
   flush_interval_ms: 100
 
+metrics:
+  stats_port: 9100
+  bind_address: "0.0.0.0"
+
 pressure:
   max_ingestion_rate_tps: 50
   backoff_scale_factor: 5.0

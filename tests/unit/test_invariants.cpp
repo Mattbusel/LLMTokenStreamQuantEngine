@@ -304,3 +304,56 @@ TEST(Invariants, test_invariant_dedup_total_novel_plus_duplicate_equals_total_ch
     EXPECT_EQ(duplicates, 50u)
         << "Second 50 repeated checks must all be duplicates";
 }
+
+// ---------------------------------------------------------------------------
+// Test 7: Every token in the LLMAdapter default dictionary has valid score
+//         ranges: sentiment/bias/volatility in [-1,1], confidence in [0,1].
+// ---------------------------------------------------------------------------
+
+TEST(Invariants, test_invariant_llm_adapter_all_dictionary_scores_in_valid_range) {
+    // The full vocabulary of known tokens that must have valid weights.
+    static const std::vector<std::string> all_tokens = {
+        "crash", "panic", "collapse", "plunge",
+        "inevitable", "guarantee", "confident",
+        "bullish", "bearish", "rally",
+        "volatile", "surge", "breakout",
+        "support", "resistance", "momentum",
+        "dump", "breakdown", "fear", "selloff", "tumble", "rout",
+        "confirmed", "certain", "assured",
+        "soar", "moon", "buy", "long",
+        "short", "sell",
+        "spike", "whipsaw", "swing", "choppy", "erratic",
+        "calls", "puts", "straddle", "strangle", "gamma", "delta",
+        "vega", "iv", "dte",
+        "inflation", "deflation", "recession", "stagflation",
+        "fed", "rate", "hike", "cut", "pivot", "gdp",
+        "liquidation", "capitulation", "squeeze", "deleveraging", "margin",
+        "accumulate", "dip", "rebound", "recovery", "uptrend", "downtrend",
+        "oversold", "overbought",
+        "expiry", "strike", "hedge",
+        "pump", "rug", "fud", "hodl", "rekt", "ath",
+        "accumulation", "distribution", "reversal", "consolidate",
+        "parabolic", "divergence", "liquidated",
+    };
+
+    LLMAdapter adapter;
+    for (const auto& tok : all_tokens) {
+        SemanticWeight w = adapter.map_token_to_weight(tok);
+        EXPECT_GE(w.confidence_score,  0.0)
+            << "Token '" << tok << "': confidence_score must be >= 0";
+        EXPECT_LE(w.confidence_score,  1.0)
+            << "Token '" << tok << "': confidence_score must be <= 1";
+        EXPECT_GE(w.sentiment_score,  -1.0)
+            << "Token '" << tok << "': sentiment_score must be >= -1";
+        EXPECT_LE(w.sentiment_score,   1.0)
+            << "Token '" << tok << "': sentiment_score must be <= 1";
+        EXPECT_GE(w.directional_bias, -1.0)
+            << "Token '" << tok << "': directional_bias must be >= -1";
+        EXPECT_LE(w.directional_bias,  1.0)
+            << "Token '" << tok << "': directional_bias must be <= 1";
+        EXPECT_GE(w.volatility_score,  0.0)
+            << "Token '" << tok << "': volatility_score must be >= 0";
+        EXPECT_LE(w.volatility_score,  1.0)
+            << "Token '" << tok << "': volatility_score must be <= 1";
+    }
+}

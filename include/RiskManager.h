@@ -184,6 +184,15 @@ public:
     void reset();
 
     /**
+     * @brief Reset all signal-counter statistics to zero.
+     *
+     * Thread-safe (each counter is an atomic).  Does NOT reset the drawdown
+     * or rate-limit accumulators — call reset() for those.  Useful between
+     * trading sessions when fresh counters are needed without a full restart.
+     */
+    void reset_stats() noexcept;
+
+    /**
      * @brief Atomically replace the risk threshold configuration.
      *
      * Safe to call from any thread; takes the internal mutex.  Gate disable

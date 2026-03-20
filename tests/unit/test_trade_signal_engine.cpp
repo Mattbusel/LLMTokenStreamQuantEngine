@@ -318,5 +318,40 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_reset_clears_accumulators_a
     EXPECT_EQ(engine.get_stats().signals_generated.load(), 1u);
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_staleness_guard_config_stored) {
+    // Verify that max_signal_age_us is stored and retrievable via get_config().
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.max_signal_age_us = 500.0;
+    TradeSignalEngine engine(cfg);
+    EXPECT_DOUBLE_EQ(engine.get_config().max_signal_age_us, 500.0);
+
+    // Large threshold (1 second) must never suppress signals in normal operation.
+    engine.set_backtest_mode(true);
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    SemanticWeight w{0.5, 0.7, 0.3, 0.6};
+    for (int i = 0; i < 5; ++i) {
+        engine.process_semantic_weight(w);
+    }
+    EXPECT_EQ(emitted.load(), 5) << "Large max_signal_age_us must not suppress normal signals";
+    EXPECT_EQ(engine.get_stats().signals_aged_out.load(), 0u);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_staleness_guard_disabled_by_default) {
+    // Default config has max_signal_age_us = 0.0 (disabled).
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    SemanticWeight w{0.5, 0.7, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(emitted.load(), 1) << "Staleness guard disabled by default must not suppress signals";
+    EXPECT_EQ(engine.get_stats().signals_aged_out.load(), 0u);
+}
+
 } // namespace
 } // namespace llmquant

@@ -76,6 +76,13 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (r["disable_position_gate"])   tmp.risk_overrides.disable_position_gate   = r["disable_position_gate"].as<bool>();
         }
 
+        // Metrics / observability endpoint settings
+        if (yaml["metrics"]) {
+            auto m = yaml["metrics"];
+            if (m["stats_port"])    tmp.metrics.stats_port    = m["stats_port"].as<uint16_t>();
+            if (m["bind_address"])  tmp.metrics.bind_address  = m["bind_address"].as<std::string>();
+        }
+
         // Pressure settings
         if (yaml["pressure"]) {
             auto pr = yaml["pressure"];
@@ -143,6 +150,11 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
         }
         if (log.flush_interval_ms <= 0) {
             spdlog::error("Config validation failed: flush_interval_ms must be > 0");
+            set_defaults();
+            return false;
+        }
+        if (tmp.metrics.stats_port == 0) {
+            spdlog::error("Config validation failed: metrics.stats_port must be > 0");
             set_defaults();
             return false;
         }
@@ -231,6 +243,10 @@ bool Config::save_to_file(const std::string& filepath) const {
     yaml["logging"]["format"] = snap_cfg.logging.format;
     yaml["logging"]["enable_console"] = snap_cfg.logging.enable_console;
     yaml["logging"]["flush_interval_ms"] = snap_cfg.logging.flush_interval_ms;
+
+    // Metrics endpoint
+    yaml["metrics"]["stats_port"]   = snap_cfg.metrics.stats_port;
+    yaml["metrics"]["bind_address"] = snap_cfg.metrics.bind_address;
 
     // Pressure
     yaml["pressure"]["max_ingestion_rate_tps"] = snap_cfg.pressure.max_ingestion_rate_tps;

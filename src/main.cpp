@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
     std::string oms_address;
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
+    uint16_t    stats_port_override = 0;        // 0 = use config value
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -61,6 +62,7 @@ int main(int argc, char* argv[]) {
                 "  --oms host:port   Connect to REST OMS adapter\n"
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
                 "  --config path     Path to config YAML (default: config.yaml)\n"
+                "  --stats-port N    Override Prometheus metrics port (default: from config, 9100)\n"
                 "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
                 "  --backtest        Enable backtest mode (emit signal on every token, no cooldown)\n"
                 "  --no-color        Disable ANSI colour output\n"
@@ -92,6 +94,8 @@ int main(int argc, char* argv[]) {
             backtest_mode = true;
         } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
             config_file = argv[++i];
+        } else if (arg == "--stats-port" && i + 1 < argc) {
+            stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i]));
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -476,7 +480,11 @@ int main(int argc, char* argv[]) {
     std::string prom_snapshot;
     std::mutex  prom_snapshot_mutex;
 
-    llmquant::PrometheusExporter prom_exporter({.port = 9100});
+    uint16_t eff_stats_port = (stats_port_override != 0)
+                                  ? stats_port_override
+                                  : sys_config.metrics.stats_port;
+    llmquant::PrometheusExporter prom_exporter({.port = eff_stats_port,
+                                                .bind_address = sys_config.metrics.bind_address});
     prom_exporter.set_metrics_callback([&]() -> std::string {
         std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
         return prom_snapshot;
