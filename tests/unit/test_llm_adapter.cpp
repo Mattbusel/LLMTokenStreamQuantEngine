@@ -425,5 +425,50 @@ TEST(LLMAdapterTest, test_llm_adapter_contains_token_reflects_add_token_mapping)
         << "contains_token must return true after add_token_mapping";
 }
 
+// ---------------------------------------------------------------------------
+// top_tokens_by_sentiment
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_top_tokens_returns_at_most_n_entries) {
+    LLMAdapter adapter;
+    auto top = adapter.top_tokens_by_sentiment(5);
+    EXPECT_LE(top.size(), 5u);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_top_tokens_sorted_descending_by_abs_sentiment) {
+    LLMAdapter adapter;
+    auto top = adapter.top_tokens_by_sentiment(10);
+    ASSERT_GE(top.size(), 2u);
+    for (size_t i = 1; i < top.size(); ++i) {
+        EXPECT_GE(std::fabs(top[i-1].second), std::fabs(top[i].second))
+            << "Results must be sorted descending by |sentiment|";
+    }
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_top_tokens_large_n_returns_full_dictionary) {
+    LLMAdapter adapter;
+    size_t dict_size = adapter.get_dictionary_size();
+    auto top = adapter.top_tokens_by_sentiment(dict_size + 100);
+    EXPECT_EQ(top.size(), dict_size)
+        << "Requesting more than dict size should return exactly dict_size entries";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_top_tokens_zero_n_returns_empty) {
+    LLMAdapter adapter;
+    auto top = adapter.top_tokens_by_sentiment(0);
+    EXPECT_TRUE(top.empty()) << "n=0 must return empty vector";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_top_tokens_highest_sentiment_is_known_token) {
+    LLMAdapter adapter;
+    // The built-in dictionary has highly negative tokens like "crash" (-0.9) and
+    // highly positive tokens like "bullish". The top entry must be one of the
+    // high-magnitude built-in tokens.
+    auto top = adapter.top_tokens_by_sentiment(1);
+    ASSERT_EQ(top.size(), 1u);
+    EXPECT_GE(std::fabs(top[0].second), 0.7)
+        << "The highest-|sentiment| token must have |sentiment| >= 0.7";
+}
+
 } // namespace
 } // namespace llmquant
