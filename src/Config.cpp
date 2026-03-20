@@ -156,6 +156,37 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
+        const auto& rt = tmp.risk_thresholds;
+        if (!std::isfinite(rt.max_bias_magnitude) || rt.max_bias_magnitude < 0.0) {
+            spdlog::error("Config validation failed: risk_thresholds.max_bias_magnitude must be >= 0");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(rt.min_confidence) || rt.min_confidence < 0.0 || rt.min_confidence > 1.0) {
+            spdlog::error("Config validation failed: risk_thresholds.min_confidence must be in [0, 1]");
+            set_defaults();
+            return false;
+        }
+        if (rt.max_signals_per_second == 0) {
+            spdlog::error("Config validation failed: risk_thresholds.max_signals_per_second must be > 0");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(rt.max_drawdown) || rt.max_drawdown < 0.0) {
+            spdlog::error("Config validation failed: risk_thresholds.max_drawdown must be >= 0");
+            set_defaults();
+            return false;
+        }
+        if (rt.drawdown_window_s <= 0) {
+            spdlog::error("Config validation failed: risk_thresholds.drawdown_window_s must be > 0");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(rt.position_warn_fraction) || rt.position_warn_fraction < 0.0 || rt.position_warn_fraction > 1.0) {
+            spdlog::error("Config validation failed: risk_thresholds.position_warn_fraction must be in [0, 1]");
+            set_defaults();
+            return false;
+        }
 
         {
             std::lock_guard<std::mutex> lk(config_mutex_);
