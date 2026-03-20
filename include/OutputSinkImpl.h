@@ -67,13 +67,18 @@ public:
              << safe_d(sig.latency_us) << ","
              << sig.strategy_toggle << ","
              << safe_d(sig.strategy_weight) << "\n";
+        ++emit_count_;
     }
 
     /// @brief Flush the underlying file stream to disk.
     void flush() override { out_.flush(); }
 
+    /// @brief Return the number of signals written so far (excluding the header row).
+    size_t emit_count() const noexcept { return emit_count_; }
+
 private:
     std::ofstream out_;
+    size_t emit_count_{0};
 };
 
 // ---------------------------------------------------------------------------
@@ -123,13 +128,18 @@ public:
              << "\"strategy_toggle\":"        << sig.strategy_toggle                   << ","
              << "\"strategy_weight\":"        << safe_d(sig.strategy_weight)
              << "}\n";
+        ++emit_count_;
     }
 
     /// @brief Flush the underlying file stream to disk.
     void flush() override { out_.flush(); }
 
+    /// @brief Return the number of signals written so far.
+    size_t emit_count() const noexcept { return emit_count_; }
+
 private:
     std::ofstream out_;
+    size_t emit_count_{0};
 };
 
 // ---------------------------------------------------------------------------

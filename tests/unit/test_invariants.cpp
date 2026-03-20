@@ -357,3 +357,43 @@ TEST(Invariants, test_invariant_llm_adapter_all_dictionary_scores_in_valid_range
             << "Token '" << tok << "': volatility_score must be <= 1";
     }
 }
+
+// ---------------------------------------------------------------------------
+// Test 8: InProcessDeduplicator::reset() restores the novel+dup identity.
+//         After reset: total_novel + total_duplicates == 0 exactly.
+//         After re-use: tokens seen before reset are treated as novel again.
+// ---------------------------------------------------------------------------
+
+TEST(Invariants, test_invariant_dedup_reset_restores_identity) {
+    InProcessDeduplicator dedup;
+    const std::vector<std::string> tokens = {
+        "bullish", "bearish", "crash", "rally", "surge"
+    };
+
+    // Phase 1: register each token once (all novel), then again (all duplicate).
+    for (const auto& t : tokens) dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
+    for (const auto& t : tokens) dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
+
+    uint64_t pre_novel = dedup.total_novel();
+    uint64_t pre_dups  = dedup.total_duplicates();
+    EXPECT_EQ(pre_novel, static_cast<uint64_t>(tokens.size()));
+    EXPECT_EQ(pre_dups,  static_cast<uint64_t>(tokens.size()));
+
+    // Phase 2: reset — all counters and table must be zero.
+    dedup.reset();
+    EXPECT_EQ(dedup.total_novel() + dedup.total_duplicates(), 0u)
+        << "novel + duplicates must both be 0 immediately after reset()";
+    EXPECT_EQ(dedup.size(), 0u)
+        << "key table must be empty after reset()";
+
+    // Phase 3: re-register all tokens — they must all be novel again.
+    for (const auto& t : tokens) {
+        auto result = dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
+        EXPECT_EQ(result, DedupResult::Novel)
+            << "Token '" << t << "' must be novel after reset(), not a stale duplicate";
+    }
+    EXPECT_EQ(dedup.total_novel(), static_cast<uint64_t>(tokens.size()))
+        << "total_novel must equal the number of tokens re-registered after reset";
+    EXPECT_EQ(dedup.total_duplicates(), 0u)
+        << "no duplicates expected in the first pass after reset";
+}

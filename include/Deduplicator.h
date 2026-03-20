@@ -181,6 +181,15 @@ public:
     uint64_t total_novel() const noexcept { return total_novel_.load(); }
 
     /**
+     * @brief Reset all state: clear the key table and zero the novel/duplicate counters.
+     *
+     * Useful at session boundaries to reuse the same backend across sessions.
+     * Thread-safe (acquires mutex_).  Does NOT stop any running background
+     * purge thread — call stop_background_purge() separately if desired.
+     */
+    void reset();
+
+    /**
      * @brief Start a background thread that calls purge_expired() every interval_s seconds.
      *
      * No-op if the thread is already running.

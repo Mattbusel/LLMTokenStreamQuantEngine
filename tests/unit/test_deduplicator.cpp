@@ -217,3 +217,55 @@ TEST(DeduplicatorTest, ConcurrentEvictAndRegister) {
 
     SUCCEED();  // No crash or sanitizer error = pass.
 }
+
+// ---------------------------------------------------------------------------
+// InProcessDeduplicator::reset() tests
+// ---------------------------------------------------------------------------
+
+TEST(DeduplicatorTest, test_in_process_dedup_reset_clears_table_and_stats) {
+    InProcessDeduplicator dedup;
+    auto k1 = DedupKey::from_token("bullish");
+    auto k2 = DedupKey::from_token("bearish");
+
+    dedup.check_and_register(k1, ms{5000});
+    dedup.check_and_register(k2, ms{5000});
+    dedup.check_and_register(k1, ms{5000});  // duplicate
+
+    ASSERT_EQ(dedup.size(), 2u);
+    ASSERT_EQ(dedup.total_novel(), 2u);
+    ASSERT_EQ(dedup.total_duplicates(), 1u);
+
+    dedup.reset();
+
+    EXPECT_EQ(dedup.size(), 0u)
+        << "reset() must empty the key table";
+    EXPECT_EQ(dedup.total_novel(), 0u)
+        << "reset() must zero total_novel";
+    EXPECT_EQ(dedup.total_duplicates(), 0u)
+        << "reset() must zero total_duplicates";
+}
+
+TEST(DeduplicatorTest, test_in_process_dedup_reset_makes_previous_tokens_novel_again) {
+    InProcessDeduplicator dedup;
+    auto key = DedupKey::from_token("crash");
+
+    dedup.check_and_register(key, ms{5000});
+    ASSERT_EQ(dedup.check_and_register(key, ms{5000}), DedupResult::Duplicate);
+
+    dedup.reset();
+
+    // After reset, the same token must be treated as novel again.
+    EXPECT_EQ(dedup.check_and_register(key, ms{5000}), DedupResult::Novel)
+        << "Token seen before reset must be novel after reset()";
+}
+
+TEST(DeduplicatorTest, test_in_process_dedup_background_purge_start_stop_is_safe) {
+    InProcessDeduplicator dedup;
+    // start_background_purge must be idempotent (second call is a no-op).
+    dedup.start_background_purge(1);
+    EXPECT_NO_THROW(dedup.start_background_purge(1));
+    // stop must not crash.
+    EXPECT_NO_THROW(dedup.stop_background_purge());
+    // Second stop must also be safe.
+    EXPECT_NO_THROW(dedup.stop_background_purge());
+}

@@ -445,18 +445,20 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_clamps
 
 TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_zero_disabled) {
     // With max_accumulated_bias=0.0 (disabled), the accumulator is free to grow above 1.0.
+    // Use a large min_bias_threshold to suppress all signal emissions (and the post-emit
+    // accumulator halving) so the accumulator grows unconstrained.
     TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
-    cfg.max_accumulated_bias = 0.0;  // disabled
+    cfg.max_accumulated_bias = 0.0;   // disabled — no clamp
+    cfg.min_bias_threshold   = 100.0; // suppress all emissions → no post-emit halving
     TradeSignalEngine engine(cfg);
     engine.set_backtest_mode(true);
-    engine.set_signal_callback([](const TradeSignal&){});
 
-    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
-    for (int i = 0; i < 20; ++i) {
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};  // bias_contribution = 1.0 per token
+    for (int i = 0; i < 30; ++i) {
         engine.process_semantic_weight(strong);
     }
-    // With decay=0.999 and contribution=1.0, after many tokens bias approaches ~1000 * 1.0 / (1-0.999)
-    // In practice after 20 steps: roughly 1 + 0.999 + 0.999^2 + ... ≈ 19+ for large count.
+    // After 30 tokens with decay≈1 and contribution=1.0, the geometric series
+    // sum = (1 - 0.999^30) / (1 - 0.999) ≈ 28.6 >> 1.0.
     EXPECT_GT(engine.get_accumulated_bias(), 1.0)
         << "Without cap, accumulator should exceed 1.0 after many strongly-bullish tokens";
 }

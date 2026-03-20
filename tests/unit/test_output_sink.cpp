@@ -239,5 +239,32 @@ TEST(OutputSinkTest, test_memory_sink_clear_resets_dropped_count) {
     EXPECT_EQ(sink.size(), 0u);
 }
 
+TEST(OutputSinkTest, test_csv_sink_emit_count_tracks_records_written) {
+    const std::string path = "/tmp/test_csv_emit_count.csv";
+    {
+        CsvOutputSink sink(path);
+        EXPECT_EQ(sink.emit_count(), 0u);
+        sink.emit(make_signal(0.1, 0.2, 10));
+        EXPECT_EQ(sink.emit_count(), 1u);
+        sink.emit(make_signal(0.3, 0.4, 20));
+        sink.emit(make_signal(0.5, 0.6, 30));
+        EXPECT_EQ(sink.emit_count(), 3u);
+    }
+    std::remove(path.c_str());
+}
+
+TEST(OutputSinkTest, test_json_sink_emit_count_tracks_records_written) {
+    const std::string path = "/tmp/test_json_emit_count.json";
+    {
+        JsonOutputSink sink(path);
+        EXPECT_EQ(sink.emit_count(), 0u);
+        for (int i = 0; i < 5; ++i) {
+            sink.emit(make_signal(0.1 * i, 0.1, static_cast<uint64_t>(i)));
+        }
+        EXPECT_EQ(sink.emit_count(), 5u);
+    }
+    std::remove(path.c_str());
+}
+
 } // namespace
 } // namespace llmquant

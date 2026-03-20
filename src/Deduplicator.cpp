@@ -96,6 +96,13 @@ void InProcessDeduplicator::purge_expired() {
     }
 }
 
+void InProcessDeduplicator::reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    table_.clear();
+    total_novel_.store(0, std::memory_order_relaxed);
+    total_duplicates_.store(0, std::memory_order_relaxed);
+}
+
 InProcessDeduplicator::~InProcessDeduplicator() {
     stop_background_purge();
 }
