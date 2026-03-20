@@ -138,6 +138,11 @@ void RiskManager::reset() {
     cumulative_bias_       = 0.0;
 }
 
+void RiskManager::update_config(const Config& config) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_ = config;
+}
+
 bool RiskManager::check_magnitude(const TradeSignal& signal) {
     return std::fabs(signal.delta_bias_shift)      <= config_.max_bias_magnitude
         && std::fabs(signal.volatility_adjustment)  <= config_.max_volatility_magnitude

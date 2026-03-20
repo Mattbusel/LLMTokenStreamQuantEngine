@@ -184,6 +184,17 @@ public:
     void reset();
 
     /**
+     * @brief Atomically replace the risk threshold configuration.
+     *
+     * Safe to call from any thread; takes the internal mutex.  Gate disable
+     * flags (disable_*_gate) are also updated.  Does not reset existing
+     * drawdown/rate-limit accumulators — call reset() first if that is desired.
+     *
+     * @param config New threshold configuration to apply.
+     */
+    void update_config(const Config& config);
+
+    /**
      * @brief Return a read-only reference to live statistics.
      *
      * @return Const reference to the internal Stats struct.

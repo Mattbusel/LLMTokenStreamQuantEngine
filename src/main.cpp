@@ -137,13 +137,6 @@ int main(int argc, char* argv[]) {
         config.set_use_memory_stream(true);
     }
 
-    if (!config.start_watching(config_file, [](const llmquant::SystemConfig& updated) {
-        std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
-                  << updated.trading.bias_sensitivity << std::endl;
-    })) {
-        std::cerr << "[warn] Config hot-reload watcher failed to start\n";
-    }
-
     const auto& sys_config = config.get_config();
 
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
@@ -215,6 +208,33 @@ int main(int argc, char* argv[]) {
     risk_cfg.disable_position_gate    = sys_config.risk_overrides.disable_position_gate;
     llmquant::RiskManager risk_mgr(risk_cfg);
     risk_mgr.set_metrics_logger(&logger);
+
+    // Start config hot-reload watcher now that risk_mgr exists so the callback
+    // can update risk thresholds live without requiring a restart.
+    if (!config.start_watching(config_file, [&risk_mgr](const llmquant::SystemConfig& updated) {
+        const auto& u = updated.risk_thresholds;
+        llmquant::RiskManager::Config new_risk_cfg;
+        new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;
+        new_risk_cfg.max_volatility_magnitude = u.max_volatility_magnitude;
+        new_risk_cfg.max_spread_magnitude     = u.max_spread_magnitude;
+        new_risk_cfg.min_confidence           = u.min_confidence;
+        new_risk_cfg.max_signals_per_second   = u.max_signals_per_second;
+        new_risk_cfg.max_drawdown             = u.max_drawdown;
+        new_risk_cfg.drawdown_window          = std::chrono::seconds(u.drawdown_window_s);
+        new_risk_cfg.position_warn_fraction   = u.position_warn_fraction;
+        new_risk_cfg.disable_magnitude_gate   = updated.risk_overrides.disable_magnitude_gate;
+        new_risk_cfg.disable_confidence_gate  = updated.risk_overrides.disable_confidence_gate;
+        new_risk_cfg.disable_rate_gate        = updated.risk_overrides.disable_rate_gate;
+        new_risk_cfg.disable_drawdown_gate    = updated.risk_overrides.disable_drawdown_gate;
+        new_risk_cfg.disable_position_gate    = updated.risk_overrides.disable_position_gate;
+        risk_mgr.update_config(new_risk_cfg);
+        std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
+                  << updated.trading.bias_sensitivity
+                  << "  max_bias=" << u.max_bias_magnitude
+                  << "  max_signals/s=" << u.max_signals_per_second << std::endl;
+    })) {
+        std::cerr << "[warn] Config hot-reload watcher failed to start\n";
+    }
 
     // OMS adapter: MockOmsAdapter by default; REST via --oms, FIX 4.2 via --fix.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
@@ -649,7 +669,12 @@ int main(int argc, char* argv[]) {
                   << "  HIT%:" << hit_pct
                   << "  DEDUP:" << dedup_backend->total_duplicates()
                   << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
-                  << "  BLOCK:"   << blocked
+                  << "  BLOCK:" << blocked
+                  << "  RATE%:" << [&]() -> uint64_t {
+                        uint64_t passed = risk_mgr.get_stats().signals_passed.load();
+                        uint64_t total  = (passed > UINT64_MAX - blocked) ? UINT64_MAX : passed + blocked;
+                        return (total > 0) ? (passed * 100 / total) : 100;
+                     }()
                   << (!stream_mode ? (std::string("  DROPS:") + std::to_string(token_sim.get_stats().ring_buffer_drops.load())) : "")
                   << std::flush;
 
@@ -664,6 +689,9 @@ int main(int argc, char* argv[]) {
     if (stream_client) stream_client->stop();
     oms_adapter->stop();
     prom_exporter.stop();
+    // Flush all output sinks (CSV/JSON) before printing the session summary
+    // so any buffered writes are visible if a crash follows.
+    trade_engine.flush_sinks();
     config.stop_watching();
 
     auto final_stats = latency_ctrl.get_stats();
