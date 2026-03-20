@@ -267,6 +267,32 @@ public:
     double get_backoff_multiplier() const;
 
     /**
+     * @brief Reset all pressure components and the backoff multiplier to their
+     *        initial values.
+     *
+     * Clears ingestion_pressure, semantic_pressure, queue_pressure, and
+     * composite to 0.0, and resets backoff_multiplier_ to 1.0.  Does NOT
+     * affect latency samples or counters.
+     *
+     * Thread-safe (acquires pressure_mutex_).
+     */
+    void reset_pressure();
+
+    /**
+     * @brief Return the signed latency budget remaining in microseconds.
+     *
+     * Computed as target_latency_us - p99_latency_us.  A positive value
+     * means the p99 is within budget; a negative value means the SLO is
+     * being breached.  Returns target_latency_us (full budget) when no
+     * samples have been recorded yet.
+     *
+     * Thread-safe (reads via get_stats()).
+     *
+     * @return Signed remaining budget in microseconds.
+     */
+    double get_latency_budget_remaining_us() const;
+
+    /**
      * @brief One bucket of the cumulative latency histogram.
      */
     struct HistogramBucket {

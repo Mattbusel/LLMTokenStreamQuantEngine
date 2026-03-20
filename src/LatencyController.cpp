@@ -282,6 +282,20 @@ void LatencyController::update_queue_pressure(size_t queue_depth,
     recompute_composite();
 }
 
+void LatencyController::reset_pressure() {
+    std::lock_guard<std::mutex> lock(pressure_mutex_);
+    pressure_           = PressureState{};
+    backoff_multiplier_ = 1.0;
+}
+
+double LatencyController::get_latency_budget_remaining_us() const {
+    const auto stats = get_stats();
+    const double target_us = static_cast<double>(config_.target_latency.count());
+    if (stats.measurements == 0) return target_us;
+    const double p99_us = static_cast<double>(stats.p99_latency.count());
+    return target_us - p99_us;
+}
+
 LatencyController::PressureState LatencyController::get_pressure() const {
     std::lock_guard<std::mutex> lock(pressure_mutex_);
     return pressure_;

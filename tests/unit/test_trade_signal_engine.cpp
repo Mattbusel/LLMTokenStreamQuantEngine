@@ -877,7 +877,6 @@ TEST(TradeSignalEngineTest, test_drain_pending_emits_signal_when_bias_nonzero) {
     // Process weight — cooldown prevents emission.
     SemanticWeight w{0.5, 0.5, 0.2, 0.9};
     engine.process_semantic_weight(w);
-    uint64_t before_gen = engine.get_stats().signals_generated.load();
 
     std::atomic<int> drain_signals{0};
     engine.set_signal_callback([&drain_signals](const TradeSignal&) { ++drain_signals; });
@@ -946,6 +945,74 @@ TEST(TradeSignalEngineTest, test_set_signal_cooldown_large_suppresses_rapid_sign
     // Only the first token can emit within a 1-second cooldown window.
     EXPECT_LE(count.load(), 1)
         << "large cooldown should suppress all but the first signal";
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 33: TradeSignalEngine::snapshot()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_snapshot_default_state) {
+    TradeSignalEngine engine(make_config());
+    auto snap = engine.snapshot();
+
+    EXPECT_DOUBLE_EQ(snap.accumulated_bias,       0.0);
+    EXPECT_DOUBLE_EQ(snap.accumulated_volatility, 0.0);
+    EXPECT_DOUBLE_EQ(snap.last_signal_quality,    0.0);
+    EXPECT_EQ(snap.stats.signals_generated.load(), 0u);
+    EXPECT_TRUE(snap.realtime_mode)
+        << "Default snapshot must show realtime_mode=true";
+}
+
+TEST(TradeSignalEngineTest, test_snapshot_reflects_processed_signal) {
+    TradeSignalEngine engine(make_config());
+    SemanticWeight w{0.5, 0.9, 0.2, 0.8};
+
+    int emitted = 0;
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+    engine.set_realtime_mode(false);  // backtest: emit on every token
+    engine.process_semantic_weight(w);
+
+    auto snap = engine.snapshot();
+    EXPECT_GT(snap.stats.signals_generated.load(), 0u)
+        << "snapshot must reflect signals generated after processing";
+    EXPECT_NE(snap.accumulated_bias, 0.0)
+        << "snapshot accumulated_bias must be non-zero after processing";
+}
+
+TEST(TradeSignalEngineTest, test_snapshot_suppression_rate_zero_with_no_suppressed) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.5, 0.9, 0.2, 0.8});
+
+    auto snap = engine.snapshot();
+    EXPECT_DOUBLE_EQ(snap.suppression_rate_val, 0.0)
+        << "No signals should be suppressed with default config";
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 33: get_tokens_per_second()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_get_tokens_per_second_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_tokens_per_second(), 0.0)
+        << "tokens_per_second must be 0 before any tokens are processed";
+}
+
+TEST(TradeSignalEngineTest, test_get_tokens_per_second_positive_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.2, 0.8});
+
+    // Sleep to ensure elapsed_us >= 1.0 so the guard doesn't suppress the rate.
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+    EXPECT_GT(engine.get_tokens_per_second(), 0.0)
+        << "tokens_per_second must be > 0 after processing tokens";
 }
 
 } // namespace

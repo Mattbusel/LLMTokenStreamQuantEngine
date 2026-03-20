@@ -1056,3 +1056,115 @@ TEST(RiskManagerTest, test_risk_manager_get_total_evaluated_counts_all_signals) 
     rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
     EXPECT_EQ(rm.get_total_evaluated(), 3u);
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 33: set_position_limit()
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_set_position_limit_updates_get_position) {
+    RiskManager rm(default_config());
+    rm.set_position_limit(2.0, -20.0);
+    auto pos = rm.get_position();
+    EXPECT_DOUBLE_EQ(pos.position_limit, 2.0);
+    EXPECT_DOUBLE_EQ(pos.pnl_limit,      -20.0);
+}
+
+TEST(RiskManagerTest, test_set_position_limit_preserves_net_position) {
+    RiskManager rm(default_config());
+    // Set a net_position via update_position first.
+    RiskManager::PositionState st;
+    st.net_position   = 0.5;
+    st.position_limit = 1.0;
+    st.pnl            = 5.0;
+    st.pnl_limit      = -10.0;
+    rm.update_position(st);
+
+    // Only update limits — net_position and pnl must remain unchanged.
+    rm.set_position_limit(3.0, -30.0);
+    auto pos = rm.get_position();
+    EXPECT_DOUBLE_EQ(pos.net_position,   0.5) << "net_position must not change";
+    EXPECT_DOUBLE_EQ(pos.pnl,            5.0) << "pnl must not change";
+    EXPECT_DOUBLE_EQ(pos.position_limit, 3.0) << "position_limit must be updated";
+    EXPECT_DOUBLE_EQ(pos.pnl_limit,    -30.0) << "pnl_limit must be updated";
+}
+
+TEST(RiskManagerTest, test_set_position_limit_default_pnl_limit) {
+    RiskManager rm(default_config());
+    rm.set_position_limit(5.0);  // pnl_limit defaults to -10.0
+    auto pos = rm.get_position();
+    EXPECT_DOUBLE_EQ(pos.position_limit, 5.0);
+    EXPECT_DOUBLE_EQ(pos.pnl_limit,    -10.0);
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 33: evaluate_batch()
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_evaluate_batch_empty_returns_empty) {
+    RiskManager rm(default_config());
+    auto results = rm.evaluate_batch({});
+    EXPECT_TRUE(results.empty());
+}
+
+TEST(RiskManagerTest, test_evaluate_batch_all_pass) {
+    RiskManager rm(default_config());
+    std::vector<TradeSignal> signals = {
+        make_signal(0.1, 0.1, 0.05, 0.8),
+        make_signal(0.2, 0.1, 0.05, 0.9),
+    };
+    auto results = rm.evaluate_batch(signals);
+    ASSERT_EQ(results.size(), 2u);
+    EXPECT_TRUE(results[0]);
+    EXPECT_TRUE(results[1]);
+}
+
+TEST(RiskManagerTest, test_evaluate_batch_mixed_pass_block) {
+    RiskManager rm(default_config());
+    std::vector<TradeSignal> signals = {
+        make_signal(0.1, 0.1, 0.05, 0.8),   // passes
+        make_signal(5.0, 0.1, 0.05, 0.8),   // blocked (magnitude)
+    };
+    auto results = rm.evaluate_batch(signals);
+    ASSERT_EQ(results.size(), 2u);
+    EXPECT_TRUE(results[0])  << "First signal should pass";
+    EXPECT_FALSE(results[1]) << "Second signal should be blocked";
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 33: set_position_limit() enforcement
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_set_position_limit_blocks_signal_exceeding_limit) {
+    RiskManager rm(default_config());
+    // Tighten position limit to 0.05 so a delta_bias_shift of 0.1 exceeds it.
+    rm.set_position_limit(0.05, -100.0);
+    // net_position = 0, projected = 0 + 0.1 = 0.1 > 0.05 → blocked.
+    TradeSignal sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    EXPECT_FALSE(rm.evaluate(sig))
+        << "signal exceeding position_limit must be blocked";
+    EXPECT_GT(rm.get_stats().signals_blocked_position.load(), 0u);
+}
+
+TEST(RiskManagerTest, test_set_position_limit_allows_signal_within_limit) {
+    RiskManager rm(default_config());
+    // Generous limit: projected = 0 + 0.1 = 0.1 < 10.0 → passes.
+    rm.set_position_limit(10.0, -100.0);
+    TradeSignal sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    EXPECT_TRUE(rm.evaluate(sig))
+        << "signal within position_limit must pass";
+}
+
+TEST(RiskManagerTest, test_set_position_limit_pnl_blocks_on_breach) {
+    RiskManager rm(default_config());
+    // Set pnl_limit to -1.0, then put PnL at -5.0 (breach).
+    rm.set_position_limit(100.0, -1.0);
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.0;
+    pos.position_limit = 100.0;
+    pos.pnl            = -5.0;
+    pos.pnl_limit      = -1.0;
+    rm.update_position(pos);
+    TradeSignal sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    EXPECT_FALSE(rm.evaluate(sig))
+        << "signal must be blocked when pnl < pnl_limit";
+}

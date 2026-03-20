@@ -809,5 +809,87 @@ TEST(LatencyControllerTest, test_update_config_same_window_preserves_samples) {
     EXPECT_EQ(lc.get_target_latency().count(), 20);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 33: reset_pressure()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_reset_pressure_clears_composite) {
+    LatencyController lc(make_config());
+    lc.update_ingestion_pressure(100.0, 50.0);  // composite = 1.0
+    auto before = lc.get_pressure();
+    EXPECT_GT(before.composite, 0.0) << "pressure must be set before reset";
+
+    lc.reset_pressure();
+    auto after = lc.get_pressure();
+    EXPECT_DOUBLE_EQ(after.ingestion_pressure, 0.0);
+    EXPECT_DOUBLE_EQ(after.semantic_pressure,  0.0);
+    EXPECT_DOUBLE_EQ(after.queue_pressure,     0.0);
+    EXPECT_DOUBLE_EQ(after.composite,          0.0);
+}
+
+TEST(LatencyControllerTest, test_reset_pressure_resets_backoff_multiplier) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 5; ++i) {
+        lc.update_ingestion_pressure(100.0, 50.0);  // p=1.0 > 0.8
+    }
+    EXPECT_GT(lc.get_backoff_multiplier(), 1.0)
+        << "backoff must have ramped before reset";
+
+    lc.reset_pressure();
+    EXPECT_DOUBLE_EQ(lc.get_backoff_multiplier(), 1.0)
+        << "backoff multiplier must be reset to 1.0";
+}
+
+TEST(LatencyControllerTest, test_reset_pressure_does_not_affect_latency_stats) {
+    LatencyController lc(make_config());
+    lc.record_latency(std::chrono::microseconds{50});
+    lc.update_ingestion_pressure(100.0, 50.0);
+
+    lc.reset_pressure();
+    auto stats = lc.get_stats();
+    EXPECT_EQ(stats.measurements, 1u)
+        << "reset_pressure must not clear latency stats";
+    EXPECT_EQ(stats.avg_latency, std::chrono::microseconds{50});
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 33: get_latency_budget_remaining_us()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_budget_remaining_equals_target_when_no_samples) {
+    // target = 10 µs, no samples → p99 = 0 → budget = target.
+    LatencyController lc(make_config(true, 200));
+    EXPECT_DOUBLE_EQ(lc.get_latency_budget_remaining_us(), 10.0)
+        << "budget must equal target when no samples have been recorded";
+}
+
+TEST(LatencyControllerTest, test_latency_budget_remaining_positive_within_slo) {
+    LatencyController lc(make_config(true, 200));
+    // Feed 200 samples at 3 µs — comfortably under the 10 µs target.
+    for (int i = 0; i < 200; ++i)
+        lc.record_latency(std::chrono::microseconds{3});
+    EXPECT_GT(lc.get_latency_budget_remaining_us(), 0.0)
+        << "budget must be positive when p99 < target_latency_us";
+}
+
+TEST(LatencyControllerTest, test_latency_budget_remaining_negative_over_slo) {
+    LatencyController lc(make_config(true, 200));
+    // Feed 200 samples at 100 µs — well above the 10 µs target.
+    for (int i = 0; i < 200; ++i)
+        lc.record_latency(std::chrono::microseconds{100});
+    EXPECT_LT(lc.get_latency_budget_remaining_us(), 0.0)
+        << "budget must be negative when p99 > target_latency_us";
+}
+
+TEST(LatencyControllerTest, test_latency_budget_remaining_zero_at_exactly_target) {
+    // Feed samples exactly at the target — budget should be ~0.
+    LatencyController lc(make_config(true, 200));
+    for (int i = 0; i < 200; ++i)
+        lc.record_latency(std::chrono::microseconds{10});
+    double budget = lc.get_latency_budget_remaining_us();
+    EXPECT_NEAR(budget, 0.0, 1.0)
+        << "budget must be near zero when all samples equal target_latency_us";
+}
+
 } // namespace
 } // namespace llmquant
