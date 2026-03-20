@@ -299,6 +299,16 @@ void Deduplicator::evict(const std::string& token, const std::string& context) {
 
 void Deduplicator::purge_expired() { backend_->purge_expired(); }
 
+Deduplicator::Stats Deduplicator::get_stats() const {
+    Stats s;
+    s.current_size = backend_->size();
+    if (auto* ip = dynamic_cast<const InProcessDeduplicator*>(backend_.get())) {
+        s.total_novel      = ip->total_novel();
+        s.total_duplicates = ip->total_duplicates();
+    }
+    return s;
+}
+
 void Deduplicator::start_background_purge(int interval_s) {
     if (auto* ip = dynamic_cast<InProcessDeduplicator*>(backend_.get())) {
         ip->start_background_purge(interval_s);

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cmath>
+#include <limits>
 #include <mutex>
 #include <vector>
 
@@ -172,6 +173,26 @@ public:
      * @return Current backoff multiplier in [1.0, 5.0].
      */
     double get_backoff_multiplier() const;
+
+    /**
+     * @brief One bucket of the cumulative latency histogram.
+     */
+    struct HistogramBucket {
+        double   upper_bound_us;  ///< Upper bound in microseconds (inf = +Inf bucket).
+        uint64_t count{0};        ///< Cumulative count of samples <= upper_bound_us.
+    };
+
+    /**
+     * @brief Return a Prometheus-compatible cumulative latency histogram.
+     *
+     * Buckets (μs): 0.5, 1, 5, 10, 25, 50, 100, 250, 500, 1000, +Inf.
+     * Each bucket's count includes all samples at or below its upper bound.
+     * If profiling is disabled or no samples have been recorded, all counts
+     * will be zero.
+     *
+     * @return Vector of HistogramBucket with monotonically increasing bounds.
+     */
+    std::vector<HistogramBucket> histogram_buckets() const;
 
 private:
     Config config_;

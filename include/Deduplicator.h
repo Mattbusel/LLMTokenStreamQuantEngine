@@ -415,6 +415,26 @@ public:
      */
     DeduplicatorBackend& backend() { return *backend_; }
 
+    /**
+     * @brief Aggregated deduplication statistics.
+     */
+    struct Stats {
+        uint64_t total_novel{0};       ///< Novel registrations since construction.
+        uint64_t total_duplicates{0};  ///< Duplicate hits since construction.
+        size_t   current_size{0};      ///< Entries currently in the live table.
+    };
+
+    /**
+     * @brief Return aggregated deduplication statistics.
+     *
+     * total_novel and total_duplicates are populated only when the backend is
+     * an InProcessDeduplicator; for other backend types they will be zero.
+     * current_size is always available via the base interface.
+     *
+     * @return Stats snapshot.
+     */
+    Stats get_stats() const;
+
 private:
     std::shared_ptr<DeduplicatorBackend> backend_;
     std::chrono::milliseconds default_ttl_;

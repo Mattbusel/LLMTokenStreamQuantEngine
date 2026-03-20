@@ -191,6 +191,12 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     for (const auto& sink : output_sinks_) {
         try { sink->emit(signal); } catch (...) {}
     }
+    // Emit to filtered sinks only when the predicate returns true.
+    for (const auto& [sink, pred] : filtered_sinks_) {
+        try {
+            if (pred && pred(signal)) sink->emit(signal);
+        } catch (...) {}
+    }
 
     // Update stats unconditionally — count every emitted signal regardless of
     // whether a callback or only sinks are registered.
@@ -223,12 +229,22 @@ void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
     output_sinks_.push_back(std::move(sink));
 }
 
+void TradeSignalEngine::add_sink_with_filter(std::shared_ptr<OutputSink> sink,
+                                              SinkPredicate predicate) {
+    filtered_sinks_.emplace_back(std::move(sink), std::move(predicate));
+}
+
 void TradeSignalEngine::clear_output_sinks() {
     output_sinks_.clear();
+    filtered_sinks_.clear();
 }
 
 void TradeSignalEngine::flush_sinks() {
     for (const auto& sink : output_sinks_) {
+        try { sink->flush(); } catch (...) {}
+    }
+    for (const auto& [sink, pred] : filtered_sinks_) {
+        (void)pred;
         try { sink->flush(); } catch (...) {}
     }
 }

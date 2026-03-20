@@ -123,6 +123,17 @@ public:
     void clear_custom_mappings();
 
     /**
+     * @brief Return true if the dictionary contains a mapping for the given token.
+     *
+     * Applies the same normalisation (lowercase + strip whitespace) as
+     * map_token_to_weight(). Does NOT update the stats counters.
+     *
+     * @param token Raw token string.
+     * @return true if a mapping exists; false otherwise.
+     */
+    bool contains_token(const std::string& token) const;
+
+    /**
      * @brief Return a snapshot of internal processing statistics.
      *
      * @return Struct with tokens_processed, cache_hits and cache_misses counts.

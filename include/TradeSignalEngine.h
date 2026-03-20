@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "LLMAdapter.h"   // SemanticWeight
@@ -224,7 +225,25 @@ public:
     void add_output_sink(std::shared_ptr<OutputSink> sink);
 
     /**
-     * @brief Remove all registered output sinks.
+     * @brief Predicate type used to filter signals before forwarding to a sink.
+     *
+     * Return true to forward the signal to the associated sink; false to skip it.
+     */
+    using SinkPredicate = std::function<bool(const TradeSignal&)>;
+
+    /**
+     * @brief Register an OutputSink that only receives signals matching the predicate.
+     *
+     * Useful for routing high-confidence signals to a separate sink, or for
+     * separating bullish and bearish signals into different output files.
+     *
+     * @param sink      Shared pointer to an OutputSink implementation.
+     * @param predicate Callable that returns true for signals to forward.
+     */
+    void add_sink_with_filter(std::shared_ptr<OutputSink> sink, SinkPredicate predicate);
+
+    /**
+     * @brief Remove all registered output sinks (both unfiltered and filtered).
      */
     void clear_output_sinks();
 
@@ -266,6 +285,7 @@ private:
     std::chrono::high_resolution_clock::time_point processing_start_;
     Stats stats_;
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;
+    std::vector<std::pair<std::shared_ptr<OutputSink>, SinkPredicate>> filtered_sinks_;
 };
 
 } // namespace llmquant

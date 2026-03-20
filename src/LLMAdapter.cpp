@@ -233,6 +233,10 @@ void LLMAdapter::clear_custom_mappings() {
     token_weights_.clear();
 }
 
+bool LLMAdapter::contains_token(const std::string& token) const {
+    return token_weights_.count(normalize_token(token)) > 0;
+}
+
 void LLMAdapter::initialize_default_mappings() {
     // Fear/Uncertainty tokens
     add_token_mapping("crash", {-0.9, 0.9, 0.8, -0.7});

@@ -443,6 +443,64 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_clamps
     }
 }
 
+// ---------------------------------------------------------------------------
+// add_sink_with_filter
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_filtered_sink_only_receives_matching_signals) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    auto bullish_sink  = std::make_shared<MemoryOutputSink>();
+    auto bearish_sink  = std::make_shared<MemoryOutputSink>();
+    auto all_sink      = std::make_shared<MemoryOutputSink>();
+
+    // Only bullish (positive bias) signals reach bullish_sink.
+    engine.add_sink_with_filter(bullish_sink,
+        [](const TradeSignal& s){ return s.delta_bias_shift > 0.0; });
+    // Only bearish (negative bias) signals reach bearish_sink.
+    engine.add_sink_with_filter(bearish_sink,
+        [](const TradeSignal& s){ return s.delta_bias_shift < 0.0; });
+    // Unfiltered sink receives everything.
+    engine.add_output_sink(all_sink);
+
+    SemanticWeight bullish{0.8, 0.6, 0.2, 0.9};
+    SemanticWeight bearish{-0.8, 0.6, 0.2, 0.9};
+
+    engine.process_semantic_weight(bullish);
+    engine.process_semantic_weight(bearish);
+    // After bullish + bearish the accumulated bias may be near-zero; emit a
+    // second strong bullish token to ensure at least one bullish signal fires.
+    engine.process_semantic_weight(bullish);
+
+    // all_sink must have received every signal.
+    EXPECT_GT(all_sink->size(), 0u) << "Unfiltered sink must receive all signals";
+    // bullish_sink must have at least one positive-bias signal.
+    EXPECT_GT(bullish_sink->size(), 0u) << "Bullish sink must receive at least one bullish signal";
+    // bearish signals must not arrive in bullish_sink and vice-versa.
+    for (const auto& s : bullish_sink->signals()) {
+        EXPECT_GT(s.delta_bias_shift, 0.0) << "Bullish sink must only contain positive-bias signals";
+    }
+    for (const auto& s : bearish_sink->signals()) {
+        EXPECT_LT(s.delta_bias_shift, 0.0) << "Bearish sink must only contain negative-bias signals";
+    }
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_filtered_sink_cleared_by_clear_output_sinks) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.add_sink_with_filter(sink, [](const TradeSignal&){ return true; });
+    engine.clear_output_sinks();  // must remove filtered sinks too
+
+    engine.set_signal_callback([](const TradeSignal&){});
+    SemanticWeight w{0.5, 0.5, 0.1, 0.8};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(sink->size(), 0u) << "Sink removed by clear_output_sinks must not receive signals";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_zero_disabled) {
     // With max_accumulated_bias=0.0 (disabled), the accumulator is free to grow above 1.0.
     // Use a large min_bias_threshold to suppress all signal emissions (and the post-emit

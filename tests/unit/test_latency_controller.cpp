@@ -328,5 +328,49 @@ TEST(LatencyControllerTest, test_latency_controller_reset_clears_p5) {
     EXPECT_EQ(stats.p5_latency.count(), 0) << "p5_latency must be zero after reset";
 }
 
+// ---------------------------------------------------------------------------
+// histogram_buckets
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_histogram_buckets_cumulative_and_ordered) {
+    LatencyController lc(make_config(true, 200));
+
+    // Insert 10 samples at 1 µs (all fall in the 0.5–1.0 µs bucket or below).
+    // Insert 10 samples at 10 µs (fall in the ≤10 µs bucket).
+    // Insert 10 samples at 100 µs (fall in the ≤100 µs bucket).
+    for (int i = 0; i < 10; ++i) lc.record_latency(std::chrono::microseconds{1});
+    for (int i = 0; i < 10; ++i) lc.record_latency(std::chrono::microseconds{10});
+    for (int i = 0; i < 10; ++i) lc.record_latency(std::chrono::microseconds{100});
+
+    auto buckets = lc.histogram_buckets();
+    ASSERT_FALSE(buckets.empty());
+
+    // Buckets must be ordered by upper_bound_us (monotonically non-decreasing).
+    for (size_t i = 1; i < buckets.size(); ++i) {
+        EXPECT_LE(buckets[i-1].upper_bound_us, buckets[i].upper_bound_us)
+            << "Buckets must be in non-decreasing order";
+    }
+
+    // Cumulative property: each bucket count >= prior bucket count.
+    for (size_t i = 1; i < buckets.size(); ++i) {
+        EXPECT_GE(buckets[i].count, buckets[i-1].count)
+            << "Histogram must be cumulative";
+    }
+
+    // The +Inf bucket must contain all 30 samples.
+    EXPECT_EQ(buckets.back().count, 30u) << "+Inf bucket must contain all samples";
+}
+
+TEST(LatencyControllerTest, test_histogram_buckets_empty_when_profiling_disabled) {
+    LatencyController lc(make_config(false /*profiling off*/));
+    lc.record_latency(std::chrono::microseconds{5});
+
+    auto buckets = lc.histogram_buckets();
+    // All counts must be zero when profiling is disabled.
+    for (const auto& b : buckets) {
+        EXPECT_EQ(b.count, 0u) << "All bucket counts must be zero when profiling is disabled";
+    }
+}
+
 } // namespace
 } // namespace llmquant

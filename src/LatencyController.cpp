@@ -219,6 +219,31 @@ double LatencyController::get_backoff_multiplier() const {
     return backoff_multiplier_;  // Protected by pressure_mutex_.
 }
 
+std::vector<LatencyController::HistogramBucket> LatencyController::histogram_buckets() const {
+    static constexpr double kBounds[] = {0.5, 1.0, 5.0, 10.0, 25.0, 50.0,
+                                          100.0, 250.0, 500.0, 1000.0};
+    std::vector<HistogramBucket> buckets;
+    buckets.reserve(sizeof(kBounds) / sizeof(kBounds[0]) + 1);
+    for (double b : kBounds) {
+        buckets.push_back({b, 0});
+    }
+    buckets.push_back({std::numeric_limits<double>::infinity(), 0});
+
+    if (!config_.enable_profiling) return buckets;
+
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    for (size_t k = 0; k < sample_count_; ++k) {
+        size_t idx = (sample_head_ + config_.sample_window - sample_count_ + k)
+                     % config_.sample_window;
+        double us = static_cast<double>(latency_samples_[idx].count());
+        for (auto& bucket : buckets) {
+            if (us <= bucket.upper_bound_us)
+                ++bucket.count;
+        }
+    }
+    return buckets;
+}
+
 void LatencyController::recompute_composite() {
     double c = std::max({pressure_.ingestion_pressure,
                          pressure_.semantic_pressure,

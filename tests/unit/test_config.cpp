@@ -537,6 +537,27 @@ TEST(ConfigTest, test_config_metrics_defaults_when_section_absent) {
     EXPECT_EQ(cfg.get_config().metrics.bind_address, "0.0.0.0");
 }
 
+TEST(ConfigTest, test_config_to_summary_string_contains_key_fields) {
+    Config cfg;
+    cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 2.5\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+
+    std::string summary = cfg.to_summary_string();
+    EXPECT_FALSE(summary.empty()) << "to_summary_string must return non-empty output";
+    // Must mention key sections.
+    EXPECT_NE(summary.find("trading"), std::string::npos)  << "summary must mention trading section";
+    EXPECT_NE(summary.find("risk"),    std::string::npos)  << "summary must mention risk section";
+    EXPECT_NE(summary.find("latency"), std::string::npos)  << "summary must mention latency section";
+    // Must include the bias_sensitivity value we set.
+    EXPECT_NE(summary.find("2.5"), std::string::npos)
+        << "summary must include bias_sensitivity=2.5";
+}
+
 TEST(ConfigTest, test_config_max_accumulated_bias_parsed_from_yaml) {
     Config cfg;
     bool ok = cfg.load_from_yaml_string(

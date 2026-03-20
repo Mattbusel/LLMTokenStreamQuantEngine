@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <spdlog/spdlog.h>
+#include <sstream>
 #include <stdexcept>
 
 namespace llmquant {
@@ -366,6 +367,35 @@ void Config::stop_watching() {
     if (watcher_thread_.joinable()) {
         watcher_thread_.join();
     }
+}
+
+std::string Config::to_summary_string() const {
+    std::lock_guard<std::mutex> lk(config_mutex_);
+    std::ostringstream ss;
+    ss << "=== Engine Configuration Summary ===\n"
+       << "[trading]  bias_sensitivity=" << config_.trading.bias_sensitivity
+       << "  vol_sensitivity=" << config_.trading.volatility_sensitivity
+       << "  decay=" << config_.trading.signal_decay_rate
+       << "  cooldown_us=" << config_.trading.signal_cooldown_us << "\n"
+       << "[trading]  max_signal_age_us=" << config_.trading.max_signal_age_us
+       << "  min_bias_threshold=" << config_.trading.min_bias_threshold
+       << "  max_accumulated_bias=" << config_.trading.max_accumulated_bias << "\n"
+       << "[risk]     max_bias=" << config_.risk_thresholds.max_bias_magnitude
+       << "  max_vol=" << config_.risk_thresholds.max_volatility_magnitude
+       << "  min_conf=" << config_.risk_thresholds.min_confidence
+       << "  max_drawdown=" << config_.risk_thresholds.max_drawdown
+       << "  rate_cap=" << config_.risk_thresholds.max_signals_per_second << "/s\n"
+       << "[latency]  target_us=" << config_.latency.target_latency_us
+       << "  window=" << config_.latency.sample_window
+       << "  profiling=" << (config_.latency.enable_profiling ? "on" : "off") << "\n"
+       << "[metrics]  port=" << config_.metrics.stats_port
+       << "  bind=" << config_.metrics.bind_address << "\n"
+       << "[pressure] max_tps=" << config_.pressure.max_ingestion_rate_tps
+       << "  backoff_scale=" << config_.pressure.backoff_scale_factor << "\n"
+       << "[stream]   interval_ms=" << config_.token_stream.token_interval_ms
+       << "  buffer=" << config_.token_stream.buffer_size
+       << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false") << "\n";
+    return ss.str();
 }
 
 } // namespace llmquant

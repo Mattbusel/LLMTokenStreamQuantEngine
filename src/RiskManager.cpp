@@ -149,6 +149,16 @@ void RiskManager::reset_stats() noexcept {
 }
 
 void RiskManager::update_config(const Config& config) {
+    if (config.max_bias_magnitude < 0.0)
+        throw std::invalid_argument("RiskManager: max_bias_magnitude must be >= 0");
+    if (config.max_volatility_magnitude < 0.0)
+        throw std::invalid_argument("RiskManager: max_volatility_magnitude must be >= 0");
+    if (config.max_spread_magnitude < 0.0)
+        throw std::invalid_argument("RiskManager: max_spread_magnitude must be >= 0");
+    if (config.min_confidence < 0.0 || config.min_confidence > 1.0)
+        throw std::invalid_argument("RiskManager: min_confidence must be in [0, 1]");
+    if (config.max_drawdown < 0.0)
+        throw std::invalid_argument("RiskManager: max_drawdown must be >= 0");
     std::lock_guard<std::mutex> lock(mutex_);
     config_ = config;
 }

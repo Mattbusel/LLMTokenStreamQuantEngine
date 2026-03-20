@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 #include <yaml-cpp/yaml.h>
+#include <sstream>
 
 namespace llmquant {
 
@@ -233,6 +234,16 @@ public:
      * never called.
      */
     void stop_watching();
+
+    /**
+     * @brief Return a human-readable summary of the active configuration.
+     *
+     * Produces a compact multi-line string suitable for startup logging.
+     * Thread-safe (acquires config_mutex_).
+     *
+     * @return Multi-line configuration summary string.
+     */
+    std::string to_summary_string() const;
 
 private:
     SystemConfig config_;
