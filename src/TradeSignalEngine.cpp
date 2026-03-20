@@ -325,6 +325,13 @@ double TradeSignalEngine::get_tokens_per_second() const noexcept {
     return static_cast<double>(tokens) / (elapsed_ns / 1e9);
 }
 
+double TradeSignalEngine::get_noise_filter_rate() const noexcept {
+    uint64_t filtered  = stats_.noise_filtered.load(std::memory_order_relaxed);
+    uint64_t processed = stats_.tokens_processed.load(std::memory_order_relaxed);
+    return (processed == 0) ? 0.0
+         : static_cast<double>(filtered) / static_cast<double>(processed);
+}
+
 double TradeSignalEngine::get_session_duration_ms() const noexcept {
     auto now = std::chrono::high_resolution_clock::now();
     return static_cast<double>(

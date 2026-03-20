@@ -108,6 +108,20 @@ public:
     SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
 
     /**
+     * @brief Map a list of tokens to their individual SemanticWeights in one call.
+     *
+     * Returns a weight per token using the same lookup logic as
+     * map_token_to_weight().  Tokens not found in the dictionary are mapped
+     * to a neutral SemanticWeight (all zeros).  Useful when per-token weights
+     * are needed rather than a single aggregated sequence weight.
+     *
+     * @param tokens Vector of raw token strings (normalised internally).
+     * @return Vector of SemanticWeights, one per input token, in the same order.
+     */
+    std::vector<SemanticWeight> batch_map_tokens_to_weights(
+        const std::vector<std::string>& tokens) const;
+
+    /**
      * @brief Returns the number of token-to-weight mappings currently loaded.
      *
      * @return Total number of entries in the token dictionary (built-in + custom).

@@ -496,6 +496,15 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("liquidated", {-0.7, 0.85, 0.85, -0.75});
 }
 
+std::vector<SemanticWeight> LLMAdapter::batch_map_tokens_to_weights(
+        const std::vector<std::string>& tokens) const {
+    std::vector<SemanticWeight> results;
+    results.reserve(tokens.size());
+    for (const auto& tok : tokens)
+        results.push_back(map_token_to_weight(tok));
+    return results;
+}
+
 size_t LLMAdapter::load_dictionary_from_tsv(const std::string& tsv_data) {
     size_t imported = 0;
     std::istringstream ss(tsv_data);

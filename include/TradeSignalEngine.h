@@ -386,6 +386,19 @@ public:
     double get_tokens_per_second() const noexcept;
 
     /**
+     * @brief Return the fraction of processed tokens rejected by the noise gate.
+     *
+     * Computed as noise_filtered / tokens_processed.  Returns 0.0 when no
+     * tokens have been processed.  A high rate indicates the min_bias_threshold
+     * is filtering most incoming signal energy.
+     *
+     * Thread-safe (atomic reads).
+     *
+     * @return Noise filter rate in [0.0, 1.0].
+     */
+    double get_noise_filter_rate() const noexcept;
+
+    /**
      * @brief Return elapsed milliseconds since construction or the last reset() call.
      *
      * Useful for monitoring session uptime and computing throughput metrics.

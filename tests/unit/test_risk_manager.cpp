@@ -1221,14 +1221,14 @@ TEST(RiskManagerTest, test_is_healthy_true_after_re_enable_and_reset) {
 }
 
 TEST(RiskManagerTest, test_get_signals_per_second_zero_initially) {
-    RiskManager rm(make_config());
+    RiskManager rm(default_config());
     // No signals have passed — rate should be 0.
     EXPECT_DOUBLE_EQ(rm.get_signals_per_second(), 0.0)
         << "get_signals_per_second must be 0 when no signals have passed";
 }
 
 TEST(RiskManagerTest, test_get_signals_per_second_non_negative_after_passing) {
-    RiskManager rm(make_config());
+    RiskManager rm(default_config());
     rm.disable_all_gates();
     TradeSignal sig;
     sig.delta_bias_shift = 0.1;
