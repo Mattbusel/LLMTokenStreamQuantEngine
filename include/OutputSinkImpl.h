@@ -142,18 +142,36 @@ private:
  * Intended for unit and integration tests where the full signal sequence
  * needs to be inspected after the fact without touching the filesystem.
  * Not thread-safe; see OutputSink class documentation.
+ *
+ * When constructed with a non-zero @p max_capacity the buffer acts as a
+ * fixed-size ring: once full, the oldest signal is evicted and dropped_count_
+ * is incremented before the new signal is stored.  A capacity of 0 (default)
+ * means unlimited — the buffer grows without bound.
  */
 class MemoryOutputSink : public OutputSink {
 public:
-    /// @brief Default constructor.
-    MemoryOutputSink() = default;
+    /**
+     * @brief Construct the sink with an optional capacity cap.
+     *
+     * @param max_capacity Maximum number of signals to retain.  Pass 0 for
+     *                     unlimited (the default, backward-compatible behaviour).
+     */
+    explicit MemoryOutputSink(size_t max_capacity = 0)
+        : max_capacity_(max_capacity) {}
 
     /**
      * @brief Append the signal to the internal buffer.
      *
+     * If a capacity cap is set and the buffer is full the oldest signal is
+     * evicted first and the drop counter is incremented.
+     *
      * @param sig Fully populated TradeSignal to store.
      */
     void emit(const TradeSignal& sig) override {
+        if (max_capacity_ > 0 && signals_.size() >= max_capacity_) {
+            signals_.erase(signals_.begin());
+            ++dropped_count_;
+        }
         signals_.push_back(sig);
     }
 
@@ -167,15 +185,24 @@ public:
     /**
      * @brief Return the number of signals currently stored in the buffer.
      *
-     * @return Signal count.
+     * @return Signal count (never exceeds max_capacity if a cap is set).
      */
     size_t size() const noexcept { return signals_.size(); }
 
-    /// @brief Clear the internal signal buffer.
-    void clear() { signals_.clear(); }
+    /**
+     * @brief Return the cumulative number of signals dropped due to capacity.
+     *
+     * @return Drop count (always 0 when max_capacity is 0).
+     */
+    size_t dropped_count() const noexcept { return dropped_count_; }
+
+    /// @brief Clear the internal signal buffer and reset the drop counter.
+    void clear() { signals_.clear(); dropped_count_ = 0; }
 
 private:
     std::vector<TradeSignal> signals_;
+    size_t max_capacity_{0};
+    size_t dropped_count_{0};
 };
 
 } // namespace llmquant

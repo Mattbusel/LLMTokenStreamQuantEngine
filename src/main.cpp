@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
     bool        backtest_mode  = false;
     std::string oms_address;
     std::string fix_address;
+    std::string config_file    = "config.yaml"; // may be overridden by --config
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -59,6 +60,7 @@ int main(int argc, char* argv[]) {
                 "  --stream [key]    Enable live LLM stream mode (optional API key)\n"
                 "  --oms host:port   Connect to REST OMS adapter\n"
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
+                "  --config path     Path to config YAML (default: config.yaml)\n"
                 "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
                 "  --backtest        Enable backtest mode (emit signal on every token, no cooldown)\n"
                 "  --no-color        Disable ANSI colour output\n"
@@ -88,6 +90,8 @@ int main(int argc, char* argv[]) {
             dry_run = true;
         } else if (arg == "--backtest") {
             backtest_mode = true;
+        } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
+            config_file = argv[++i];
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -128,11 +132,15 @@ int main(int argc, char* argv[]) {
         : "  \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\n";
     const char* ARROW = no_color ? "->" : "\xe2\x86\x92";
 
-    // Load configuration (skip --stream / <key> args when looking for config path).
+    // Load configuration.
+    // config_file may already have been set by --config; otherwise treat the
+    // first positional argument (no leading dash) as the config path so that
+    // the legacy invocation `engine config.yaml` still works.
     Config config;
-    std::string config_file = "config.yaml";
-    if (argc > 1 && std::string(argv[1]) != "--stream") {
-        config_file = argv[1];
+    if (config_file == "config.yaml") {
+        for (int i = 1; i < argc; ++i) {
+            if (argv[i][0] != '-') { config_file = argv[i]; break; }
+        }
     }
     bool config_loaded = config.load_from_file(config_file);
     if (!config_loaded) {
@@ -589,6 +597,12 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_latency_p50_us p50 (median) token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_p50_us gauge\n"
                  << "llmquant_latency_p50_us " << stats.p50_latency.count() << "\n"
+                 << "# HELP llmquant_latency_p95_us p95 token-to-signal latency in microseconds\n"
+                 << "# TYPE llmquant_latency_p95_us gauge\n"
+                 << "llmquant_latency_p95_us " << stats.p95_latency.count() << "\n"
+                 << "# HELP llmquant_tokens_emitted_total Tokens emitted by simulator (0 in stream mode)\n"
+                 << "# TYPE llmquant_tokens_emitted_total counter\n"
+                 << "llmquant_tokens_emitted_total " << (!stream_mode ? token_sim.get_stats().tokens_emitted.load() : 0) << "\n"
                  << "# HELP llmquant_oms_update_count_total Total successful OMS position updates\n"
                  << "# TYPE llmquant_oms_update_count_total counter\n"
                  << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
@@ -663,10 +677,7 @@ int main(int argc, char* argv[]) {
                         std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
                  << "# TYPE llmquant_dry_run gauge\n"
-                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n"
-                 << "# HELP llmquant_dictionary_size Number of token mappings in the LLMAdapter dictionary\n"
-                 << "# TYPE llmquant_dictionary_size gauge\n"
-                 << "llmquant_dictionary_size " << llm_adapter.get_dictionary_size() << "\n";
+                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
