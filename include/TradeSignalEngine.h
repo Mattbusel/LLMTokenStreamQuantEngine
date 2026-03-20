@@ -359,6 +359,34 @@ public:
     }
 
     /**
+     * @brief Return the total number of signals discarded by the staleness guard since
+     *        construction or last reset().
+     *
+     * Thread-safe (atomic read with relaxed ordering).
+     *
+     * @return Total aged-out signal count.
+     */
+    uint64_t get_signals_aged_out() const noexcept {
+        return stats_.signals_aged_out.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the fraction of processed tokens where the signal was aged out.
+     *
+     * Computed as signals_aged_out / tokens_processed.
+     * Returns 0.0 if no tokens have been processed yet.
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Aged-out rate in [0.0, 1.0].
+     */
+    double get_aged_out_rate() const noexcept {
+        uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
+        if (tokens == 0) return 0.0;
+        return static_cast<double>(stats_.signals_aged_out.load(std::memory_order_relaxed))
+             / static_cast<double>(tokens);
+    }
+
+    /**
      * @brief Return the running average signal_quality across all emitted signals.
      *
      * Computed as a Welford running mean updated in emit_signal().
