@@ -1291,5 +1291,38 @@ TEST(TradeSignalEngineTest, test_get_signal_efficiency_in_range) {
     EXPECT_LE(eff, 1.0);
 }
 
+TEST(TradeSignalEngineTest, test_get_signals_aged_out_zero_initially) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_signals_aged_out(), uint64_t{0});
+}
+
+TEST(TradeSignalEngineTest, test_get_aged_out_rate_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_aged_out_rate(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_aged_out_rate_in_range_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.6, 0.8, 0.2, 0.5};
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight(w);
+    double rate = engine.get_aged_out_rate();
+    EXPECT_GE(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_signals_aged_out_resets_with_reset) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.5, 0.8, 0.1, 0.4};
+    for (int i = 0; i < 3; ++i)
+        engine.process_semantic_weight(w);
+    engine.reset();
+    EXPECT_EQ(engine.get_signals_aged_out(), uint64_t{0});
+}
+
 } // namespace
 } // namespace llmquant
