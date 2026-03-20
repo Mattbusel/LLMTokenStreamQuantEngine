@@ -201,6 +201,14 @@ public:
      */
     void reset() noexcept;
 
+    /**
+     * @brief Flush all registered output sinks.
+     *
+     * Call this at shutdown to ensure any buffered file-sink output is written
+     * to disk.  Not thread-safe — call from the same thread as emit_signal().
+     */
+    void flush_sinks();
+
 private:
     bool should_emit_signal() const;
     void emit_signal(const TradeSignal& signal);
@@ -218,6 +226,9 @@ private:
     /// path (see class-level thread-safety note); no synchronisation is needed.
     /// Do NOT access this field from any other thread.
     std::chrono::high_resolution_clock::time_point last_signal_time_;
+    /// Set at the start of process_semantic_weight() to allow emit_signal() to
+    /// compute the token-to-signal latency for the TradeSignal::latency_us field.
+    std::chrono::high_resolution_clock::time_point processing_start_;
     Stats stats_;
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;
 };

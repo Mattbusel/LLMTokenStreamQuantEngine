@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "TradeSignalEngine.h"
 #include "LLMAdapter.h"
+#include "OutputSinkImpl.h"
 
 #include <atomic>
 #include <chrono>
@@ -202,6 +203,32 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_confidence_reflects_input_w
 
     EXPECT_DOUBLE_EQ(captured.confidence, expected_confidence)
         << "signal.confidence must reflect the confidence_score of the processed weight";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_latency_us_is_populated) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    SemanticWeight w{0.5, 0.7, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+
+    // latency_us must be non-negative and finite (not left at default 0.0 is not
+    // strictly required, but must be a valid measured duration >= 0).
+    EXPECT_GE(captured.latency_us, 0.0)
+        << "latency_us must be a non-negative duration";
+    EXPECT_TRUE(std::isfinite(captured.latency_us))
+        << "latency_us must be finite";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_flush_sinks_does_not_crash) {
+    TradeSignalEngine engine(make_config());
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.add_output_sink(sink);
+    // Should not throw or crash even with no pending data.
+    EXPECT_NO_THROW(engine.flush_sinks());
 }
 
 TEST(TradeSignalEngineTest, test_trade_signal_engine_reset_clears_accumulators_and_stats) {

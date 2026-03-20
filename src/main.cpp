@@ -37,11 +37,15 @@ int main(int argc, char* argv[]) {
   try {
     std::signal(SIGINT, signal_handler);
 
+    // Record engine start time for uptime metrics.
+    const auto engine_start_time = std::chrono::steady_clock::now();
+
     // Parse flags before anything else.
     bool        stream_mode    = false;
     std::string stream_api_key;
     bool        no_color       = false;
     bool        debug_raw      = false;
+    bool        dry_run        = false;
     std::string oms_address;
     std::string fix_address;
     for (int i = 1; i < argc; ++i) {
@@ -54,6 +58,7 @@ int main(int argc, char* argv[]) {
                 "  --stream [key]    Enable live LLM stream mode (optional API key)\n"
                 "  --oms host:port   Connect to REST OMS adapter\n"
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
+                "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
                 "  --version         Print version and exit\n"
@@ -77,6 +82,8 @@ int main(int argc, char* argv[]) {
             no_color = true;
         } else if (arg == "--debug-raw") {
             debug_raw = true;
+        } else if (arg == "--dry-run") {
+            dry_run = true;
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -270,7 +277,11 @@ int main(int argc, char* argv[]) {
 
         auto weight = llm_adapter.map_token_to_weight(text);
 
-        trade_engine.process_semantic_weight(weight);
+        // In dry-run mode, tokens are mapped through LLMAdapter for
+        // dictionary coverage analysis but no signals are emitted.
+        if (!dry_run) {
+            trade_engine.process_semantic_weight(weight);
+        }
 
         latency_ctrl.end_measurement();
 
@@ -377,6 +388,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  INTERVAL: " << sys_config.token_stream.token_interval_ms << "ms/token\n";
     }
     std::cout << "  LATENCY : target p99 < " << sys_config.latency.target_latency_us << "us\n";
+    if (dry_run)
+        std::cout << "  DRY-RUN : signals suppressed — dictionary coverage mode\n";
     std::cout << DIV1 << "\n";
     std::cout << "  TIME(ms)     BIAS      VOL       LATENCY   GATE\n";
     std::cout << DIV2;
@@ -552,6 +565,12 @@ int main(int argc, char* argv[]) {
                             return rest->error_count();
                         return 0;
                     }() << "\n"
+                 << "# HELP llmquant_dedup_novel_total Tokens processed as novel (not seen in TTL window)\n"
+                 << "# TYPE llmquant_dedup_novel_total counter\n"
+                 << "llmquant_dedup_novel_total " << dedup_backend->total_novel() << "\n"
+                 << "# HELP llmquant_dedup_duplicates_total Tokens suppressed as duplicates within the TTL window\n"
+                 << "# TYPE llmquant_dedup_duplicates_total counter\n"
+                 << "llmquant_dedup_duplicates_total " << dedup_backend->total_duplicates() << "\n"
                  << "# HELP llmquant_dedup_redis_connected Whether a Redis dedup connection is active\n"
                  << "# TYPE llmquant_dedup_redis_connected gauge\n"
                  << "llmquant_dedup_redis_connected 0\n"
@@ -570,6 +589,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_cache_misses_total Tokens not found in the dictionary (neutral fallback)\n"
                  << "# TYPE llmquant_cache_misses_total counter\n"
                  << "llmquant_cache_misses_total " << llm_adapter.get_stats().cache_misses << "\n"
+                 << "# HELP llmquant_dictionary_size Number of entries in the LLMAdapter token dictionary\n"
+                 << "# TYPE llmquant_dictionary_size gauge\n"
+                 << "llmquant_dictionary_size " << llm_adapter.get_dictionary_size() << "\n"
                  << "# HELP llmquant_pressure_composite Current composite back-pressure [0,1]\n"
                  << "# TYPE llmquant_pressure_composite gauge\n"
                  << "llmquant_pressure_composite " << std::fixed << std::setprecision(4) << pressure.composite << "\n"
@@ -596,7 +618,14 @@ int main(int argc, char* argv[]) {
                  << "llmquant_latency_jitter_ms " << std::setprecision(4) << stats.jitter_ms << "\n"
                  << "# HELP llmquant_ring_buffer_drops_total Tokens dropped due to full simulator ring buffer\n"
                  << "# TYPE llmquant_ring_buffer_drops_total counter\n"
-                 << "llmquant_ring_buffer_drops_total " << (!stream_mode ? token_sim.get_stats().ring_buffer_drops.load() : 0) << "\n";
+                 << "llmquant_ring_buffer_drops_total " << (!stream_mode ? token_sim.get_stats().ring_buffer_drops.load() : 0) << "\n"
+                 << "# HELP llmquant_uptime_seconds Engine uptime since startup\n"
+                 << "# TYPE llmquant_uptime_seconds counter\n"
+                 << "llmquant_uptime_seconds " << std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
+                 << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
+                 << "# TYPE llmquant_dry_run gauge\n"
+                 << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -664,6 +693,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
     std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
     std::cout << "  Min latency      : " << final_stats.min_latency.count() << "us\n";
+    std::cout << "  P50 latency      : " << final_stats.p50_latency.count() << "us\n";
     std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";
     std::cout << "  Max latency      : " << final_stats.max_latency.count() << "us\n";
     std::cout << "  Jitter           : " << std::fixed << std::setprecision(3)
@@ -678,6 +708,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
     std::cout << "  ---------------------------------------------------------\n\n";
 
+    trade_engine.flush_sinks();
     logger.log_performance_summary();
     return 0;
   } catch (const std::exception& ex) {

@@ -145,5 +145,16 @@ TEST(OutputSinkTest, test_json_sink_nonexistent_directory_throws) {
     );
 }
 
+TEST(OutputSinkTest, test_memory_sink_size_tracks_signal_count) {
+    MemoryOutputSink sink;
+    EXPECT_EQ(sink.size(), 0u);
+    sink.emit(make_signal(0.1, 0.2));
+    EXPECT_EQ(sink.size(), 1u);
+    sink.emit(make_signal(0.3, 0.4));
+    EXPECT_EQ(sink.size(), 2u);
+    sink.clear();
+    EXPECT_EQ(sink.size(), 0u);
+}
+
 } // namespace
 } // namespace llmquant

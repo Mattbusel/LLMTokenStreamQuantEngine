@@ -21,6 +21,9 @@ TradeSignalEngine::TradeSignalEngine(const Config& config)
 }
 
 void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
+    // Record start time for latency_us population in emit_signal().
+    processing_start_ = std::chrono::high_resolution_clock::now();
+
     // Apply sensitivity scaling
     double bias_contribution = weight.directional_bias * weight.confidence_score * config_.bias_sensitivity;
     double vol_contribution = weight.volatility_score * weight.confidence_score * config_.volatility_sensitivity;
@@ -130,6 +133,9 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.timestamp_ns = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()).count());
+    // Populate latency_us: time from start of process_semantic_weight() to now.
+    signal.latency_us = std::chrono::duration<double, std::micro>(
+        now - processing_start_).count();
     signal.spread_modifier = (std::fabs(signal.delta_bias_shift) > 0.5)
                                  ? -0.1 * signal.delta_bias_shift
                                  : 0.0;
@@ -186,6 +192,12 @@ void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
 
 void TradeSignalEngine::clear_output_sinks() {
     output_sinks_.clear();
+}
+
+void TradeSignalEngine::flush_sinks() {
+    for (const auto& sink : output_sinks_) {
+        try { sink->flush(); } catch (...) {}
+    }
 }
 
 } // namespace llmquant

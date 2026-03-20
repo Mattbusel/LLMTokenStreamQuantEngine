@@ -340,12 +340,8 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("of",        {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("to",        {0.0,  0.1,  0.0,  0.0});
 
-    // Options / derivatives sentiment
-    add_token_mapping("calls",      { 0.6, 0.80, 0.50,  0.75});
-    add_token_mapping("puts",       {-0.6, 0.80, 0.50, -0.75});
-    add_token_mapping("squeeze",    { 0.5, 0.75, 0.85,  0.60});
-    add_token_mapping("gamma",      { 0.0, 0.65, 0.80,  0.0});
-    add_token_mapping("delta",      { 0.0, 0.60, 0.50,  0.0});
+    // Options / derivatives — additional terms (expiry, strike, hedge are new;
+    // calls/puts/squeeze/gamma/delta already defined above with better values)
     add_token_mapping("expiry",     { 0.0, 0.50, 0.70,  0.0});
     add_token_mapping("strike",     { 0.0, 0.50, 0.40,  0.0});
     add_token_mapping("hedge",      {-0.1, 0.70, 0.30, -0.10});
@@ -356,13 +352,10 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("fud",        {-0.6, 0.70, 0.60, -0.55});
     add_token_mapping("hodl",       { 0.3, 0.60, 0.20,  0.40});
     add_token_mapping("rekt",       {-0.8, 0.85, 0.80, -0.80});
-    add_token_mapping("dip",        { 0.3, 0.70, 0.40,  0.35});
     add_token_mapping("ath",        { 0.7, 0.75, 0.65,  0.70});
 
-    // Technical analysis — trend / exhaustion signals
-    add_token_mapping("overbought", {-0.4, 0.75, 0.50, -0.50});
-    add_token_mapping("oversold",   { 0.4, 0.75, 0.50,  0.50});
-    add_token_mapping("capitulation",{-0.8, 0.85, 0.85, -0.80});
+    // Technical analysis — trend / exhaustion signals (new; overbought/oversold/
+    // capitulation/dip/margin already defined above with better values)
     add_token_mapping("accumulation",{ 0.5, 0.75, 0.35,  0.55});
     add_token_mapping("distribution",{-0.4, 0.70, 0.45, -0.45});
     add_token_mapping("reversal",   { 0.0, 0.70, 0.80,  0.0});
@@ -370,7 +363,6 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("parabolic",  { 0.6, 0.75, 0.90,  0.65});
     add_token_mapping("divergence", { 0.0, 0.65, 0.70,  0.0});
     add_token_mapping("liquidated", {-0.7, 0.85, 0.85, -0.75});
-    add_token_mapping("margin",     { 0.0, 0.55, 0.65,  0.0});
 }
 
 } // namespace llmquant

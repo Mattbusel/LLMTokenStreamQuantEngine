@@ -369,5 +369,44 @@ TEST(ConfigTest, ConfigLoadUnreadableFile) {
 #endif
 }
 
+// ---------------------------------------------------------------------------
+// save_to_file round-trip for risk_thresholds
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_save_and_reload_preserves_risk_thresholds) {
+    const std::string tmp_path = "tmp_risk_thresholds_roundtrip.yaml";
+
+    // Load custom risk thresholds.
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n"
+        "  max_bias_magnitude: 4.5\n"
+        "  max_volatility_magnitude: 3.0\n"
+        "  min_confidence: 0.25\n"
+        "  max_signals_per_second: 300\n"
+        "  max_drawdown: 7.5\n"
+        "  drawdown_window_s: 90\n"
+        "  position_warn_fraction: 0.7\n");
+    ASSERT_TRUE(ok);
+
+    // Save to a temp file.
+    ASSERT_TRUE(cfg.save_to_file(tmp_path));
+
+    // Reload from the saved file.
+    Config cfg2;
+    ASSERT_TRUE(cfg2.load_from_file(tmp_path));
+    const auto& rt = cfg2.get_config().risk_thresholds;
+
+    EXPECT_DOUBLE_EQ(rt.max_bias_magnitude,       4.5);
+    EXPECT_DOUBLE_EQ(rt.max_volatility_magnitude, 3.0);
+    EXPECT_DOUBLE_EQ(rt.min_confidence,           0.25);
+    EXPECT_EQ(rt.max_signals_per_second,          300u);
+    EXPECT_DOUBLE_EQ(rt.max_drawdown,             7.5);
+    EXPECT_EQ(rt.drawdown_window_s,               90);
+    EXPECT_DOUBLE_EQ(rt.position_warn_fraction,   0.7);
+
+    std::remove(tmp_path.c_str());
+}
+
 } // namespace
 } // namespace llmquant

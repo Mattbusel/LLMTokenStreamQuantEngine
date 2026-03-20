@@ -159,5 +159,117 @@ TEST(LLMAdapterTest, test_llm_adapter_simd_odd_count_matches_scalar) {
     EXPECT_NEAR(scalar.directional_bias, simd.directional_bias, 1e-9);
 }
 
+// ---------------------------------------------------------------------------
+// Tests for financial tokens added in the expanded dictionary
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_calls_positive_puts_negative_directional_bias) {
+    LLMAdapter adapter;
+    SemanticWeight calls = adapter.map_token_to_weight("calls");
+    SemanticWeight puts  = adapter.map_token_to_weight("puts");
+    EXPECT_GT(calls.directional_bias, 0.0) << "'calls' should have positive directional bias";
+    EXPECT_LT(puts.directional_bias,  0.0) << "'puts' should have negative directional bias";
+    // Symmetry: magnitude should be similar
+    EXPECT_NEAR(std::abs(calls.directional_bias), std::abs(puts.directional_bias), 0.2);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_overbought_oversold_opposite_bias) {
+    LLMAdapter adapter;
+    SemanticWeight ob  = adapter.map_token_to_weight("overbought");
+    SemanticWeight os_ = adapter.map_token_to_weight("oversold");
+    EXPECT_LT(ob.directional_bias,  0.0) << "'overbought' should signal bearish (reversal risk)";
+    EXPECT_GT(os_.directional_bias, 0.0) << "'oversold' should signal bullish (bounce potential)";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_capitulation_strong_bearish) {
+    LLMAdapter adapter;
+    SemanticWeight w = adapter.map_token_to_weight("capitulation");
+    EXPECT_LT(w.sentiment_score,  -0.5) << "'capitulation' must be strongly bearish";
+    EXPECT_GT(w.volatility_score,  0.7) << "'capitulation' must signal high volatility";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_accumulation_bullish_low_vol) {
+    LLMAdapter adapter;
+    SemanticWeight w = adapter.map_token_to_weight("accumulation");
+    EXPECT_GT(w.directional_bias, 0.0) << "'accumulation' should be bullish";
+    EXPECT_LT(w.volatility_score, 0.6) << "'accumulation' implies controlled, low-vol buying";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_recession_strongly_bearish) {
+    LLMAdapter adapter;
+    SemanticWeight w = adapter.map_token_to_weight("recession");
+    EXPECT_LT(w.sentiment_score,  -0.5) << "'recession' must be strongly bearish";
+    EXPECT_LT(w.directional_bias, -0.5) << "'recession' must have strong negative bias";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_case_insensitive_lookup) {
+    LLMAdapter adapter;
+    // All three forms should resolve to the same mapping.
+    SemanticWeight lower = adapter.map_token_to_weight("bullish");
+    SemanticWeight upper = adapter.map_token_to_weight("BULLISH");
+    SemanticWeight mixed = adapter.map_token_to_weight("Bullish");
+    EXPECT_DOUBLE_EQ(lower.sentiment_score, upper.sentiment_score);
+    EXPECT_DOUBLE_EQ(lower.sentiment_score, mixed.sentiment_score);
+    EXPECT_DOUBLE_EQ(lower.directional_bias, upper.directional_bias);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_get_stats_hit_miss_sum_equals_processed) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("bullish");    // hit
+    adapter.map_token_to_weight("unknown_xyz"); // miss
+    auto s = adapter.get_stats();
+    EXPECT_EQ(s.cache_hits + s.cache_misses, s.tokens_processed)
+        << "cache_hits + cache_misses must equal tokens_processed";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_crypto_bearish_tokens_negative_sentiment) {
+    LLMAdapter adapter;
+    for (const std::string& token : {"rug", "rekt", "fud"}) {
+        SemanticWeight w = adapter.map_token_to_weight(token);
+        EXPECT_LT(w.sentiment_score, 0.0)
+            << "Crypto bearish token '" << token << "' must have negative sentiment";
+        EXPECT_GT(w.confidence_score, 0.5)
+            << "Crypto bearish token '" << token << "' must have above-neutral confidence";
+    }
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_crypto_bullish_tokens_positive_sentiment) {
+    LLMAdapter adapter;
+    SemanticWeight pump = adapter.map_token_to_weight("pump");
+    SemanticWeight ath  = adapter.map_token_to_weight("ath");
+    EXPECT_GT(pump.sentiment_score, 0.0) << "'pump' must have positive sentiment";
+    EXPECT_GT(pump.directional_bias, 0.0) << "'pump' must have positive directional bias";
+    EXPECT_GT(ath.sentiment_score, 0.0)  << "'ath' must have positive sentiment";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_get_dictionary_size_is_large_enough) {
+    LLMAdapter adapter;
+    EXPECT_GE(adapter.get_dictionary_size(), 60u)
+        << "Default dictionary must contain at least 60 unique mappings";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_clear_custom_mappings_empties_dictionary) {
+    LLMAdapter adapter;
+    ASSERT_GE(adapter.get_dictionary_size(), 1u);
+    adapter.clear_custom_mappings();
+    EXPECT_EQ(adapter.get_dictionary_size(), 0u);
+    // After clearing, any lookup returns the neutral default.
+    SemanticWeight w = adapter.map_token_to_weight("bullish");
+    EXPECT_DOUBLE_EQ(w.sentiment_score,  0.0);
+    EXPECT_DOUBLE_EQ(w.directional_bias, 0.0);
+    EXPECT_DOUBLE_EQ(w.confidence_score, 0.5);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_tokens_processed_increments_per_call) {
+    LLMAdapter adapter;
+    auto before = adapter.get_stats();
+    adapter.map_token_to_weight("crash");
+    adapter.map_token_to_weight("panic");
+    adapter.map_token_to_weight("xyzzy_unknown_42");
+    auto after = adapter.get_stats();
+    EXPECT_EQ(after.tokens_processed, before.tokens_processed + 3u)
+        << "tokens_processed must increment by exactly 1 per map_token_to_weight call";
+}
+
 } // namespace
 } // namespace llmquant
