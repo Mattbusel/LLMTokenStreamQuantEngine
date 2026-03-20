@@ -228,6 +228,23 @@ public:
     Stats get_stats() const noexcept { return stats_; }
 
     /**
+     * @brief Return the time elapsed since the last emitted signal, in microseconds.
+     *
+     * Returns 0.0 if no signal has been emitted yet.
+     * Thread-safe (atomic read of nanosecond timestamp).
+     *
+     * @return Elapsed microseconds since the last emit_signal() call.
+     */
+    double get_signal_age_us() const noexcept {
+        uint64_t ts = last_signal_timestamp_ns_.load(std::memory_order_relaxed);
+        if (ts == 0) return 0.0;
+        auto now_ns = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::high_resolution_clock::now().time_since_epoch()).count());
+        return (now_ns > ts) ? static_cast<double>(now_ns - ts) / 1000.0 : 0.0;
+    }
+
+    /**
      * @brief Returns the current accumulated directional bias (atomic read, instantaneous snapshot).
      *
      * @return Current accumulated bias value.
