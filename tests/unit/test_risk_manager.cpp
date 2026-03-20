@@ -615,3 +615,100 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_confidence_reason) 
     rm.evaluate_with_reason(make_signal(0.1, 0.1, 0.05, 0.01 /*below 0.1 min*/), reason);
     EXPECT_EQ(reason, "confidence_below_minimum");
 }
+
+// ============================================================
+// Test: reset_drawdown() clears the accumulator without touching the rate window.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_reset_drawdown_clears_accumulator) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown           = 0.5;
+    cfg.max_signals_per_second = 1000;
+    RiskManager rm(cfg);
+
+    auto sig = make_signal(0.4, 0.1, 0.05, 0.8);
+    EXPECT_TRUE(rm.evaluate(sig));  // cumulative = 0.4
+
+    // Second signal would push cumulative to 0.8 > 0.5 — blocked.
+    EXPECT_FALSE(rm.evaluate(sig));
+    EXPECT_EQ(rm.get_stats().signals_blocked_drawdown.load(), 1u);
+
+    // reset_drawdown() must clear accumulator so the next signal passes.
+    rm.reset_drawdown();
+    EXPECT_DOUBLE_EQ(rm.get_cumulative_bias(), 0.0);
+    EXPECT_TRUE(rm.evaluate(sig));
+}
+
+// ============================================================
+// Test: reset_drawdown() does NOT reset rate-limit window.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_reset_drawdown_does_not_reset_rate_limit) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 2;
+    cfg.max_drawdown           = 100.0;  // no drawdown interference
+    RiskManager rm(cfg);
+
+    auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
+    EXPECT_TRUE(rm.evaluate(sig));   // rate count = 1
+    EXPECT_TRUE(rm.evaluate(sig));   // rate count = 2
+    EXPECT_FALSE(rm.evaluate(sig));  // rate count = 3 > 2, blocked
+
+    // reset_drawdown() must NOT clear the rate window — signal must still be blocked.
+    rm.reset_drawdown();
+    EXPECT_FALSE(rm.evaluate(sig))
+        << "reset_drawdown() must not reset the rate-limit window";
+    EXPECT_GE(rm.get_stats().signals_blocked_rate.load(), 2u);
+}
+
+// ============================================================
+// Cycle 22: evaluate_with_reason for rate-limit and drawdown gates
+// ============================================================
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_rate_limit_reason) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 1;
+    RiskManager rm(cfg);
+
+    std::string reason;
+    // First signal passes.
+    rm.evaluate_with_reason(make_signal(), reason);
+    EXPECT_TRUE(reason.empty());
+
+    // Immediately fire a second — rate limit fires.
+    bool result = rm.evaluate_with_reason(make_signal(), reason);
+    EXPECT_FALSE(result);
+    EXPECT_EQ(reason, "rate_limit_exceeded");
+}
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_drawdown_reason) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown = 0.01;  // tiny window
+    RiskManager rm(cfg);
+
+    std::string reason;
+    // Fire crash signals to bust drawdown; unique-enough so rate limit won't fire.
+    for (int i = 0; i < 5; ++i) {
+        TradeSignal s;
+        s.delta_bias_shift      = 1.0;
+        s.volatility_adjustment = 0.1;
+        s.spread_modifier       = 0.05;
+        s.confidence            = 0.8;
+        s.timestamp_ns          = static_cast<uint64_t>(i + 1);
+        rm.evaluate_with_reason(s, reason);
+    }
+    EXPECT_EQ(reason, "drawdown_limit_exceeded");
+}
+
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_does_not_disturb_existing_callback) {
+    // Verify the internal callback swap doesn't clobber a caller-registered callback.
+    RiskManager rm(default_config());
+    std::atomic<int> alert_count{0};
+    rm.set_alert_callback([&alert_count](const std::string&, const TradeSignal&) {
+        ++alert_count;
+    });
+
+    std::string reason;
+    rm.evaluate_with_reason(make_signal(5.0, 0.1, 0.05, 0.8), reason);  // magnitude block
+    EXPECT_FALSE(reason.empty());
+    // The original callback must still have fired.
+    EXPECT_EQ(alert_count.load(), 1);
+}

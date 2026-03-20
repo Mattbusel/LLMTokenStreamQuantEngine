@@ -207,6 +207,17 @@ public:
     void reset();
 
     /**
+     * @brief Reset only the drawdown accumulator and its window start time.
+     *
+     * Lighter-weight alternative to reset() that does not affect the rate-limit
+     * window or any signal counters.  Useful at session boundaries when you want
+     * a fresh drawdown budget without discarding rate-limiting history.
+     *
+     * Thread-safe (acquires mutex_).
+     */
+    void reset_drawdown();
+
+    /**
      * @brief Reset all signal-counter statistics to zero.
      *
      * Thread-safe (each counter is an atomic).  Does NOT reset the drawdown

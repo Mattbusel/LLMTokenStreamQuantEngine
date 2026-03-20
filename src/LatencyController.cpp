@@ -102,6 +102,8 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             if (p25_idx > 0) p25_idx--;
             size_t p50_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.50));
             if (p50_idx > 0) p50_idx--;
+            size_t p75_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.75));
+            if (p75_idx > 0) p75_idx--;
             size_t p95_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.95));
             if (p95_idx > 0) p95_idx--;
             size_t p99_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.99));
@@ -109,6 +111,7 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             p5_idx  = std::min(p5_idx,  N - 1);
             p25_idx = std::min(p25_idx, N - 1);
             p50_idx = std::min(p50_idx, N - 1);
+            p75_idx = std::min(p75_idx, N - 1);
             p95_idx = std::min(p95_idx, N - 1);
             p99_idx = std::min(p99_idx, N - 1);
 
@@ -129,6 +132,11 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
                              samples_copy.begin() + static_cast<std::ptrdiff_t>(p50_idx),
                              samples_copy.end());
             stats.p50_latency = samples_copy[p50_idx];
+
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p75_idx),
+                             samples_copy.end());
+            stats.p75_latency = samples_copy[p75_idx];
 
             std::nth_element(samples_copy.begin(),
                              samples_copy.begin() + static_cast<std::ptrdiff_t>(p95_idx),

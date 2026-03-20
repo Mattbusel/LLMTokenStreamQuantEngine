@@ -162,6 +162,12 @@ void RiskManager::reset() {
     cumulative_bias_       = 0.0;
 }
 
+void RiskManager::reset_drawdown() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    drawdown_window_start_ = std::chrono::high_resolution_clock::now();
+    cumulative_bias_       = 0.0;
+}
+
 void RiskManager::reset_stats() noexcept {
     stats_.signals_passed.store(0, std::memory_order_relaxed);
     stats_.signals_blocked_magnitude.store(0, std::memory_order_relaxed);

@@ -437,6 +437,46 @@ TEST(LatencyControllerTest, test_latency_controller_get_target_latency_returns_c
         << "get_target_latency must return the value set at construction";
 }
 
+// ---------------------------------------------------------------------------
+// p75 (third quartile) latency
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_controller_p75_is_populated) {
+    LatencyController lc(make_config(true, 200));
+
+    // Insert 100 samples: 1..100 µs. Nearest-rank p75: ceil(100*0.75)-1 = 74
+    // (0-indexed), sorted value = 75 µs; allow ±5 µs tolerance.
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto stats = lc.get_stats();
+    EXPECT_GE(stats.p75_latency.count(), 70) << "p75 of [1..100] should be near 75 µs";
+    EXPECT_LE(stats.p75_latency.count(), 80);
+}
+
+TEST(LatencyControllerTest, test_latency_controller_p50_le_p75_le_p95) {
+    LatencyController lc(make_config(true, 200));
+
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto s = lc.get_stats();
+    EXPECT_LE(s.p50_latency.count(), s.p75_latency.count()) << "p50 must be <= p75";
+    EXPECT_LE(s.p75_latency.count(), s.p95_latency.count()) << "p75 must be <= p95";
+}
+
+TEST(LatencyControllerTest, test_latency_controller_reset_clears_p75) {
+    LatencyController lc(make_config());
+
+    lc.record_latency(std::chrono::microseconds{999});
+    lc.reset_stats();
+
+    auto stats = lc.get_stats();
+    EXPECT_EQ(stats.p75_latency.count(), 0) << "p75_latency must be zero after reset";
+}
+
 TEST(LatencyControllerTest, test_histogram_buckets_empty_when_profiling_disabled) {
     LatencyController lc(make_config(false /*profiling off*/));
     lc.record_latency(std::chrono::microseconds{5});

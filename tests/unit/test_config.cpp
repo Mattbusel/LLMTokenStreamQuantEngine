@@ -650,5 +650,61 @@ TEST(ConfigTest, test_config_load_from_env_zero_count_when_no_vars_set) {
     EXPECT_EQ(cfg.load_from_env(), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 22: load_from_env — multiple vars applied simultaneously
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_load_from_env_multiple_vars_returns_correct_count) {
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "2.5");
+    _putenv_s("LLMQUANT_VOL_SENSITIVITY",  "1.5");
+    _putenv_s("LLMQUANT_SIGNAL_DECAY",     "0.9");
+#else
+    setenv("LLMQUANT_BIAS_SENSITIVITY", "2.5", 1);
+    setenv("LLMQUANT_VOL_SENSITIVITY",  "1.5", 1);
+    setenv("LLMQUANT_SIGNAL_DECAY",     "0.9", 1);
+#endif
+    Config cfg;
+    cfg.load("../config.yaml");
+    int count = cfg.load_from_env();
+    EXPECT_GE(count, 3) << "At least 3 env vars should have been applied";
+
+    const auto& t = cfg.get().trading;
+    EXPECT_DOUBLE_EQ(t.bias_sensitivity,      2.5);
+    EXPECT_DOUBLE_EQ(t.volatility_sensitivity, 1.5);
+    EXPECT_DOUBLE_EQ(t.signal_decay_rate,      0.9);
+
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");
+    _putenv_s("LLMQUANT_VOL_SENSITIVITY",  "");
+    _putenv_s("LLMQUANT_SIGNAL_DECAY",     "");
+#else
+    unsetenv("LLMQUANT_BIAS_SENSITIVITY");
+    unsetenv("LLMQUANT_VOL_SENSITIVITY");
+    unsetenv("LLMQUANT_SIGNAL_DECAY");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_nan_value_is_ignored) {
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "nan");
+#else
+    setenv("LLMQUANT_BIAS_SENSITIVITY", "nan", 1);
+#endif
+    Config cfg;
+    cfg.load("../config.yaml");
+    double before = cfg.get().trading.bias_sensitivity;
+    int count = cfg.load_from_env();
+    // NaN is not finite — load_from_env must skip it.
+    EXPECT_DOUBLE_EQ(cfg.get().trading.bias_sensitivity, before)
+        << "NaN env var must not change the config value";
+    EXPECT_EQ(count, 0);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");
+#else
+    unsetenv("LLMQUANT_BIAS_SENSITIVITY");
+#endif
+}
+
 } // namespace
 } // namespace llmquant

@@ -44,6 +44,7 @@ public:
         std::chrono::microseconds p5_latency{0};   ///< 5th-percentile latency (fast-path lower bound).
         std::chrono::microseconds p25_latency{0};  ///< 25th-percentile latency (first quartile).
         std::chrono::microseconds p50_latency{0};
+        std::chrono::microseconds p75_latency{0};  ///< 75th-percentile latency (third quartile).
         std::chrono::microseconds p95_latency{0};
         std::chrono::microseconds p99_latency{0};
         /** @brief Standard deviation of the sample window in milliseconds. */
