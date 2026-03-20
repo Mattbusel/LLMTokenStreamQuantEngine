@@ -159,6 +159,18 @@ public:
     bool update_token_weight(const std::string& token, const SemanticWeight& weight);
 
     /**
+     * @brief Insert or overwrite multiple token mappings in one call.
+     *
+     * Equivalent to calling add_token_mapping() for each entry but avoids
+     * repeated normalisation overhead.
+     *
+     * @param mappings Map of raw token string to SemanticWeight.
+     * @return Number of new entries inserted (not counting overwrites).
+     */
+    size_t batch_add_token_mappings(
+        const std::unordered_map<std::string, SemanticWeight>& mappings);
+
+    /**
      * @brief Retrieve the SemanticWeight associated with a token.
      *
      * Applies the same normalisation as map_token_to_weight().

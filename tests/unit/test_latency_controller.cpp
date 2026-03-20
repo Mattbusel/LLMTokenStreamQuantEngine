@@ -639,5 +639,51 @@ TEST(LatencyControllerTest, test_all_percentile_ordering_p5_le_p25_le_p50_le_p75
     EXPECT_LE(s.p75_latency.count(), s.p95_latency.count())  << "p75 <= p95";
 }
 
+// ---------------------------------------------------------------------------
+// record_batch()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_record_batch_empty_does_nothing) {
+    LatencyController lc(make_config());
+    lc.record_batch({});
+    EXPECT_EQ(lc.get_stats().measurements, 0u)
+        << "record_batch with empty vector must not record any measurements";
+}
+
+TEST(LatencyControllerTest, test_record_batch_records_all_samples) {
+    LatencyController lc(make_config(true, 200));
+
+    std::vector<std::chrono::microseconds> batch;
+    for (int i = 1; i <= 10; ++i) {
+        batch.emplace_back(i);
+    }
+    lc.record_batch(batch);
+
+    auto stats = lc.get_stats();
+    EXPECT_EQ(stats.measurements, 10u) << "record_batch must record all samples";
+    EXPECT_EQ(stats.min_latency, std::chrono::microseconds{1});
+    EXPECT_EQ(stats.max_latency, std::chrono::microseconds{10});
+}
+
+TEST(LatencyControllerTest, test_record_batch_equivalent_to_sequential_record) {
+    LatencyController lc1(make_config(true, 200));
+    LatencyController lc2(make_config(true, 200));
+
+    std::vector<std::chrono::microseconds> batch;
+    for (int i = 1; i <= 50; ++i) {
+        batch.emplace_back(i);
+    }
+
+    lc1.record_batch(batch);
+    for (const auto& lat : batch) lc2.record_latency(lat);
+
+    auto s1 = lc1.get_stats();
+    auto s2 = lc2.get_stats();
+    EXPECT_EQ(s1.measurements, s2.measurements);
+    EXPECT_EQ(s1.min_latency,  s2.min_latency);
+    EXPECT_EQ(s1.max_latency,  s2.max_latency);
+    EXPECT_EQ(s1.avg_latency,  s2.avg_latency);
+}
+
 } // namespace
 } // namespace llmquant

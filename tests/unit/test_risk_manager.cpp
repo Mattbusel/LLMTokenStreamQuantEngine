@@ -1009,3 +1009,50 @@ TEST(RiskManagerTest, test_try_evaluate_agrees_with_evaluate_with_reason) {
     EXPECT_EQ(reason_wr, *result_te)
         << "try_evaluate and evaluate_with_reason must return the same reason";
 }
+
+// ============================================================
+// Test: snapshot() captures consistent state.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_snapshot_reflects_current_state) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown           = 5.0;
+    cfg.max_signals_per_second = 1000;
+    RiskManager rm(cfg);
+
+    // Process a signal to accumulate some drawdown.
+    rm.evaluate(make_signal(1.0, 0.1, 0.05, 0.8));  // cumulative_bias = 1.0
+
+    auto snap = rm.snapshot();
+
+    EXPECT_DOUBLE_EQ(snap.config.max_drawdown, 5.0);
+    EXPECT_DOUBLE_EQ(snap.cumulative_bias, 1.0);
+    EXPECT_NEAR(snap.drawdown_budget_remaining, 4.0, 1e-9)
+        << "Drawdown budget must be max_drawdown - |cumulative_bias|";
+    EXPECT_EQ(snap.signals_passed, 1u);
+    EXPECT_EQ(snap.signals_blocked_total, 0u);
+}
+
+TEST(RiskManagerTest, test_risk_manager_snapshot_blocked_total_matches_stats) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
+
+    auto snap = rm.snapshot();
+    EXPECT_EQ(snap.signals_blocked_total, rm.get_stats().blocked_total())
+        << "snapshot().signals_blocked_total must equal get_stats().blocked_total()";
+}
+
+// ============================================================
+// Test: get_total_evaluated() = passed + blocked.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_get_total_evaluated_zero_at_start) {
+    RiskManager rm(default_config());
+    EXPECT_EQ(rm.get_total_evaluated(), 0u);
+}
+
+TEST(RiskManagerTest, test_risk_manager_get_total_evaluated_counts_all_signals) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    EXPECT_EQ(rm.get_total_evaluated(), 3u);
+}

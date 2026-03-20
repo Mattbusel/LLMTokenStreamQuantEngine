@@ -859,5 +859,47 @@ TEST(TradeSignalEngineTest, test_get_signal_age_us_resets_to_zero_on_reset) {
     EXPECT_EQ(engine.get_signal_age_us(), 0.0);
 }
 
+// ---------------------------------------------------------------------------
+// drain_pending()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_drain_pending_emits_signal_when_bias_nonzero) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.95, 0);
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    // Accumulate some bias without emitting — disable backtest so cooldown blocks.
+    engine.set_realtime_mode(true);
+    // Set cooldown high so no signal emits during accumulation.
+    cfg.signal_cooldown = std::chrono::microseconds{1'000'000};  // 1 s
+    engine.update_config(cfg);
+
+    // Process weight — cooldown prevents emission.
+    SemanticWeight w{0.5, 0.5, 0.2, 0.9};
+    engine.process_semantic_weight(w);
+    uint64_t before_gen = engine.get_stats().signals_generated.load();
+
+    std::atomic<int> drain_signals{0};
+    engine.set_signal_callback([&drain_signals](const TradeSignal&) { ++drain_signals; });
+
+    engine.drain_pending();
+
+    // drain_pending must have emitted exactly one signal.
+    EXPECT_GT(drain_signals.load(), 0) << "drain_pending must emit a signal when bias is non-zero";
+    // After drain, accumulators are cleared.
+    EXPECT_DOUBLE_EQ(engine.get_accumulated_bias(), 0.0);
+    EXPECT_EQ(engine.get_stats().signals_generated.load(), 0u) << "reset() clears stats";
+}
+
+TEST(TradeSignalEngineTest, test_drain_pending_no_signal_when_bias_zero) {
+    TradeSignalEngine engine(make_config());
+    int drain_count = 0;
+    engine.set_signal_callback([&drain_count](const TradeSignal&) { ++drain_count; });
+
+    // No tokens processed — bias is 0, drain should not emit.
+    engine.drain_pending();
+    EXPECT_EQ(drain_count, 0) << "drain_pending must not emit when bias is 0";
+}
+
 } // namespace
 } // namespace llmquant
