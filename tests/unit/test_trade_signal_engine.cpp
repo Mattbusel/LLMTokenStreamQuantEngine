@@ -622,6 +622,37 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_filtered_sink_cleared_by_cl
     EXPECT_EQ(sink->size(), 0u) << "Sink removed by clear_output_sinks must not receive signals";
 }
 
+// ---------------------------------------------------------------------------
+// process_batch
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_process_batch_emits_n_signals_in_backtest) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { ++count; });
+
+    std::vector<SemanticWeight> batch = {
+        {0.5, 0.7, 0.3, 0.6},
+        {0.4, 0.8, 0.2, 0.7},
+        {0.6, 0.9, 0.1, 0.5},
+    };
+    engine.process_batch(batch);
+    EXPECT_EQ(count.load(), 3) << "process_batch must emit one signal per token in backtest mode";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_process_batch_empty_emits_nothing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { ++count; });
+
+    engine.process_batch({});
+    EXPECT_EQ(count.load(), 0) << "Empty batch must emit no signals";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_zero_disabled) {
     // With max_accumulated_bias=0.0 (disabled), the accumulator is free to grow above 1.0.
     // Use a large min_bias_threshold to suppress all signal emissions (and the post-emit

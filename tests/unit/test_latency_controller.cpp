@@ -427,6 +427,16 @@ TEST(LatencyControllerTest, test_window_fill_ratio_reset_to_zero) {
         << "Fill ratio must be 0 after reset";
 }
 
+TEST(LatencyControllerTest, test_latency_controller_get_target_latency_returns_configured_value) {
+    LatencyController::Config cfg;
+    cfg.target_latency   = std::chrono::microseconds{42};
+    cfg.sample_window    = 100;
+    cfg.enable_profiling = true;
+    LatencyController lc(cfg);
+    EXPECT_EQ(lc.get_target_latency(), std::chrono::microseconds{42})
+        << "get_target_latency must return the value set at construction";
+}
+
 TEST(LatencyControllerTest, test_histogram_buckets_empty_when_profiling_disabled) {
     LatencyController lc(make_config(false /*profiling off*/));
     lc.record_latency(std::chrono::microseconds{5});

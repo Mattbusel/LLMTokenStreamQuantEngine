@@ -582,3 +582,36 @@ TEST(RiskManagerTest, test_risk_manager_update_config_valid_succeeds) {
     EXPECT_NO_THROW(rm.update_config(good));
     EXPECT_DOUBLE_EQ(rm.get_config().max_bias_magnitude, 2.0);
 }
+
+// ============================================================
+// Test: evaluate_with_reason() — passing signal returns empty reason.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_pass_returns_empty_reason) {
+    RiskManager rm(default_config());
+    std::string reason;
+    bool result = rm.evaluate_with_reason(make_signal(0.1, 0.1, 0.05, 0.8), reason);
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(reason.empty()) << "Reason must be empty on pass";
+}
+
+// ============================================================
+// Test: evaluate_with_reason() — blocked signal returns non-empty reason.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_block_returns_reason_string) {
+    RiskManager rm(default_config());
+    std::string reason;
+    // Magnitude too large — should be blocked with reason "magnitude_exceeded".
+    bool result = rm.evaluate_with_reason(make_signal(5.0, 0.1, 0.05, 0.8), reason);
+    EXPECT_FALSE(result);
+    EXPECT_EQ(reason, "magnitude_exceeded");
+}
+
+// ============================================================
+// Test: evaluate_with_reason() — each rejection reason maps correctly.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_confidence_reason) {
+    RiskManager rm(default_config());
+    std::string reason;
+    rm.evaluate_with_reason(make_signal(0.1, 0.1, 0.05, 0.01 /*below 0.1 min*/), reason);
+    EXPECT_EQ(reason, "confidence_below_minimum");
+}
