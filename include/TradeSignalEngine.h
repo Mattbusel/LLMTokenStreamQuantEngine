@@ -326,6 +326,39 @@ public:
     }
 
     /**
+     * @brief Return the total number of signals emitted since construction or last reset().
+     *
+     * Thread-safe (atomic read with relaxed ordering).
+     *
+     * @return Total emitted signal count.
+     */
+    uint64_t get_signals_generated() const noexcept {
+        return stats_.signals_generated.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the total number of signals suppressed since construction or last reset().
+     *
+     * Thread-safe (atomic read with relaxed ordering).
+     *
+     * @return Total suppressed signal count.
+     */
+    uint64_t get_signals_suppressed() const noexcept {
+        return stats_.signals_suppressed.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the total number of process_semantic_weight() calls since construction or last reset().
+     *
+     * Thread-safe (atomic read with relaxed ordering).
+     *
+     * @return Total tokens processed count.
+     */
+    uint64_t get_tokens_processed() const noexcept {
+        return stats_.tokens_processed.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Return the running average signal_quality across all emitted signals.
      *
      * Computed as a Welford running mean updated in emit_signal().

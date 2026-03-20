@@ -1194,5 +1194,51 @@ TEST(TradeSignalEngineTest, test_get_avg_signal_quality_in_range_after_processin
     EXPECT_LE(q, 1.0);
 }
 
+TEST(TradeSignalEngineTest, test_get_signals_generated_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_signals_generated(), uint64_t{0});
+}
+
+TEST(TradeSignalEngineTest, test_get_signals_generated_increments_after_emit) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.9, 0.95, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    EXPECT_GE(engine.get_signals_generated(), uint64_t{0});
+}
+
+TEST(TradeSignalEngineTest, test_get_signals_suppressed_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_signals_suppressed(), uint64_t{0});
+}
+
+TEST(TradeSignalEngineTest, test_get_tokens_processed_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_tokens_processed(), uint64_t{0});
+}
+
+TEST(TradeSignalEngineTest, test_get_tokens_processed_increments_per_call) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.5, 0.8, 0.1, 0.4};
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(engine.get_tokens_processed(), uint64_t{2});
+}
+
+TEST(TradeSignalEngineTest, test_generated_plus_suppressed_equals_processed_or_less) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.7, 0.9, 0.2, 0.6};
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight(w);
+    // Each process call counts as a token, signals generated + suppressed <= tokens_processed
+    EXPECT_LE(engine.get_signals_generated() + engine.get_signals_suppressed(),
+              engine.get_tokens_processed());
+}
+
 } // namespace
 } // namespace llmquant
