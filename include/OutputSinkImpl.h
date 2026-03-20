@@ -164,6 +164,13 @@ public:
      */
     const std::vector<TradeSignal>& get_signals() const { return signals_; }
 
+    /**
+     * @brief Return the number of signals currently stored in the buffer.
+     *
+     * @return Signal count.
+     */
+    size_t size() const noexcept { return signals_.size(); }
+
     /// @brief Clear the internal signal buffer.
     void clear() { signals_.clear(); }
 

@@ -225,6 +225,55 @@ TEST(ConfigTest, test_config_hot_reload_detects_file_change) {
 }
 
 // ---------------------------------------------------------------------------
+// risk_thresholds YAML section
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_risk_thresholds_parsed_from_yaml) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n"
+        "  max_bias_magnitude: 3.0\n"
+        "  min_confidence: 0.2\n"
+        "  max_signals_per_second: 200\n"
+        "  max_drawdown: 8.0\n"
+        "  drawdown_window_s: 120\n"
+        "  position_warn_fraction: 0.75\n");
+    ASSERT_TRUE(ok);
+    const auto& rt = cfg.get_config().risk_thresholds;
+    EXPECT_DOUBLE_EQ(rt.max_bias_magnitude,  3.0);
+    EXPECT_DOUBLE_EQ(rt.min_confidence,      0.2);
+    EXPECT_EQ(rt.max_signals_per_second,     200u);
+    EXPECT_DOUBLE_EQ(rt.max_drawdown,        8.0);
+    EXPECT_EQ(rt.drawdown_window_s,          120);
+    EXPECT_DOUBLE_EQ(rt.position_warn_fraction, 0.75);
+}
+
+TEST(ConfigTest, test_config_risk_thresholds_invalid_min_confidence_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n  min_confidence: 1.5\n");  // > 1.0
+    EXPECT_FALSE(ok);
+    // Defaults restored
+    EXPECT_DOUBLE_EQ(cfg.get_config().risk_thresholds.min_confidence, 0.1);
+}
+
+TEST(ConfigTest, test_config_risk_thresholds_zero_max_signals_per_second_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "risk_thresholds:\n  max_signals_per_second: 0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_GT(cfg.get_config().risk_thresholds.max_signals_per_second, 0u);
+}
+
+TEST(ConfigTest, test_config_pressure_zero_max_ingestion_rate_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "pressure:\n  max_ingestion_rate_tps: 0.0\n");
+    EXPECT_FALSE(ok);
+    EXPECT_GT(cfg.get_config().pressure.max_ingestion_rate_tps, 0.0);
+}
+
+// ---------------------------------------------------------------------------
 // Range validation tests (improvement 3)
 // ---------------------------------------------------------------------------
 

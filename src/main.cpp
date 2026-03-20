@@ -593,7 +593,10 @@ int main(int argc, char* argv[]) {
                  << "llmquant_latency_max_us " << stats.max_latency.count() << "\n"
                  << "# HELP llmquant_latency_jitter_ms Latency standard deviation in milliseconds\n"
                  << "# TYPE llmquant_latency_jitter_ms gauge\n"
-                 << "llmquant_latency_jitter_ms " << std::setprecision(4) << stats.jitter_ms << "\n";
+                 << "llmquant_latency_jitter_ms " << std::setprecision(4) << stats.jitter_ms << "\n"
+                 << "# HELP llmquant_ring_buffer_drops_total Tokens dropped due to full simulator ring buffer\n"
+                 << "# TYPE llmquant_ring_buffer_drops_total counter\n"
+                 << "llmquant_ring_buffer_drops_total " << (!stream_mode ? token_sim.get_stats().ring_buffer_drops.load() : 0) << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -618,6 +621,7 @@ int main(int argc, char* argv[]) {
                   << "  DEDUP:" << dedup_backend->total_duplicates()
                   << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
                   << "  BLOCK:"   << blocked
+                  << (!stream_mode ? (std::string("  DROPS:") + std::to_string(token_sim.get_stats().ring_buffer_drops.load())) : "")
                   << std::flush;
 
         // Alert if P99 exceeds budget.
