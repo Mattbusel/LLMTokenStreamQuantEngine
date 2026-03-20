@@ -607,5 +607,37 @@ TEST(LatencyControllerTest, test_is_warmed_up_fraction_clamped) {
         << "is_warmed_up(-1.0) must clamp to 0.0 and return true";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 27: is_warmed_up exactly-at-threshold and p-quartile ordering
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_is_warmed_up_exactly_at_threshold_is_warmed) {
+    // Fill exactly 5 of a 10-sample window. With fraction=0.5 it must be warm.
+    LatencyController lc(make_config(true, 10));
+    for (int i = 0; i < 5; ++i) lc.record_latency(std::chrono::microseconds{i + 1});
+    EXPECT_TRUE(lc.is_warmed_up(0.5))
+        << "At exactly the threshold fraction the window is considered warmed up";
+}
+
+TEST(LatencyControllerTest, test_is_warmed_up_one_below_threshold_is_cold) {
+    // Fill 4 of 10 samples. With fraction=0.5 (5/10 needed) it must not be warm.
+    LatencyController lc(make_config(true, 10));
+    for (int i = 0; i < 4; ++i) lc.record_latency(std::chrono::microseconds{i + 1});
+    EXPECT_FALSE(lc.is_warmed_up(0.5))
+        << "One sample below the threshold fraction must not be warm";
+}
+
+TEST(LatencyControllerTest, test_all_percentile_ordering_p5_le_p25_le_p50_le_p75_le_p95) {
+    LatencyController lc(make_config(true, 64));
+    for (int i = 1; i <= 64; ++i)
+        lc.record_latency(std::chrono::microseconds{i});
+
+    const auto s = lc.get_stats();
+    EXPECT_LE(s.p5_latency.count(),  s.p25_latency.count())  << "p5  <= p25";
+    EXPECT_LE(s.p25_latency.count(), s.p50_latency.count())  << "p25 <= p50";
+    EXPECT_LE(s.p50_latency.count(), s.p75_latency.count())  << "p50 <= p75";
+    EXPECT_LE(s.p75_latency.count(), s.p95_latency.count())  << "p75 <= p95";
+}
+
 } // namespace
 } // namespace llmquant

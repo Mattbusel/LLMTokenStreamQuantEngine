@@ -556,5 +556,36 @@ TEST(LLMAdapterTest, test_llm_adapter_update_token_weight_case_insensitive) {
     EXPECT_DOUBLE_EQ(retrieved.sentiment_score, 0.3);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 27: update_token_weight and remove_token_mapping integration
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_update_weight_changes_map_output) {
+    LLMAdapter adapter;
+    // Verify initial "bullish" is positive.
+    SemanticWeight before = adapter.map_token_to_weight("bullish");
+    EXPECT_GT(before.directional_bias, 0.0);
+
+    // Recalibrate to be strongly negative.
+    // SemanticWeight field order: {sentiment_score, confidence_score, volatility_score, directional_bias}
+    SemanticWeight new_w{-0.9, 0.9, 0.9, -0.9};  // directional_bias = -0.9
+    ASSERT_TRUE(adapter.update_token_weight("bullish", new_w));
+
+    SemanticWeight after = adapter.map_token_to_weight("bullish");
+    EXPECT_LT(after.directional_bias, 0.0)
+        << "After update, bullish must return negative directional_bias";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_remove_makes_token_return_neutral) {
+    LLMAdapter adapter;
+    // "crash" is in the default dict — remove it.
+    ASSERT_TRUE(adapter.remove_token_mapping("crash"));
+
+    // map_token_to_weight for an unknown token returns neutral {0, 0.5, 0.1, 0}.
+    SemanticWeight after = adapter.map_token_to_weight("crash");
+    EXPECT_DOUBLE_EQ(after.directional_bias, 0.0)
+        << "After removal, crash must return neutral (zero) directional_bias";
+}
+
 } // namespace
 } // namespace llmquant

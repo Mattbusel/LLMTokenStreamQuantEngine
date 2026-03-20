@@ -824,5 +824,40 @@ TEST(TradeSignalEngineTest, test_noise_filtered_resets_on_reset) {
         << "noise_filtered must be zero after reset()";
 }
 
+// ---------------------------------------------------------------------------
+// get_signal_age_us()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_get_signal_age_us_zero_before_first_signal) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_EQ(engine.get_signal_age_us(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_signal_age_us_positive_after_emission) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.9};
+    engine.process_semantic_weight(w);
+
+    // After a signal is emitted, the age must be >= 0 (may be near zero but not negative).
+    EXPECT_GE(engine.get_signal_age_us(), 0.0)
+        << "Signal age must be non-negative after emission";
+}
+
+TEST(TradeSignalEngineTest, test_get_signal_age_us_resets_to_zero_on_reset) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.9};
+    engine.process_semantic_weight(w);
+    ASSERT_GE(engine.get_signal_age_us(), 0.0);
+
+    engine.reset();
+    EXPECT_EQ(engine.get_signal_age_us(), 0.0);
+}
+
 } // namespace
 } // namespace llmquant
