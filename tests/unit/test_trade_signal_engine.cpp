@@ -901,5 +901,52 @@ TEST(TradeSignalEngineTest, test_drain_pending_no_signal_when_bias_zero) {
     EXPECT_EQ(drain_count, 0) << "drain_pending must not emit when bias is 0";
 }
 
+// ---------------------------------------------------------------------------
+// set_signal_cooldown
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_set_signal_cooldown_reflects_in_get_config) {
+    TradeSignalEngine engine(make_config());
+    engine.set_signal_cooldown(std::chrono::microseconds{5000});
+    EXPECT_EQ(engine.get_config().signal_cooldown.count(), 5000)
+        << "set_signal_cooldown must be visible via get_config()";
+}
+
+TEST(TradeSignalEngineTest, test_set_signal_cooldown_zero_allows_every_signal_in_realtime) {
+    auto cfg = make_config();
+    cfg.signal_cooldown = std::chrono::microseconds{0};
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(true);
+    engine.set_signal_cooldown(std::chrono::microseconds{0});
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { ++count; });
+
+    SemanticWeight w{0.5, 0.9, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    // With zero cooldown every token that passes the noise gate should emit.
+    EXPECT_GE(count.load(), 1)
+        << "zero cooldown should not suppress consecutive signals";
+}
+
+TEST(TradeSignalEngineTest, test_set_signal_cooldown_large_suppresses_rapid_signals) {
+    auto cfg = make_config();
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(true);
+    engine.set_signal_cooldown(std::chrono::microseconds{1000000}); // 1 second
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { ++count; });
+
+    SemanticWeight w{0.5, 0.9, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    // Only the first token can emit within a 1-second cooldown window.
+    EXPECT_LE(count.load(), 1)
+        << "large cooldown should suppress all but the first signal";
+}
+
 } // namespace
 } // namespace llmquant

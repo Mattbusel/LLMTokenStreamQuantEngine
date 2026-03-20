@@ -764,7 +764,7 @@ TEST(LatencyControllerTest, test_get_percentile_ordering_p25_le_p50_le_p75) {
 // ---------------------------------------------------------------------------
 
 TEST(LatencyControllerTest, test_update_config_changes_target_latency) {
-    LatencyController lc(make_config(true, 100, 5));
+    LatencyController lc(make_config(true, 100));
     LatencyController::Config cfg;
     cfg.target_latency   = std::chrono::microseconds{50};
     cfg.sample_window    = 100;
