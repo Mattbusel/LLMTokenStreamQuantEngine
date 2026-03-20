@@ -189,6 +189,12 @@ void LatencyController::reset_stats() {
     sample_count_ = 0;
 }
 
+void LatencyController::record_batch(const std::vector<std::chrono::microseconds>& latencies) {
+    for (const auto& lat : latencies) {
+        record_latency(lat);
+    }
+}
+
 void LatencyController::profile_token_processing() {
     // Hook for detailed token processing profiling
     start_measurement();

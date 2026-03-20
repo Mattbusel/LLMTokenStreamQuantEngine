@@ -347,6 +347,32 @@ public:
      */
     const Stats& get_stats() const noexcept { return stats_; }
 
+    /**
+     * @brief Immutable state snapshot for dashboards and health checks.
+     */
+    struct Snapshot {
+        Config        config;
+        PositionState position;
+        double        cumulative_bias{0.0};
+        double        drawdown_budget_remaining{0.0};
+        double        rate_limit_utilization{0.0};
+        uint64_t      signals_passed{0};
+        uint64_t      signals_blocked_total{0};
+    };
+
+    /**
+     * @brief Capture all current state atomically in a single mutex-held call.
+     *
+     * Returns a value-copy of config, position, and drawdown state alongside
+     * the current stat counters.  Useful for structured health-check endpoints
+     * and Prometheus gauge export where you need a consistent cross-field view.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Snapshot of all current RiskManager state.
+     */
+    Snapshot snapshot() const;
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);

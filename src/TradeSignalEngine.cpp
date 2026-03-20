@@ -245,6 +245,29 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     last_signal_time_ = now;
 }
 
+void TradeSignalEngine::drain_pending() {
+    double bias = accumulated_bias_.load(std::memory_order_relaxed);
+    double vol  = accumulated_volatility_.load(std::memory_order_relaxed);
+
+    bool above_threshold = (config_.min_bias_threshold > 0.0)
+        ? (std::fabs(bias) >= config_.min_bias_threshold)
+        : (bias != 0.0);
+
+    if (above_threshold) {
+        processing_start_ = std::chrono::high_resolution_clock::now();
+        TradeSignal signal;
+        signal.delta_bias_shift      = bias;
+        signal.volatility_adjustment = vol;
+        signal.confidence            = last_confidence_.load(std::memory_order_relaxed);
+        if (std::fabs(bias) > 0.5) {
+            signal.strategy_toggle = (bias > 0) ? 1 : -1;
+        }
+        signal.strategy_weight = std::min(1.0, signal.confidence * 2.0);
+        emit_signal(signal);
+    }
+    reset();
+}
+
 void TradeSignalEngine::reset() noexcept {
     accumulated_bias_.store(0.0, std::memory_order_relaxed);
     accumulated_volatility_.store(0.0, std::memory_order_relaxed);

@@ -283,6 +283,25 @@ double RiskManager::get_drawdown_budget_remaining() const {
     return remaining < 0.0 ? 0.0 : remaining;
 }
 
+RiskManager::Snapshot RiskManager::snapshot() const {
+    Snapshot snap;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        snap.config   = config_;
+        snap.position = position_;
+        snap.cumulative_bias = cumulative_bias_;
+        double remaining = config_.max_drawdown - std::fabs(cumulative_bias_);
+        snap.drawdown_budget_remaining = remaining < 0.0 ? 0.0 : remaining;
+        double util = (config_.max_signals_per_second > 0)
+            ? static_cast<double>(signals_in_window_) / static_cast<double>(config_.max_signals_per_second)
+            : 1.0;
+        snap.rate_limit_utilization = util > 1.0 ? 1.0 : util;
+    }
+    snap.signals_passed         = stats_.signals_passed.load(std::memory_order_relaxed);
+    snap.signals_blocked_total  = stats_.blocked_total();
+    return snap;
+}
+
 double RiskManager::get_blocked_rate() const noexcept {
     uint64_t blocked = stats_.blocked_total();
     uint64_t passed  = stats_.signals_passed.load(std::memory_order_relaxed);

@@ -84,6 +84,17 @@ public:
     void record_latency(std::chrono::microseconds latency);
 
     /**
+     * @brief Record a batch of pre-computed latency values.
+     *
+     * Equivalent to calling record_latency() for each element in order.
+     * The sample ring buffer lock is acquired once per call (not once per
+     * value), reducing mutex contention in backtest / replay scenarios.
+     *
+     * @param latencies Ordered sequence of durations to record.
+     */
+    void record_batch(const std::vector<std::chrono::microseconds>& latencies);
+
+    /**
      * @brief Return a consistent snapshot of all aggregated statistics.
      *
      * If no measurements have been recorded, all fields in the returned struct

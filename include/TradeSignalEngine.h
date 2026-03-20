@@ -327,6 +327,20 @@ public:
     void clear_output_sinks();
 
     /**
+     * @brief Emit a final signal from the current accumulators then reset.
+     *
+     * Useful at graceful shutdown or session boundary: if the absolute
+     * accumulated bias exceeds min_bias_threshold (or is non-zero when the
+     * threshold is disabled), emits one last signal before clearing state.
+     * If the engine is in realtime mode, the cooldown is bypassed so the
+     * drain signal is always emitted regardless of the last emission time.
+     *
+     * Not thread-safe — must be called from the same thread as
+     * process_semantic_weight().
+     */
+    void drain_pending();
+
+    /**
      * @brief Reset accumulated bias and volatility to zero and clear statistics.
      *
      * Intended for use between trading sessions. Not thread-safe — must be
