@@ -73,7 +73,11 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
                 if (position_.pnl < position_.pnl_limit) {
                     pnl_breach = true;
                     if (!hard_breach) {
+                        // Increment both the specific PnL counter and the aggregate
+                        // position counter; tests and Prometheus consumers rely on
+                        // signals_blocked_position for all OMS-gate rejections.
                         sat_increment(stats_.signals_blocked_pnl);
+                        sat_increment(stats_.signals_blocked_position);
                         reject_reason = "pnl_limit";
                     }
                 }
@@ -171,17 +175,6 @@ void RiskManager::update_drawdown(const TradeSignal& signal) {
 void RiskManager::set_metrics_logger(MetricsLogger* logger) {
     std::lock_guard<std::mutex> lock(mutex_);
     logger_ = logger;
-}
-
-void RiskManager::fire_alert(const std::string& reason, const TradeSignal& signal) {
-    if (alert_cb_) {
-        try { alert_cb_(reason, signal); }
-        catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
-        catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
-    }
-    if (logger_) {
-        logger_->log_risk_rejection(reason, signal.delta_bias_shift, signal.confidence);
-    }
 }
 
 void RiskManager::update_position(const PositionState& state) {

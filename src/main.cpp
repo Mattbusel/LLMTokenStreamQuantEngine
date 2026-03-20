@@ -9,6 +9,7 @@
 #include "LLMStreamClient.h"
 #include "OmsAdapter.h"
 #include "RestOmsAdapter.h"
+#include "FixOmsAdapter.h"
 #include "MockOmsAdapter.h"
 #include "PrometheusExporter.h"
 #include <iostream>
@@ -27,7 +28,8 @@ using namespace llmquant;
 std::atomic<bool> g_running{true};
 
 void signal_handler(int /*signal*/) {
-    std::cout << "\nShutting down gracefully..." << std::endl;
+    // std::cout is not async-signal-safe; only set the atomic flag here.
+    // The main loop detects g_running==false and prints the shutdown summary.
     g_running = false;
 }
 
@@ -41,9 +43,33 @@ int main(int argc, char* argv[]) {
     bool        no_color       = false;
     bool        debug_raw      = false;
     std::string oms_address;
+    std::string fix_address;
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
-        if (arg == "--stream") {
+        if (arg == "--help" || arg == "-h") {
+            std::cout <<
+                "Usage: LLMTokenStreamQuantEngine [config.yaml] [options]\n"
+                "\n"
+                "Options:\n"
+                "  --stream [key]    Enable live LLM stream mode (optional API key)\n"
+                "  --oms host:port   Connect to REST OMS adapter\n"
+                "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
+                "  --no-color        Disable ANSI colour output\n"
+                "  --debug-raw       Print raw LLM stream bytes\n"
+                "  --version         Print version and exit\n"
+                "  --help            Print this help and exit\n"
+                "\n"
+                "Environment:\n"
+                "  LLMQUANT_API_KEY  LLM API key (fallback when --stream has no key)\n"
+                "\n"
+                "Config file (YAML) keys: token_stream, trading, latency, logging,\n"
+                "  pressure, risk_thresholds, risk (override flags).\n";
+            return 0;
+        } else if (arg == "--version" || arg == "-v") {
+            // Version string injected by CMake via llmquant_version.h.in
+            std::cout << "LLMTokenStreamQuantEngine 1.1.0\n";
+            return 0;
+        } else if (arg == "--stream") {
             stream_mode = true;
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 stream_api_key = argv[++i];  // explicit key provided on CLI
@@ -53,6 +79,8 @@ int main(int argc, char* argv[]) {
             debug_raw = true;
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
+        } else if (arg == "--fix" && i + 1 < argc) {
+            fix_address = argv[++i];
         }
     }
 
@@ -162,18 +190,38 @@ int main(int argc, char* argv[]) {
     auto memory_sink = std::make_shared<llmquant::MemoryOutputSink>();
     trade_engine.add_output_sink(memory_sink);
 
-    // Risk manager.
+    // Risk manager — thresholds driven from config (hot-reloadable via YAML).
+    const auto& rt = sys_config.risk_thresholds;
     llmquant::RiskManager::Config risk_cfg;
-    risk_cfg.max_bias_magnitude      = 2.0;
-    risk_cfg.max_volatility_magnitude = 2.0;
-    risk_cfg.max_signals_per_second  = 500;
-    risk_cfg.max_drawdown            = 10.0;
+    risk_cfg.max_bias_magnitude       = rt.max_bias_magnitude;
+    risk_cfg.max_volatility_magnitude = rt.max_volatility_magnitude;
+    risk_cfg.max_spread_magnitude     = rt.max_spread_magnitude;
+    risk_cfg.min_confidence           = rt.min_confidence;
+    risk_cfg.max_signals_per_second   = rt.max_signals_per_second;
+    risk_cfg.max_drawdown             = rt.max_drawdown;
+    risk_cfg.drawdown_window          = std::chrono::seconds(rt.drawdown_window_s);
+    risk_cfg.position_warn_fraction   = rt.position_warn_fraction;
+    risk_cfg.disable_magnitude_gate   = sys_config.risk_overrides.disable_magnitude_gate;
+    risk_cfg.disable_confidence_gate  = sys_config.risk_overrides.disable_confidence_gate;
+    risk_cfg.disable_rate_gate        = sys_config.risk_overrides.disable_rate_gate;
+    risk_cfg.disable_drawdown_gate    = sys_config.risk_overrides.disable_drawdown_gate;
+    risk_cfg.disable_position_gate    = sys_config.risk_overrides.disable_position_gate;
     llmquant::RiskManager risk_mgr(risk_cfg);
     risk_mgr.set_metrics_logger(&logger);
 
-    // OMS adapter: use MockOmsAdapter by default; REST if --oms <host:port> is passed.
+    // OMS adapter: MockOmsAdapter by default; REST via --oms, FIX 4.2 via --fix.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
-    if (!oms_address.empty()) {
+    if (!fix_address.empty()) {
+        llmquant::FixOmsAdapter::Config fix_cfg;
+        size_t colon = fix_address.find(':');
+        if (colon != std::string::npos) {
+            fix_cfg.host = fix_address.substr(0, colon);
+            fix_cfg.port = static_cast<uint16_t>(std::stoi(fix_address.substr(colon + 1)));
+        } else {
+            fix_cfg.host = fix_address;
+        }
+        oms_adapter = std::make_unique<llmquant::FixOmsAdapter>(fix_cfg);
+    } else if (!oms_address.empty()) {
         std::string endpoint = oms_address;
         llmquant::RestOmsAdapter::Config oms_cfg;
         size_t colon = endpoint.find(':');
@@ -487,6 +535,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_latency_avg_us Average token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_avg_us gauge\n"
                  << "llmquant_latency_avg_us " << stats.avg_latency.count() << "\n"
+                 << "# HELP llmquant_latency_p50_us p50 (median) token-to-signal latency in microseconds\n"
+                 << "# TYPE llmquant_latency_p50_us gauge\n"
+                 << "llmquant_latency_p50_us " << stats.p50_latency.count() << "\n"
                  << "# HELP llmquant_oms_update_count_total Total successful OMS position updates\n"
                  << "# TYPE llmquant_oms_update_count_total counter\n"
                  << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
@@ -506,10 +557,51 @@ int main(int argc, char* argv[]) {
                  << "llmquant_dedup_redis_connected 0\n"
                  << "# HELP llmquant_dedup_redis_reconnect_attempts_total Total Redis reconnect attempts\n"
                  << "# TYPE llmquant_dedup_redis_reconnect_attempts_total counter\n"
-                 << "llmquant_dedup_redis_reconnect_attempts_total 0\n";
+                 << "llmquant_dedup_redis_reconnect_attempts_total 0\n"
+                 << "# HELP llmquant_signals_passed_total Total trade signals that passed all risk gates\n"
+                 << "# TYPE llmquant_signals_passed_total counter\n"
+                 << "llmquant_signals_passed_total " << rs.signals_passed.load() << "\n"
+                 << "# HELP llmquant_tokens_processed_total Total tokens processed since startup\n"
+                 << "# TYPE llmquant_tokens_processed_total counter\n"
+                 << "llmquant_tokens_processed_total " << llm_adapter.get_stats().tokens_processed << "\n"
+                 << "# HELP llmquant_cache_hits_total Tokens resolved from the in-memory dictionary cache\n"
+                 << "# TYPE llmquant_cache_hits_total counter\n"
+                 << "llmquant_cache_hits_total " << llm_adapter.get_stats().cache_hits << "\n"
+                 << "# HELP llmquant_cache_misses_total Tokens not found in the dictionary (neutral fallback)\n"
+                 << "# TYPE llmquant_cache_misses_total counter\n"
+                 << "llmquant_cache_misses_total " << llm_adapter.get_stats().cache_misses << "\n"
+                 << "# HELP llmquant_pressure_composite Current composite back-pressure [0,1]\n"
+                 << "# TYPE llmquant_pressure_composite gauge\n"
+                 << "llmquant_pressure_composite " << std::fixed << std::setprecision(4) << pressure.composite << "\n"
+                 << "# HELP llmquant_pressure_ingestion Current ingestion pressure [0,1]\n"
+                 << "# TYPE llmquant_pressure_ingestion gauge\n"
+                 << "llmquant_pressure_ingestion " << pressure.ingestion_pressure << "\n"
+                 << "# HELP llmquant_pressure_semantic Current semantic variance pressure [0,1]\n"
+                 << "# TYPE llmquant_pressure_semantic gauge\n"
+                 << "llmquant_pressure_semantic " << pressure.semantic_pressure << "\n"
+                 << "# HELP llmquant_pressure_queue Current signal queue pressure [0,1]\n"
+                 << "# TYPE llmquant_pressure_queue gauge\n"
+                 << "llmquant_pressure_queue " << pressure.queue_pressure << "\n"
+                 << "# HELP llmquant_backoff_multiplier Current exponential backoff multiplier [1,5]\n"
+                 << "# TYPE llmquant_backoff_multiplier gauge\n"
+                 << "llmquant_backoff_multiplier " << std::setprecision(2) << backoff << "\n"
+                 << "# HELP llmquant_latency_min_us Minimum observed token-to-signal latency\n"
+                 << "# TYPE llmquant_latency_min_us gauge\n"
+                 << "llmquant_latency_min_us " << stats.min_latency.count() << "\n"
+                 << "# HELP llmquant_latency_max_us Maximum observed token-to-signal latency\n"
+                 << "# TYPE llmquant_latency_max_us gauge\n"
+                 << "llmquant_latency_max_us " << stats.max_latency.count() << "\n"
+                 << "# HELP llmquant_latency_jitter_ms Latency standard deviation in milliseconds\n"
+                 << "# TYPE llmquant_latency_jitter_ms gauge\n"
+                 << "llmquant_latency_jitter_ms " << std::setprecision(4) << stats.jitter_ms << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
+
+        // Cache hit rate for LLMAdapter dictionary efficiency.
+        auto adapter_stats = llm_adapter.get_stats();
+        uint64_t hit_pct = (adapter_stats.tokens_processed > 0)
+            ? (adapter_stats.cache_hits * 100 / adapter_stats.tokens_processed) : 0;
 
         // Overwrite the stats line in-place.
         std::cout << "\n  -- STATS "
@@ -522,8 +614,9 @@ int main(int argc, char* argv[]) {
                                << std::fixed << std::setprecision(2)
                                << pressure.composite << C("\033[0m")
                   << "  BKOF:" << std::setprecision(1) << backoff << "x"
+                  << "  HIT%:" << hit_pct
                   << "  DEDUP:" << dedup_backend->total_duplicates()
-                  << "  SIG-PASS:" << eng_stats.signals_generated.load()
+                  << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
                   << "  BLOCK:"   << blocked
                   << std::flush;
 
@@ -566,8 +659,19 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
     std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
+    std::cout << "  Min latency      : " << final_stats.min_latency.count() << "us\n";
     std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";
     std::cout << "  Max latency      : " << final_stats.max_latency.count() << "us\n";
+    std::cout << "  Jitter           : " << std::fixed << std::setprecision(3)
+              << final_stats.jitter_ms << "ms\n";
+    {
+        auto ads = llm_adapter.get_stats();
+        uint64_t hit_pct2 = (ads.tokens_processed > 0)
+            ? (ads.cache_hits * 100 / ads.tokens_processed) : 0;
+        std::cout << "  Cache hit rate   : " << hit_pct2 << "% ("
+                  << ads.cache_hits << "/" << ads.tokens_processed << ")\n";
+    }
+    std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
     std::cout << "  ---------------------------------------------------------\n\n";
 
     logger.log_performance_summary();

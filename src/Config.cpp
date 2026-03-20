@@ -53,6 +53,19 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (l["enable_profiling"]) tmp.latency.enable_profiling = l["enable_profiling"].as<bool>();
         }
 
+        // Risk threshold parameters
+        if (yaml["risk_thresholds"]) {
+            auto rt = yaml["risk_thresholds"];
+            if (rt["max_bias_magnitude"])       tmp.risk_thresholds.max_bias_magnitude       = rt["max_bias_magnitude"].as<double>();
+            if (rt["max_volatility_magnitude"]) tmp.risk_thresholds.max_volatility_magnitude = rt["max_volatility_magnitude"].as<double>();
+            if (rt["max_spread_magnitude"])     tmp.risk_thresholds.max_spread_magnitude     = rt["max_spread_magnitude"].as<double>();
+            if (rt["min_confidence"])           tmp.risk_thresholds.min_confidence           = rt["min_confidence"].as<double>();
+            if (rt["max_signals_per_second"])   tmp.risk_thresholds.max_signals_per_second   = rt["max_signals_per_second"].as<size_t>();
+            if (rt["max_drawdown"])             tmp.risk_thresholds.max_drawdown             = rt["max_drawdown"].as<double>();
+            if (rt["drawdown_window_s"])        tmp.risk_thresholds.drawdown_window_s        = rt["drawdown_window_s"].as<int>();
+            if (rt["position_warn_fraction"])   tmp.risk_thresholds.position_warn_fraction   = rt["position_warn_fraction"].as<double>();
+        }
+
         // Risk gate override settings
         if (yaml["risk"]) {
             auto r = yaml["risk"];
@@ -133,6 +146,16 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
+        if (!std::isfinite(tmp.pressure.max_ingestion_rate_tps) || tmp.pressure.max_ingestion_rate_tps <= 0.0) {
+            spdlog::error("Config validation failed: pressure.max_ingestion_rate_tps must be > 0");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(tmp.pressure.backoff_scale_factor) || tmp.pressure.backoff_scale_factor <= 0.0) {
+            spdlog::error("Config validation failed: pressure.backoff_scale_factor must be > 0");
+            set_defaults();
+            return false;
+        }
 
         {
             std::lock_guard<std::mutex> lk(config_mutex_);
@@ -177,6 +200,20 @@ bool Config::save_to_file(const std::string& filepath) const {
     yaml["logging"]["format"] = snap_cfg.logging.format;
     yaml["logging"]["enable_console"] = snap_cfg.logging.enable_console;
     yaml["logging"]["flush_interval_ms"] = snap_cfg.logging.flush_interval_ms;
+
+    // Pressure
+    yaml["pressure"]["max_ingestion_rate_tps"] = snap_cfg.pressure.max_ingestion_rate_tps;
+    yaml["pressure"]["backoff_scale_factor"]   = snap_cfg.pressure.backoff_scale_factor;
+
+    // Risk thresholds
+    yaml["risk_thresholds"]["max_bias_magnitude"]       = snap_cfg.risk_thresholds.max_bias_magnitude;
+    yaml["risk_thresholds"]["max_volatility_magnitude"] = snap_cfg.risk_thresholds.max_volatility_magnitude;
+    yaml["risk_thresholds"]["max_spread_magnitude"]     = snap_cfg.risk_thresholds.max_spread_magnitude;
+    yaml["risk_thresholds"]["min_confidence"]           = snap_cfg.risk_thresholds.min_confidence;
+    yaml["risk_thresholds"]["max_signals_per_second"]   = snap_cfg.risk_thresholds.max_signals_per_second;
+    yaml["risk_thresholds"]["max_drawdown"]             = snap_cfg.risk_thresholds.max_drawdown;
+    yaml["risk_thresholds"]["drawdown_window_s"]        = snap_cfg.risk_thresholds.drawdown_window_s;
+    yaml["risk_thresholds"]["position_warn_fraction"]   = snap_cfg.risk_thresholds.position_warn_fraction;
 
     std::ofstream f(filepath);
     if (!f.is_open()) {

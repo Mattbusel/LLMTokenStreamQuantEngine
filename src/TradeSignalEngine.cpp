@@ -170,6 +170,16 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     last_signal_time_ = now;
 }
 
+void TradeSignalEngine::reset() noexcept {
+    accumulated_bias_.store(0.0, std::memory_order_relaxed);
+    accumulated_volatility_.store(0.0, std::memory_order_relaxed);
+    last_confidence_.store(0.5, std::memory_order_relaxed);
+    last_signal_time_ = std::chrono::high_resolution_clock::time_point{};
+    stats_.signals_generated.store(0, std::memory_order_relaxed);
+    stats_.signals_suppressed.store(0, std::memory_order_relaxed);
+    stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
+}
+
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
     output_sinks_.push_back(std::move(sink));
 }

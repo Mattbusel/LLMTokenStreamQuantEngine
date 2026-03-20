@@ -204,5 +204,35 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_confidence_reflects_input_w
         << "signal.confidence must reflect the confidence_score of the processed weight";
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_reset_clears_accumulators_and_stats) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { count++; });
+
+    // Accumulate some state.
+    SemanticWeight bullish{0.8, 0.9, 0.3, 0.9};
+    for (int i = 0; i < 5; ++i) {
+        engine.process_semantic_weight(bullish);
+    }
+    EXPECT_GT(engine.get_stats().signals_generated.load(), 0u);
+    EXPECT_NE(engine.get_accumulated_bias(), 0.0);
+
+    engine.reset();
+
+    // After reset, accumulators and stats must be zero.
+    EXPECT_EQ(engine.get_stats().signals_generated.load(), 0u);
+    EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 0u);
+    EXPECT_DOUBLE_EQ(engine.get_accumulated_bias(),      0.0);
+    EXPECT_DOUBLE_EQ(engine.get_accumulated_volatility(), 0.0);
+
+    // Engine must still be operational after reset: a new weight must produce a signal.
+    count = 0;
+    engine.process_semantic_weight(bullish);
+    EXPECT_EQ(count.load(), 1) << "Engine must emit signals normally after reset()";
+    EXPECT_EQ(engine.get_stats().signals_generated.load(), 1u);
+}
+
 } // namespace
 } // namespace llmquant

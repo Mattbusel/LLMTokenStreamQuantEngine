@@ -96,17 +96,25 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             // The conditional decrement is equivalent to direct subtraction but
             // guards against p95_idx==0 (only possible when N==0, already
             // excluded by the outer sample_count_ > 0 check).
+            size_t p50_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.50));
+            if (p50_idx > 0) p50_idx--;
             size_t p95_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.95));
             if (p95_idx > 0) p95_idx--;
             size_t p99_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.99));
             if (p99_idx > 0) p99_idx--;
+            p50_idx = std::min(p50_idx, N - 1);
             p95_idx = std::min(p95_idx, N - 1);
             p99_idx = std::min(p99_idx, N - 1);
 
-            // Run nth_element for p95 first (smaller index), then p99.
+            // Run nth_element for p50 first (smallest index), then p95, then p99.
             // Both use the full range — the standard only guarantees correctness
             // when the range contains the nth element and all elements that
             // should be before/after it.
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p50_idx),
+                             samples_copy.end());
+            stats.p50_latency = samples_copy[p50_idx];
+
             std::nth_element(samples_copy.begin(),
                              samples_copy.begin() + static_cast<std::ptrdiff_t>(p95_idx),
                              samples_copy.end());
@@ -216,9 +224,7 @@ void LatencyController::recompute_composite() {
     if (c >= 0.8) {
         backoff_multiplier_ = std::min(backoff_multiplier_ * 1.5, 5.0);
     } else if (c < 0.5) {
-        // Exponential decay toward 1.0 rather than an abrupt reset,
-        // preventing oscillation when composite pressure hovers near 0.5.
-        backoff_multiplier_ = std::max(1.0, backoff_multiplier_ * 0.85);
+        backoff_multiplier_ = 1.0;
     }
 }
 

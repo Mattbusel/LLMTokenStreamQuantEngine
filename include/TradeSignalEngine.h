@@ -193,6 +193,14 @@ public:
      */
     void clear_output_sinks();
 
+    /**
+     * @brief Reset accumulated bias and volatility to zero and clear statistics.
+     *
+     * Intended for use between trading sessions. Not thread-safe — must be
+     * called from the same thread as process_semantic_weight().
+     */
+    void reset() noexcept;
+
 private:
     bool should_emit_signal() const;
     void emit_signal(const TradeSignal& signal);

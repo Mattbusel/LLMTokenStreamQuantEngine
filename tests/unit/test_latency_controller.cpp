@@ -32,6 +32,7 @@ TEST(LatencyControllerTest, test_latency_controller_initial_stats_are_zero) {
     EXPECT_EQ(stats.avg_latency.count(),     0);
     EXPECT_EQ(stats.min_latency.count(),     0);
     EXPECT_EQ(stats.max_latency.count(),     0);
+    EXPECT_EQ(stats.p50_latency.count(),     0);
     EXPECT_EQ(stats.p95_latency.count(),     0);
     EXPECT_EQ(stats.p99_latency.count(),     0);
     EXPECT_DOUBLE_EQ(stats.jitter_ms,        0.0);
@@ -194,6 +195,28 @@ TEST(LatencyControllerTest, test_latency_controller_backoff_resets_below_low_thr
 
     EXPECT_DOUBLE_EQ(lc.get_backoff_multiplier(), 1.0)
         << "Backoff must reset to 1.0 when composite pressure < 0.5";
+}
+
+// ---------------------------------------------------------------------------
+// p50 (median) percentile
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_controller_p50_is_median) {
+    LatencyController lc(make_config(true, 200));
+
+    // Insert 100 samples: 1..100 μs.  Median of [1,100] is the 50th value ≈ 50 μs.
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto stats = lc.get_stats();
+    // Nearest-rank p50: ceil(100 * 0.50) - 1 = 49 (0-indexed), sorted value = 50 μs.
+    // Allow ±5 μs tolerance for implementation differences.
+    EXPECT_GE(stats.p50_latency.count(), 45);
+    EXPECT_LE(stats.p50_latency.count(), 55);
+    // p50 must be <= p95 and p99.
+    EXPECT_LE(stats.p50_latency.count(), stats.p95_latency.count());
+    EXPECT_LE(stats.p50_latency.count(), stats.p99_latency.count());
 }
 
 // ---------------------------------------------------------------------------

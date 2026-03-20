@@ -196,7 +196,6 @@ private:
     bool check_rate_limit();
     bool check_drawdown(const TradeSignal& signal);
     void update_drawdown(const TradeSignal& signal);
-    void fire_alert(const std::string& reason, const TradeSignal& signal);
 
     Config        config_;
     AlertCallback alert_cb_;
