@@ -207,4 +207,9 @@ RiskManager::PositionState RiskManager::get_position() const {
     return position_;
 }
 
+double RiskManager::get_cumulative_bias() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return cumulative_bias_;
+}
+
 } // namespace llmquant

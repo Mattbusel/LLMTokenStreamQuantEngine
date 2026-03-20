@@ -62,6 +62,14 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     // Record latest confidence for use in emitted signals.
     last_confidence_ = weight.confidence_score;
 
+    // Noise filter: suppress signals too weak to act on.
+    if (config_.min_bias_threshold > 0.0 &&
+        std::fabs(current_bias) < config_.min_bias_threshold) {
+        if (stats_.signals_suppressed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+            stats_.signals_suppressed.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
     // Check if we should emit a signal
     if (should_emit_signal()) {
         TradeSignal signal;

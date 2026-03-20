@@ -84,6 +84,11 @@ public:
         /// Signals with latency_us > this value are suppressed as stale.
         /// Set to 0.0 to disable the guard (default).
         double max_signal_age_us{0.0};
+        /// Minimum absolute bias required to emit a signal.
+        /// Signals with |delta_bias_shift| < this value are treated as noise
+        /// and suppressed (counted in signals_suppressed).
+        /// Set to 0.0 to disable (default).
+        double min_bias_threshold{0.0};
     };
 
     /**

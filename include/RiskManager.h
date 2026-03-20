@@ -171,6 +171,16 @@ public:
     PositionState get_position() const;
 
     /**
+     * @brief Return the current cumulative drawdown bias accumulator value.
+     *
+     * Thread-safe (acquires mutex_).  The value resets to 0 when the drawdown
+     * window elapses or when reset() is called.
+     *
+     * @return Signed cumulative bias since the last window reset.
+     */
+    double get_cumulative_bias() const;
+
+    /**
      * @brief Attach a MetricsLogger for structured rejection logging.
      *
      * @param logger Pointer to an active MetricsLogger; must outlive this

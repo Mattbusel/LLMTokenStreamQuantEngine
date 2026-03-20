@@ -460,3 +460,20 @@ TEST(RiskManagerTest, test_risk_manager_reset_stats_clears_counters) {
     rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
     EXPECT_EQ(rm.get_stats().signals_passed.load(), 1u);
 }
+
+// ============================================================
+// Test 21: get_cumulative_bias() tracks accumulation and resets.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_get_cumulative_bias_updates_and_resets) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_cumulative_bias(), 0.0);
+
+    // Process signals with a known bias shift to accumulate drawdown.
+    rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));  // contributes 0.4 to drawdown
+    EXPECT_NE(rm.get_cumulative_bias(), 0.0)
+        << "Cumulative bias must be non-zero after evaluating a signal";
+
+    // After full reset, accumulator must return to zero.
+    rm.reset();
+    EXPECT_DOUBLE_EQ(rm.get_cumulative_bias(), 0.0);
+}

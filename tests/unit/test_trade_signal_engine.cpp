@@ -353,5 +353,39 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_staleness_guard_disabled_by
     EXPECT_EQ(engine.get_stats().signals_aged_out.load(), 0u);
 }
 
+TEST(TradeSignalEngineTest, test_trade_signal_engine_min_bias_threshold_suppresses_weak_signals) {
+    // Set a threshold so high that one token can never reach it in one step.
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 10.0;  // accumulated bias after one token << 10.0
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    SemanticWeight w{0.9, 0.9, 0.2, 0.9};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(emitted.load(), 0)
+        << "Accumulated bias below min_bias_threshold must be suppressed";
+    EXPECT_GT(engine.get_stats().signals_suppressed.load(), 0u);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_min_bias_threshold_disabled_by_default) {
+    // Default config has min_bias_threshold = 0.0 (disabled).
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    SemanticWeight w{0.5, 0.8, 0.3, 0.6};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(emitted.load(), 1)
+        << "Noise filter disabled by default must not suppress signals";
+    EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 0u);
+}
+
 } // namespace
 } // namespace llmquant

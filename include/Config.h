@@ -39,6 +39,10 @@ struct TradingConfig {
      *  Signals whose processing time exceeds this value are suppressed as stale.
      *  Set to 0.0 to disable the staleness guard (default). */
     double max_signal_age_us{0.0};
+    /** @brief Minimum absolute bias required to emit a signal.
+     *  Signals with |accumulated_bias| < this value are suppressed as noise.
+     *  Set to 0.0 to disable the noise filter (default). */
+    double min_bias_threshold{0.0};
 };
 
 /**

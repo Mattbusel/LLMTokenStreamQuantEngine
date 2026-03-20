@@ -10,6 +10,7 @@ trading:
   signal_decay_rate: 0.95
   signal_cooldown_us: 1000
   max_signal_age_us: 0.0
+  min_bias_threshold: 0.0
 
 latency:
   target_latency_us: 10

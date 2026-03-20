@@ -349,5 +349,21 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_clears_counters) {
     EXPECT_EQ(adapter.get_stats().tokens_processed, 1u);
 }
 
+TEST(LLMAdapterTest, test_llm_adapter_reset_stats_preserves_dictionary) {
+    LLMAdapter adapter;
+    size_t dict_before = adapter.get_dictionary_size();
+    ASSERT_GT(dict_before, 0u);
+
+    // Process some tokens to populate counters, then reset.
+    adapter.map_token_to_weight("bullish");
+    adapter.reset_stats();
+
+    // Dictionary must be unchanged — reset_stats only clears counters.
+    EXPECT_EQ(adapter.get_dictionary_size(), dict_before);
+    // Known tokens still return the correct weight after stat reset.
+    SemanticWeight w = adapter.map_token_to_weight("bullish");
+    EXPECT_GT(w.directional_bias, 0.0);
+}
+
 } // namespace
 } // namespace llmquant

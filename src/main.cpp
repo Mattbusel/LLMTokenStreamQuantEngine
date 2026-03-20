@@ -200,7 +200,8 @@ int main(int argc, char* argv[]) {
         .volatility_sensitivity = sys_config.trading.volatility_sensitivity,
         .signal_decay_rate    = sys_config.trading.signal_decay_rate,
         .signal_cooldown      = std::chrono::microseconds(sys_config.trading.signal_cooldown_us),
-        .max_signal_age_us    = sys_config.trading.max_signal_age_us
+        .max_signal_age_us    = sys_config.trading.max_signal_age_us,
+        .min_bias_threshold   = sys_config.trading.min_bias_threshold
     });
 
     // Backtest mode: emit on every token, ignoring the cooldown timer.
@@ -256,6 +257,7 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.signal_decay_rate      = updated.trading.signal_decay_rate;
         new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
         new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
+        new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
         trade_engine.update_config(new_eng_cfg);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
@@ -706,7 +708,13 @@ int main(int argc, char* argv[]) {
                  << "llmquant_latency_measurements_total " << stats.measurements << "\n"
                  << "# HELP llmquant_signal_age_threshold_us Configured staleness guard threshold (0=disabled)\n"
                  << "# TYPE llmquant_signal_age_threshold_us gauge\n"
-                 << "llmquant_signal_age_threshold_us " << trade_engine.get_config().max_signal_age_us << "\n";
+                 << "llmquant_signal_age_threshold_us " << trade_engine.get_config().max_signal_age_us << "\n"
+                 << "# HELP llmquant_min_bias_threshold Configured noise-filter minimum |bias| threshold (0=disabled)\n"
+                 << "# TYPE llmquant_min_bias_threshold gauge\n"
+                 << "llmquant_min_bias_threshold " << trade_engine.get_config().min_bias_threshold << "\n"
+                 << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
+                 << "# TYPE llmquant_drawdown_cumulative_bias gauge\n"
+                 << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
