@@ -743,5 +743,55 @@ TEST(LLMAdapterTest, test_filter_tokens_by_sentiment_negative_range) {
     EXPECT_EQ(neg[0].first, "crash");
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 34: export_dictionary()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_export_dictionary_empty_returns_empty_string) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    EXPECT_TRUE(adapter.export_dictionary().empty())
+        << "export_dictionary must return empty string when dict is empty";
+}
+
+TEST(LLMAdapterTest, test_export_dictionary_contains_token_name) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bullish", {0.8, 0.9, 0.1, 0.8});
+    std::string exported = adapter.export_dictionary();
+    EXPECT_NE(exported.find("bullish"), std::string::npos)
+        << "exported dictionary must contain the token name";
+}
+
+TEST(LLMAdapterTest, test_export_dictionary_line_count_matches_dict_size) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("crash",   {-0.9, 0.9, 0.8, -0.7});
+    adapter.add_token_mapping("rally",   { 0.8, 0.9, 0.2,  0.7});
+    adapter.add_token_mapping("neutral", { 0.0, 0.5, 0.0,  0.0});
+
+    std::string exported = adapter.export_dictionary();
+    // Count lines (each token occupies one line ending with '\n').
+    size_t line_count = 0;
+    for (char c : exported) if (c == '\n') ++line_count;
+    EXPECT_EQ(line_count, 3u)
+        << "export_dictionary must produce one line per token";
+}
+
+TEST(LLMAdapterTest, test_export_dictionary_is_sorted_alphabetically) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("zebra",   {0.1, 0.5, 0.0, 0.0});
+    adapter.add_token_mapping("apple",   {0.2, 0.5, 0.0, 0.0});
+    adapter.add_token_mapping("mango",   {0.3, 0.5, 0.0, 0.0});
+
+    std::string exported = adapter.export_dictionary();
+    auto pos_apple = exported.find("apple");
+    auto pos_mango = exported.find("mango");
+    auto pos_zebra = exported.find("zebra");
+    EXPECT_LT(pos_apple, pos_mango) << "apple must come before mango";
+    EXPECT_LT(pos_mango, pos_zebra) << "mango must come before zebra";
+}
+
 } // namespace
 } // namespace llmquant

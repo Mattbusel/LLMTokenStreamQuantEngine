@@ -320,3 +320,59 @@ TEST(MetricsLoggerTest, test_log_trade_signal_json_contains_event_key) {
         << "JSON output must contain the trade_signal event key";
     std::remove(path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 34: log_config_reload()
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_log_config_reload_increments_entry_count_csv) {
+    const std::string path = "tmp_log_config_reload_csv.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path  = path;
+        cfg.format         = MetricsLogger::OutputFormat::CSV;
+        cfg.enable_console_output = false;
+        MetricsLogger logger(cfg);
+        uint64_t before = logger.get_log_entry_count();
+        logger.log_config_reload("/etc/engine/config.yaml", true);
+        EXPECT_EQ(logger.get_log_entry_count(), before + 1)
+            << "log_config_reload must increment entry count (CSV)";
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_log_config_reload_increments_entry_count_json) {
+    const std::string path = "tmp_log_config_reload_json.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path  = path;
+        cfg.format         = MetricsLogger::OutputFormat::JSON;
+        cfg.enable_console_output = false;
+        MetricsLogger logger(cfg);
+        uint64_t before = logger.get_log_entry_count();
+        logger.log_config_reload("/etc/engine/config.yaml", false);
+        EXPECT_EQ(logger.get_log_entry_count(), before + 1)
+            << "log_config_reload must increment entry count (JSON)";
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_log_config_reload_json_contains_event_key) {
+    const std::string path = "tmp_log_config_reload_event.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path  = path;
+        cfg.format         = MetricsLogger::OutputFormat::JSON;
+        cfg.enable_console_output = false;
+        MetricsLogger logger(cfg);
+        logger.log_config_reload("/cfg/config.yaml", true);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("config_reload"), std::string::npos)
+        << "JSON output must contain the config_reload event key";
+    std::remove(path.c_str());
+}

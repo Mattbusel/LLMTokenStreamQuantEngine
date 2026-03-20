@@ -232,6 +232,25 @@ std::string PrometheusExporter::format_counter(const std::string& name, uint64_t
     return ss.str();
 }
 
+std::string PrometheusExporter::format_info(const std::string& name,
+                                             const std::map<std::string, std::string>& labels,
+                                             const std::string& help) {
+    std::ostringstream ss;
+    if (!help.empty()) {
+        ss << "# HELP " << name << " " << help << "\n";
+        ss << "# TYPE " << name << " gauge\n";
+    }
+    ss << name << "{";
+    bool first = true;
+    for (const auto& [k, v] : labels) {
+        if (!first) ss << ",";
+        ss << k << "=\"" << v << "\"";
+        first = false;
+    }
+    ss << "} 1\n";
+    return ss.str();
+}
+
 std::string PrometheusExporter::format_histogram(const std::string& name,
                                                    const std::vector<HistogramBucket>& buckets,
                                                    double sum_us, uint64_t count,

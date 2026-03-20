@@ -246,3 +246,40 @@ TEST(PrometheusExporterTest, test_format_histogram_nan_sum_replaced_with_zero) {
     EXPECT_NE(result.find("_sum 0"), std::string::npos)
         << "NaN histogram sum must appear as 0";
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 34: format_info()
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_info_value_is_always_one) {
+    std::map<std::string, std::string> labels = {{"version", "1.0.0"}};
+    auto result = PrometheusExporter::format_info("llmquant_build_info", labels);
+    EXPECT_NE(result.find("} 1"), std::string::npos)
+        << "info metric value must always be 1";
+}
+
+TEST(PrometheusExporterTest, test_format_info_contains_label_key_value) {
+    std::map<std::string, std::string> labels = {{"env", "prod"}, {"region", "us-east"}};
+    auto result = PrometheusExporter::format_info("llmquant_build_info", labels);
+    EXPECT_NE(result.find("env=\"prod\""), std::string::npos)
+        << "format_info must include label env=prod";
+    EXPECT_NE(result.find("region=\"us-east\""), std::string::npos)
+        << "format_info must include label region=us-east";
+}
+
+TEST(PrometheusExporterTest, test_format_info_with_help_includes_type_comment) {
+    std::map<std::string, std::string> labels = {{"build", "release"}};
+    auto result = PrometheusExporter::format_info("llmquant_build_info", labels,
+                                                    "Engine build metadata");
+    EXPECT_NE(result.find("# HELP"), std::string::npos)
+        << "format_info must include HELP comment when help is non-empty";
+    EXPECT_NE(result.find("# TYPE llmquant_build_info gauge"), std::string::npos)
+        << "format_info must declare TYPE as gauge";
+}
+
+TEST(PrometheusExporterTest, test_format_info_empty_labels_produces_empty_braces) {
+    std::map<std::string, std::string> labels;
+    auto result = PrometheusExporter::format_info("llmquant_empty_info", labels);
+    EXPECT_NE(result.find("{} 1"), std::string::npos)
+        << "format_info with no labels must produce empty label set {}";
+}

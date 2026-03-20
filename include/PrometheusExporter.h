@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -111,6 +112,23 @@ public:
      */
     static std::string format_counter(const std::string& name, uint64_t value,
                                        const std::string& help = "");
+
+    /**
+     * @brief Format a Prometheus info metric (gauge with static key=value labels, always 1).
+     *
+     * Info metrics expose build metadata, version strings, or configuration
+     * values that do not change at runtime.  The value is always 1 per
+     * Prometheus convention.  Label values must not contain double-quote
+     * characters (the caller is responsible for sanitisation).
+     *
+     * @param name   Metric name (conventionally ends in "_info").
+     * @param labels Key-value pairs to embed as Prometheus label set.
+     * @param help   Optional HELP string (omitted if empty).
+     * @return Formatted Prometheus info metric block (ends with newline).
+     */
+    static std::string format_info(const std::string& name,
+                                    const std::map<std::string, std::string>& labels,
+                                    const std::string& help = "");
 
     /**
      * @brief One histogram bucket entry (upper bound + cumulative count).

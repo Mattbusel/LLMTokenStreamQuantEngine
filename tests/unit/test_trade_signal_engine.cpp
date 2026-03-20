@@ -1015,5 +1015,35 @@ TEST(TradeSignalEngineTest, test_get_tokens_per_second_positive_after_processing
         << "tokens_per_second must be > 0 after processing tokens";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 34: get_session_duration_ms()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_get_session_duration_ms_non_negative_at_start) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_GE(engine.get_session_duration_ms(), 0.0)
+        << "session duration must be non-negative immediately after construction";
+}
+
+TEST(TradeSignalEngineTest, test_get_session_duration_ms_increases_over_time) {
+    TradeSignalEngine engine(make_config());
+    double d1 = engine.get_session_duration_ms();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    double d2 = engine.get_session_duration_ms();
+    EXPECT_GE(d2, d1) << "session duration must not decrease";
+}
+
+TEST(TradeSignalEngineTest, test_get_session_duration_ms_resets_on_reset) {
+    TradeSignalEngine engine(make_config());
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    double before_reset = engine.get_session_duration_ms();
+    EXPECT_GE(before_reset, 0.0);
+    engine.reset();
+    // After reset, the session clock restarts — duration should be less than before.
+    double after_reset = engine.get_session_duration_ms();
+    EXPECT_LE(after_reset, before_reset)
+        << "session duration must restart from 0 after reset()";
+}
+
 } // namespace
 } // namespace llmquant

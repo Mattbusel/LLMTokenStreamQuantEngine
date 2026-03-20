@@ -119,6 +119,18 @@ public:
                           double quality);
 
     /**
+     * @brief Record a hot-reload event for the configuration file.
+     *
+     * Writes a structured log entry indicating that the configuration was
+     * reloaded from @p source_path and whether it succeeded.  Increments
+     * the log entry counter.
+     *
+     * @param source_path Path of the YAML configuration file that was reloaded.
+     * @param success     true if the reload parsed and validated successfully.
+     */
+    void log_config_reload(const std::string& source_path, bool success);
+
+    /**
      * @brief Write a human-readable performance summary to the console (if enabled).
      */
     void log_performance_summary();

@@ -1168,3 +1168,54 @@ TEST(RiskManagerTest, test_set_position_limit_pnl_blocks_on_breach) {
     EXPECT_FALSE(rm.evaluate(sig))
         << "signal must be blocked when pnl < pnl_limit";
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 34: is_healthy()
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_is_healthy_default_config) {
+    RiskManager rm(default_config());
+    EXPECT_TRUE(rm.is_healthy())
+        << "Default-constructed RiskManager with default PositionState must be healthy";
+}
+
+TEST(RiskManagerTest, test_is_healthy_false_when_gate_disabled) {
+    RiskManager rm(default_config());
+    rm.disable_all_gates();
+    EXPECT_FALSE(rm.is_healthy())
+        << "is_healthy() must return false when any gate is disabled";
+}
+
+TEST(RiskManagerTest, test_is_healthy_false_when_position_at_limit) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState pos;
+    pos.net_position   = 1.0;   // exactly at limit
+    pos.position_limit = 1.0;
+    pos.pnl            = 0.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+    EXPECT_FALSE(rm.is_healthy())
+        << "is_healthy() must return false when |net_position| >= position_limit";
+}
+
+TEST(RiskManagerTest, test_is_healthy_false_when_pnl_below_floor) {
+    RiskManager rm(default_config());
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.0;
+    pos.position_limit = 1.0;
+    pos.pnl            = -15.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+    EXPECT_FALSE(rm.is_healthy())
+        << "is_healthy() must return false when pnl < pnl_limit";
+}
+
+TEST(RiskManagerTest, test_is_healthy_true_after_re_enable_and_reset) {
+    RiskManager rm(default_config());
+    rm.disable_all_gates();
+    ASSERT_FALSE(rm.is_healthy());
+    rm.enable_all_gates();
+    rm.reset_drawdown();
+    EXPECT_TRUE(rm.is_healthy())
+        << "is_healthy() must return true after re-enabling all gates";
+}

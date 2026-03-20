@@ -274,6 +274,21 @@ public:
     uint64_t get_total_evaluated() const noexcept;
 
     /**
+     * @brief Return true if all risk gates are nominally healthy.
+     *
+     * Checks:
+     *   - All gates are enabled (none are in bypass mode).
+     *   - The drawdown budget remaining is > 0.
+     *   - The net position is within limits.
+     *   - The current PnL is above the PnL floor.
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return true if no gates are bypassed and all thresholds are met.
+     */
+    bool is_healthy() const;
+
+    /**
      * @brief Convenience setter to update the position and PnL limits without
      *        replacing the entire PositionState.
      *

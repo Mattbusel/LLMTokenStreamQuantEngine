@@ -275,6 +275,19 @@ public:
         stats_.cache_misses.store(0, std::memory_order_relaxed);
     }
 
+    /**
+     * @brief Export the entire token dictionary as a tab-separated string.
+     *
+     * Each line represents one token in the format:
+     *   token\tsentiment\tconfidence\tvolatility\tdirectional_bias
+     *
+     * Values are formatted to 6 decimal places.  Lines are sorted
+     * alphabetically by token for deterministic output.
+     *
+     * @return Multi-line TSV string; empty string if the dictionary is empty.
+     */
+    std::string export_dictionary() const;
+
 private:
     void initialize_default_mappings();
 

@@ -252,6 +252,19 @@ void RiskManager::update_drawdown(const TradeSignal& signal) {
     cumulative_bias_ += signal.delta_bias_shift;
 }
 
+bool RiskManager::is_healthy() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (config_.disable_magnitude_gate || config_.disable_confidence_gate ||
+        config_.disable_rate_gate      || config_.disable_drawdown_gate    ||
+        config_.disable_position_gate)
+        return false;
+    double remaining = config_.max_drawdown - std::fabs(cumulative_bias_);
+    if (remaining <= 0.0) return false;
+    if (std::fabs(position_.net_position) >= position_.position_limit) return false;
+    if (position_.pnl < position_.pnl_limit) return false;
+    return true;
+}
+
 void RiskManager::set_position_limit(double position_limit, double pnl_limit) {
     std::lock_guard<std::mutex> lock(mutex_);
     position_.position_limit = position_limit;

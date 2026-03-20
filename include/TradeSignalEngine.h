@@ -374,6 +374,16 @@ public:
     double get_tokens_per_second() const noexcept;
 
     /**
+     * @brief Return elapsed milliseconds since construction or the last reset() call.
+     *
+     * Useful for monitoring session uptime and computing throughput metrics.
+     * Thread-safe (reads reset_time_ which is only written on construction and reset()).
+     *
+     * @return Elapsed session duration in milliseconds.
+     */
+    double get_session_duration_ms() const noexcept;
+
+    /**
      * @brief Flush all registered output sinks.
      *
      * Call this at shutdown to ensure any buffered file-sink output is written

@@ -195,6 +195,27 @@ void MetricsLogger::log_trade_signal(double bias, double volatility,
     }
 }
 
+void MetricsLogger::log_config_reload(const std::string& source_path, bool success) {
+    log_entries_++;
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    const char* status = success ? "ok" : "failed";
+    if (config_.format == OutputFormat::CSV) {
+        std::ostringstream oss;
+        oss << timestamp << ",CONFIG_RELOAD," << status << "," << source_path << ",,,,";
+        if (file_logger_) file_logger_->info(oss.str());
+        if (console_logger_)
+            console_logger_->info("Config reload {}: {}", status, source_path);
+    } else if (config_.format == OutputFormat::JSON) {
+        if (file_logger_)
+            file_logger_->info(
+                R"({{"event":"config_reload","status":"{}","source":"{}","timestamp":{}}})",
+                status, source_path, timestamp);
+        if (console_logger_)
+            console_logger_->info("Config reload {}: {}", status, source_path);
+    }
+}
+
 void MetricsLogger::log_performance_summary() {
     if (console_logger_) {
         console_logger_->info("=== Performance Summary ===");

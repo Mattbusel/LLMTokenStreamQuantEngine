@@ -321,6 +321,12 @@ double TradeSignalEngine::get_tokens_per_second() const noexcept {
     return static_cast<double>(tokens) / (elapsed_ns / 1e9);
 }
 
+double TradeSignalEngine::get_session_duration_ms() const noexcept {
+    auto now = std::chrono::high_resolution_clock::now();
+    return static_cast<double>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - reset_time_).count());
+}
+
 TradeSignalEngine::Snapshot TradeSignalEngine::snapshot() const noexcept {
     Snapshot snap;
     snap.config                = config_;

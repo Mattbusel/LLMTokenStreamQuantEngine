@@ -266,6 +266,29 @@ bool LLMAdapter::update_token_weight(const std::string& token, const SemanticWei
     return true;
 }
 
+std::string LLMAdapter::export_dictionary() const {
+    if (token_weights_.empty()) return {};
+
+    // Sort tokens alphabetically for deterministic output.
+    std::vector<std::string> keys;
+    keys.reserve(token_weights_.size());
+    for (const auto& [tok, _] : token_weights_) keys.push_back(tok);
+    std::sort(keys.begin(), keys.end());
+
+    std::ostringstream ss;
+    ss.precision(6);
+    ss << std::fixed;
+    for (const auto& key : keys) {
+        const auto& w = token_weights_.at(key);
+        ss << key << '\t'
+           << w.sentiment_score  << '\t'
+           << w.confidence_score << '\t'
+           << w.volatility_score << '\t'
+           << w.directional_bias << '\n';
+    }
+    return ss.str();
+}
+
 size_t LLMAdapter::batch_add_token_mappings(
     const std::unordered_map<std::string, SemanticWeight>& mappings) {
     size_t inserted = 0;
