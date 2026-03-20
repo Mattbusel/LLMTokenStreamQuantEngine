@@ -215,7 +215,9 @@ std::string PrometheusExporter::format_gauge(const std::string& name, double val
         ss << "# HELP " << name << " " << help << "\n";
         ss << "# TYPE " << name << " gauge\n";
     }
-    ss << name << " " << value << "\n";
+    // Prometheus text format does not accept NaN or Inf — replace with 0.
+    const double safe_value = std::isfinite(value) ? value : 0.0;
+    ss << name << " " << safe_value << "\n";
     return ss.str();
 }
 
@@ -244,7 +246,8 @@ std::string PrometheusExporter::format_histogram(const std::string& name,
         ss << name << "_bucket{le=\"" << b.upper_bound_us << "\"} " << b.count << "\n";
     }
     ss << name << "_bucket{le=\"+Inf\"} " << count << "\n";
-    ss << name << "_sum " << sum_us << "\n";
+    const double safe_sum = std::isfinite(sum_us) ? sum_us : 0.0;
+    ss << name << "_sum " << safe_sum << "\n";
     ss << name << "_count " << count << "\n";
     return ss.str();
 }

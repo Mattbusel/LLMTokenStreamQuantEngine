@@ -361,6 +361,43 @@ TEST(LatencyControllerTest, test_histogram_buckets_cumulative_and_ordered) {
     EXPECT_EQ(buckets.back().count, 30u) << "+Inf bucket must contain all samples";
 }
 
+// ---------------------------------------------------------------------------
+// get_window_fill_ratio
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_window_fill_ratio_zero_before_measurements) {
+    LatencyController lc(make_config(true, 100));
+    EXPECT_DOUBLE_EQ(lc.get_window_fill_ratio(), 0.0)
+        << "Fill ratio must be 0 before any measurements";
+}
+
+TEST(LatencyControllerTest, test_window_fill_ratio_rises_with_samples) {
+    LatencyController lc(make_config(true, 100));
+    for (int i = 0; i < 50; ++i) {
+        lc.record_latency(std::chrono::microseconds{i + 1});
+    }
+    double ratio = lc.get_window_fill_ratio();
+    EXPECT_GE(ratio, 0.49) << "After 50/100 samples fill ratio should be ~0.5";
+    EXPECT_LE(ratio, 0.51);
+}
+
+TEST(LatencyControllerTest, test_window_fill_ratio_saturates_at_one) {
+    LatencyController lc(make_config(true, 10));
+    for (int i = 0; i < 20; ++i) {
+        lc.record_latency(std::chrono::microseconds{i + 1});
+    }
+    EXPECT_DOUBLE_EQ(lc.get_window_fill_ratio(), 1.0)
+        << "Fill ratio must saturate at 1.0 once window is full";
+}
+
+TEST(LatencyControllerTest, test_window_fill_ratio_reset_to_zero) {
+    LatencyController lc(make_config(true, 10));
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.reset_stats();
+    EXPECT_DOUBLE_EQ(lc.get_window_fill_ratio(), 0.0)
+        << "Fill ratio must be 0 after reset";
+}
+
 TEST(LatencyControllerTest, test_histogram_buckets_empty_when_profiling_disabled) {
     LatencyController lc(make_config(false /*profiling off*/));
     lc.record_latency(std::chrono::microseconds{5});

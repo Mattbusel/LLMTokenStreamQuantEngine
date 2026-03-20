@@ -245,6 +245,31 @@ public:
      */
     std::string to_summary_string() const;
 
+    /**
+     * @brief Apply overrides from environment variables.
+     *
+     * Reads a fixed set of `LLMQUANT_*` environment variables and, when
+     * present and parseable, overwrites the corresponding fields in the
+     * current configuration.  Variables that are absent or cannot be parsed
+     * are silently ignored (the previous value is preserved).
+     *
+     * Supported variables:
+     *   LLMQUANT_BIAS_SENSITIVITY       → trading.bias_sensitivity
+     *   LLMQUANT_VOL_SENSITIVITY        → trading.volatility_sensitivity
+     *   LLMQUANT_SIGNAL_DECAY           → trading.signal_decay_rate
+     *   LLMQUANT_SIGNAL_COOLDOWN_US     → trading.signal_cooldown_us
+     *   LLMQUANT_MAX_SIGNAL_AGE_US      → trading.max_signal_age_us
+     *   LLMQUANT_MIN_BIAS_THRESHOLD     → trading.min_bias_threshold
+     *   LLMQUANT_MAX_DRAWDOWN           → risk_thresholds.max_drawdown
+     *   LLMQUANT_MAX_SIGNALS_PER_SECOND → risk_thresholds.max_signals_per_second
+     *   LLMQUANT_STATS_PORT             → metrics.stats_port
+     *
+     * Thread-safe (acquires config_mutex_).
+     *
+     * @return Number of environment variables successfully applied.
+     */
+    int load_from_env();
+
 private:
     SystemConfig config_;
     mutable std::mutex config_mutex_;  ///< Guards config_ during hot-reload.

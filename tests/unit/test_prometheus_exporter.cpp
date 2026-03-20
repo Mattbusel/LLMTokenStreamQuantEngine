@@ -206,3 +206,43 @@ TEST(PrometheusExporterTest, test_format_histogram_includes_bucket_sum_count) {
     EXPECT_NE(result.find("_count 100"), std::string::npos);
     EXPECT_NE(result.find("# TYPE llmquant_latency_us histogram"), std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 17: NaN/Inf guard in format_gauge and format_histogram
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_gauge_nan_replaced_with_zero) {
+    // Use a metric name that does NOT contain "nan" so the search is unambiguous.
+    auto result = PrometheusExporter::format_gauge("llmquant_bias_gauge",
+                                                    std::numeric_limits<double>::quiet_NaN());
+    // Value must be 0, not "nan".
+    EXPECT_NE(result.find("llmquant_bias_gauge 0"), std::string::npos)
+        << "NaN gauge value must be replaced with 0";
+    // "nan" must NOT appear as the value token after the metric name.
+    // We check by ensuring the line ends with "0\n", not "nan\n".
+    EXPECT_EQ(result.find("gauge nan"), std::string::npos)
+        << "NaN must not appear as the metric value";
+}
+
+TEST(PrometheusExporterTest, test_format_gauge_inf_replaced_with_zero) {
+    // Use a metric name without "inf" to avoid false-positive finds.
+    auto result = PrometheusExporter::format_gauge("llmquant_volatility_gauge",
+                                                    std::numeric_limits<double>::infinity());
+    EXPECT_NE(result.find("llmquant_volatility_gauge 0"), std::string::npos)
+        << "Inf gauge value must be replaced with 0";
+    EXPECT_EQ(result.find("gauge inf"), std::string::npos)
+        << "Inf must not appear as the metric value";
+}
+
+TEST(PrometheusExporterTest, test_format_histogram_nan_sum_replaced_with_zero) {
+    using Bucket = PrometheusExporter::HistogramBucket;
+    std::vector<Bucket> buckets = {{10.0, 5}};
+    auto result = PrometheusExporter::format_histogram(
+        "llmquant_lat", buckets,
+        std::numeric_limits<double>::quiet_NaN(), 5u);
+    // _sum must not be "nan".
+    EXPECT_EQ(result.find("_sum nan"), std::string::npos)
+        << "NaN histogram sum must be replaced with 0";
+    EXPECT_NE(result.find("_sum 0"), std::string::npos)
+        << "NaN histogram sum must appear as 0";
+}

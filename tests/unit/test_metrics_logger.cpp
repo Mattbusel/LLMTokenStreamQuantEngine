@@ -256,3 +256,24 @@ TEST(MetricsLoggerTest, test_metrics_logger_entry_count_not_incremented_by_non_c
     }
     std::remove(path.c_str());
 }
+
+TEST(MetricsLoggerTest, test_metrics_logger_reset_counters_zeroes_entry_count) {
+    const std::string path = "/tmp/test_metrics_reset_counters.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        logger.log_token_received("bullish", 1);
+        logger.log_token_received("crash",   2);
+        logger.log_signal_generated(0.5, 0.2, 8);
+        ASSERT_EQ(logger.get_log_entry_count(), uint64_t{3});
+
+        logger.reset_counters();
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{0})
+            << "reset_counters() must zero the entry count";
+
+        // Logging after reset must start counting from zero again.
+        logger.log_token_received("rally", 3);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{1})
+            << "Entry count must increment from 0 after reset";
+    }
+    std::remove(path.c_str());
+}

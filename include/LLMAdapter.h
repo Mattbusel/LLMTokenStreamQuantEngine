@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <unordered_map>
 #include <atomic>
@@ -132,6 +133,21 @@ public:
      * @return true if a mapping exists; false otherwise.
      */
     bool contains_token(const std::string& token) const;
+
+    /**
+     * @brief Return the top N tokens sorted by absolute sentiment score.
+     *
+     * Useful for auditing which tokens are most influential in driving
+     * signal generation.  Ties are broken by dictionary insertion order
+     * (unspecified).
+     *
+     * @param n Maximum number of tokens to return (default: 10).
+     *          If n >= dictionary size, all tokens are returned.
+     * @return Vector of (token, sentiment_score) pairs, sorted descending
+     *         by |sentiment_score|.
+     */
+    std::vector<std::pair<std::string, double>>
+        top_tokens_by_sentiment(size_t n = 10) const;
 
     /**
      * @brief Return a snapshot of internal processing statistics.

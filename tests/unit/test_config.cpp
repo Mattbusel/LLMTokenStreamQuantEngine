@@ -585,5 +585,70 @@ TEST(ConfigTest, test_config_negative_max_accumulated_bias_returns_false) {
     EXPECT_FALSE(ok) << "Negative max_accumulated_bias must fail validation";
 }
 
+// ---------------------------------------------------------------------------
+// load_from_env tests
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_load_from_env_applies_bias_sensitivity) {
+    Config cfg;
+    cfg.set_defaults();
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "3.5");
+#else
+    setenv("LLMQUANT_BIAS_SENSITIVITY", "3.5", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0) << "At least one env var should be applied";
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.bias_sensitivity, 3.5);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");
+#else
+    unsetenv("LLMQUANT_BIAS_SENSITIVITY");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_invalid_value_is_ignored) {
+    Config cfg;
+    cfg.set_defaults();
+    double old_decay = cfg.get_config().trading.signal_decay_rate;
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_SIGNAL_DECAY", "not_a_number");
+#else
+    setenv("LLMQUANT_SIGNAL_DECAY", "not_a_number", 1);
+#endif
+    cfg.load_from_env();
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.signal_decay_rate, old_decay);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_SIGNAL_DECAY", "");
+#else
+    unsetenv("LLMQUANT_SIGNAL_DECAY");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_zero_count_when_no_vars_set) {
+    Config cfg;
+    cfg.set_defaults();
+    // Unset all env vars under test.
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");
+    _putenv_s("LLMQUANT_VOL_SENSITIVITY", "");
+    _putenv_s("LLMQUANT_SIGNAL_DECAY", "");
+    _putenv_s("LLMQUANT_SIGNAL_COOLDOWN_US", "");
+    _putenv_s("LLMQUANT_MAX_SIGNAL_AGE_US", "");
+    _putenv_s("LLMQUANT_MIN_BIAS_THRESHOLD", "");
+    _putenv_s("LLMQUANT_MAX_DRAWDOWN", "");
+    _putenv_s("LLMQUANT_MAX_SIGNALS_PER_SECOND", "");
+    _putenv_s("LLMQUANT_STATS_PORT", "");
+#else
+    for (const char* v : {"LLMQUANT_BIAS_SENSITIVITY","LLMQUANT_VOL_SENSITIVITY",
+                          "LLMQUANT_SIGNAL_DECAY","LLMQUANT_SIGNAL_COOLDOWN_US",
+                          "LLMQUANT_MAX_SIGNAL_AGE_US","LLMQUANT_MIN_BIAS_THRESHOLD",
+                          "LLMQUANT_MAX_DRAWDOWN","LLMQUANT_MAX_SIGNALS_PER_SECOND",
+                          "LLMQUANT_STATS_PORT"})
+        unsetenv(v);
+#endif
+    EXPECT_EQ(cfg.load_from_env(), 0);
+}
+
 } // namespace
 } // namespace llmquant

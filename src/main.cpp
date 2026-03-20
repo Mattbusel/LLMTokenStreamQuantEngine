@@ -709,6 +709,9 @@ int main(int argc, char* argv[]) {
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)
                      << eng_stats.avg_signal_strength.load() << "\n"
+                 << "# HELP llmquant_latency_window_fill_ratio Fraction of sample window populated [0,1]\n"
+                 << "# TYPE llmquant_latency_window_fill_ratio gauge\n"
+                 << "llmquant_latency_window_fill_ratio " << std::fixed << std::setprecision(4) << latency_ctrl.get_window_fill_ratio() << "\n"
                  << "# HELP llmquant_latency_measurements_total Total latency samples recorded\n"
                  << "# TYPE llmquant_latency_measurements_total counter\n"
                  << "llmquant_latency_measurements_total " << stats.measurements << "\n"

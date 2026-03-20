@@ -1,4 +1,5 @@
 #include "LLMAdapter.h"
+#include <cmath>
 #include <fstream>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -235,6 +236,25 @@ void LLMAdapter::clear_custom_mappings() {
 
 bool LLMAdapter::contains_token(const std::string& token) const {
     return token_weights_.count(normalize_token(token)) > 0;
+}
+
+std::vector<std::pair<std::string, double>>
+LLMAdapter::top_tokens_by_sentiment(size_t n) const {
+    std::vector<std::pair<std::string, double>> result;
+    result.reserve(token_weights_.size());
+    for (const auto& [tok, weight] : token_weights_) {
+        result.emplace_back(tok, weight.sentiment_score);
+    }
+    // Partial sort: bring the top n (by |sentiment|) to the front in O(N log n).
+    size_t take = std::min(n, result.size());
+    std::partial_sort(result.begin(),
+                      result.begin() + static_cast<std::ptrdiff_t>(take),
+                      result.end(),
+                      [](const auto& a, const auto& b) {
+                          return std::fabs(a.second) > std::fabs(b.second);
+                      });
+    result.resize(take);
+    return result;
 }
 
 void LLMAdapter::initialize_default_mappings() {

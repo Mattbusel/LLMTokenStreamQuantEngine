@@ -47,6 +47,11 @@ struct TradeSignal {
 
     /// Weighting applied to the selected strategy (0.0 = ignore, 1.0 = full weight).
     double strategy_weight{0.0};
+
+    /// Composite quality score in [0.0, 1.0].
+    /// Computed as: confidence * clamp((|delta_bias_shift| + |volatility_adjustment|) / 2, 0, 1).
+    /// Higher = more confident and larger magnitude signal.
+    double signal_quality{0.0};
 };
 
 /**

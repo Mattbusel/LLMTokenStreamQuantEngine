@@ -165,6 +165,17 @@ public:
     PressureState get_pressure() const;
 
     /**
+     * @brief Return the fraction of the sample window currently populated, in [0.0, 1.0].
+     *
+     * Rises from 0.0 to 1.0 as measurements are recorded up to the configured
+     * sample_window size.  Once full, returns 1.0.  Useful for suppressing noisy
+     * percentile estimates before warm-up completes.
+     *
+     * @return Sample window fill ratio in [0.0, 1.0].
+     */
+    double get_window_fill_ratio() const;
+
+    /**
      * @brief Return the current exponential-backoff multiplier for source polling.
      *
      * Starts at 1.0x and increases up to 5.0x as composite pressure rises

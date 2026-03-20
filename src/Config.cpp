@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -367,6 +368,87 @@ void Config::stop_watching() {
     if (watcher_thread_.joinable()) {
         watcher_thread_.join();
     }
+}
+
+int Config::load_from_env() {
+#ifdef _MSC_VER
+#  pragma warning(push)
+#  pragma warning(disable: 4996)  // 'getenv': safe in single-process use; _dupenv_s requires free()
+#endif
+    // Helper lambdas for type-safe env-var parsing.
+    auto get_double = [](const char* name, double& out) -> bool {
+        const char* val = std::getenv(name);
+        if (!val || val[0] == '\0') return false;
+        try {
+            size_t pos;
+            double d = std::stod(val, &pos);
+            if (pos == 0 || !std::isfinite(d)) return false;
+            out = d;
+            return true;
+        } catch (...) { return false; }
+    };
+    auto get_int = [](const char* name, int& out) -> bool {
+        const char* val = std::getenv(name);
+        if (!val || val[0] == '\0') return false;
+        try {
+            size_t pos;
+            long l = std::stol(val, &pos);
+            if (pos == 0) return false;
+            out = static_cast<int>(l);
+            return true;
+        } catch (...) { return false; }
+    };
+    auto get_size_t = [](const char* name, size_t& out) -> bool {
+        const char* val = std::getenv(name);
+        if (!val || val[0] == '\0') return false;
+        try {
+            size_t pos;
+            unsigned long ul = std::stoul(val, &pos);
+            if (pos == 0) return false;
+            out = static_cast<size_t>(ul);
+            return true;
+        } catch (...) { return false; }
+    };
+    auto get_uint16 = [](const char* name, uint16_t& out) -> bool {
+        const char* val = std::getenv(name);
+        if (!val || val[0] == '\0') return false;
+        try {
+            size_t pos;
+            unsigned long ul = std::stoul(val, &pos);
+            if (pos == 0 || ul > 65535) return false;
+            out = static_cast<uint16_t>(ul);
+            return true;
+        } catch (...) { return false; }
+    };
+
+    int applied = 0;
+    std::lock_guard<std::mutex> lk(config_mutex_);
+
+    double d{}; int i{}; size_t sz{}; uint16_t u16{};
+
+    if (get_double("LLMQUANT_BIAS_SENSITIVITY", d) && d > 0.0)
+        { config_.trading.bias_sensitivity = d; ++applied; }
+    if (get_double("LLMQUANT_VOL_SENSITIVITY", d) && d > 0.0)
+        { config_.trading.volatility_sensitivity = d; ++applied; }
+    if (get_double("LLMQUANT_SIGNAL_DECAY", d) && d > 0.0 && d <= 1.0)
+        { config_.trading.signal_decay_rate = d; ++applied; }
+    if (get_int("LLMQUANT_SIGNAL_COOLDOWN_US", i) && i >= 0)
+        { config_.trading.signal_cooldown_us = i; ++applied; }
+    if (get_double("LLMQUANT_MAX_SIGNAL_AGE_US", d) && d >= 0.0)
+        { config_.trading.max_signal_age_us = d; ++applied; }
+    if (get_double("LLMQUANT_MIN_BIAS_THRESHOLD", d) && d >= 0.0)
+        { config_.trading.min_bias_threshold = d; ++applied; }
+    if (get_double("LLMQUANT_MAX_DRAWDOWN", d) && d >= 0.0)
+        { config_.risk_thresholds.max_drawdown = d; ++applied; }
+    if (get_size_t("LLMQUANT_MAX_SIGNALS_PER_SECOND", sz))
+        { config_.risk_thresholds.max_signals_per_second = sz; ++applied; }
+    if (get_uint16("LLMQUANT_STATS_PORT", u16) && u16 > 0)
+        { config_.metrics.stats_port = u16; ++applied; }
+
+#ifdef _MSC_VER
+#  pragma warning(pop)
+#endif
+    return applied;
 }
 
 std::string Config::to_summary_string() const {

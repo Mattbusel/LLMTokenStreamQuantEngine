@@ -123,6 +123,17 @@ public:
         return log_entries_.load(std::memory_order_relaxed);
     }
 
+    /**
+     * @brief Reset the log entry counter to zero.
+     *
+     * Useful at session boundaries to reuse the same logger without restarting
+     * the process.  Does NOT truncate or rotate the underlying log file.
+     * Thread-safe (atomic store with release ordering).
+     */
+    void reset_counters() noexcept {
+        log_entries_.store(0, std::memory_order_release);
+    }
+
 private:
     void initialize_loggers();
     void write_csv_header();

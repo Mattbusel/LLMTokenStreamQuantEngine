@@ -178,6 +178,12 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.spread_modifier = (std::fabs(signal.delta_bias_shift) > 0.5)
                                  ? -0.1 * signal.delta_bias_shift
                                  : 0.0;
+
+    // Composite quality: confidence × clamp((|bias| + |vol|) / 2, 0, 1).
+    double magnitude_avg = (std::fabs(signal.delta_bias_shift)
+                          + std::fabs(signal.volatility_adjustment)) * 0.5;
+    signal.signal_quality = signal.confidence
+                          * std::clamp(magnitude_avg, 0.0, 1.0);
     // Do NOT overwrite signal.confidence here — it must be set by the caller
     // (process_semantic_weight) before calling emit_signal().  Overwriting it
     // would silently discard any per-signal confidence already populated.

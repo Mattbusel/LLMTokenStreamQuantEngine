@@ -214,6 +214,12 @@ LatencyController::PressureState LatencyController::get_pressure() const {
     return pressure_;
 }
 
+double LatencyController::get_window_fill_ratio() const {
+    std::lock_guard<std::mutex> lock(samples_mutex_);
+    if (config_.sample_window == 0) return 0.0;
+    return static_cast<double>(sample_count_) / static_cast<double>(config_.sample_window);
+}
+
 double LatencyController::get_backoff_multiplier() const {
     std::lock_guard<std::mutex> lock(pressure_mutex_);
     return backoff_multiplier_;  // Protected by pressure_mutex_.

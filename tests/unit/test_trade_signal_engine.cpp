@@ -34,6 +34,38 @@ static TradeSignalEngine::Config make_config(
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// signal_quality field
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_signal_quality_in_unit_interval) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    SemanticWeight w{0.8, 0.9, 0.3, 0.9};
+    engine.process_semantic_weight(w);
+
+    EXPECT_GE(captured.signal_quality, 0.0) << "signal_quality must be >= 0";
+    EXPECT_LE(captured.signal_quality, 1.0) << "signal_quality must be <= 1";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_signal_quality_zero_for_zero_confidence) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    TradeSignal captured;
+    engine.set_signal_callback([&captured](const TradeSignal& s) { captured = s; });
+
+    SemanticWeight w{0.8, 0.0 /*zero confidence*/, 0.3, 0.5};
+    engine.process_semantic_weight(w);
+
+    EXPECT_DOUBLE_EQ(captured.signal_quality, 0.0)
+        << "signal_quality must be 0 when confidence is 0";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_process_bullish_weight_produces_positive_bias) {
     TradeSignalEngine engine(make_config());
     engine.set_backtest_mode(true);  // emit every token
