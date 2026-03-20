@@ -1074,5 +1074,41 @@ TEST(TradeSignalEngineTest, test_set_min_bias_threshold_suppresses_weak_signal) 
         << "weak signal below threshold must be suppressed";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 36: get_noise_filter_rate()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_get_noise_filter_rate_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_noise_filter_rate(), 0.0)
+        << "noise filter rate must be 0 before any tokens are processed";
+}
+
+TEST(TradeSignalEngineTest, test_get_noise_filter_rate_zero_when_no_noise_gate) {
+    // No min_bias_threshold — nothing should be noise-filtered.
+    auto cfg = make_config();
+    cfg.min_bias_threshold = 0.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.2, 0.8});
+    EXPECT_DOUBLE_EQ(engine.get_noise_filter_rate(), 0.0)
+        << "noise filter rate must be 0 when min_bias_threshold is disabled";
+}
+
+TEST(TradeSignalEngineTest, test_get_noise_filter_rate_one_when_all_filtered) {
+    // Set an impossibly high threshold so every token is noise-filtered.
+    auto cfg = make_config();
+    cfg.min_bias_threshold = 1e9;
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({0.01, 0.9, 0.01, 0.01});
+    EXPECT_DOUBLE_EQ(engine.get_noise_filter_rate(), 1.0)
+        << "noise filter rate must be 1.0 when all tokens are below the threshold";
+}
+
 } // namespace
 } // namespace llmquant

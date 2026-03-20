@@ -888,5 +888,41 @@ TEST(LLMAdapterTest, test_decay_all_weights_zero_zeroes_confidence) {
         << "decay_all_weights(0.0) must zero all confidence scores";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 36: batch_map_tokens_to_weights()
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_batch_map_tokens_empty_input_returns_empty) {
+    LLMAdapter adapter;
+    auto results = adapter.batch_map_tokens_to_weights({});
+    EXPECT_TRUE(results.empty())
+        << "batch_map_tokens_to_weights must return empty for empty input";
+}
+
+TEST(LLMAdapterTest, test_batch_map_tokens_count_matches_input) {
+    LLMAdapter adapter;
+    auto results = adapter.batch_map_tokens_to_weights({"bullish", "bearish", "neutral_word"});
+    EXPECT_EQ(results.size(), 3u)
+        << "result count must equal input token count";
+}
+
+TEST(LLMAdapterTest, test_batch_map_tokens_known_token_matches_single_lookup) {
+    LLMAdapter adapter;
+    // "bullish" is in the default dictionary.
+    SemanticWeight single = adapter.map_token_to_weight("bullish");
+    auto batch = adapter.batch_map_tokens_to_weights({"bullish"});
+    ASSERT_EQ(batch.size(), 1u);
+    EXPECT_DOUBLE_EQ(batch[0].sentiment_score,  single.sentiment_score);
+    EXPECT_DOUBLE_EQ(batch[0].confidence_score, single.confidence_score);
+}
+
+TEST(LLMAdapterTest, test_batch_map_tokens_unknown_token_returns_neutral) {
+    LLMAdapter adapter;
+    auto batch = adapter.batch_map_tokens_to_weights({"completely_unknown_xyz123"});
+    ASSERT_EQ(batch.size(), 1u);
+    // Unknown tokens must yield a neutral (zero) weight.
+    EXPECT_DOUBLE_EQ(batch[0].sentiment_score, 0.0);
+}
+
 } // namespace
 } // namespace llmquant
