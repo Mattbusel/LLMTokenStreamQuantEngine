@@ -407,4 +407,17 @@ std::vector<bool> RiskManager::evaluate_batch(const std::vector<TradeSignal>& si
     return results;
 }
 
+double RiskManager::get_rejection_rate() const noexcept {
+    const auto& s = stats_;
+    uint64_t passed  = s.signals_passed.load(std::memory_order_relaxed);
+    uint64_t blocked = s.signals_blocked_magnitude.load(std::memory_order_relaxed)
+                     + s.signals_blocked_confidence.load(std::memory_order_relaxed)
+                     + s.signals_blocked_rate.load(std::memory_order_relaxed)
+                     + s.signals_blocked_drawdown.load(std::memory_order_relaxed)
+                     + s.signals_blocked_position.load(std::memory_order_relaxed);
+    uint64_t total = passed + blocked;
+    if (total == 0) return 0.0;
+    return static_cast<double>(blocked) / static_cast<double>(total);
+}
+
 } // namespace llmquant

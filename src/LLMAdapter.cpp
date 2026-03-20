@@ -585,6 +585,11 @@ size_t LLMAdapter::load_dictionary_from_tsv(const std::string& tsv_data) {
     return imported;
 }
 
+double LLMAdapter::get_sentiment_range() const {
+    if (token_weights_.empty()) return 0.0;
+    return get_max_sentiment() - get_min_sentiment();
+}
+
 double LLMAdapter::get_min_sentiment() const {
     if (token_weights_.empty()) return 0.0;
     double mn = std::numeric_limits<double>::max();
@@ -596,6 +601,34 @@ double LLMAdapter::get_max_sentiment() const {
     if (token_weights_.empty()) return 0.0;
     double mx = std::numeric_limits<double>::lowest();
     for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.sentiment_score > mx) mx = wt.sentiment_score; }
+    return mx;
+}
+
+double LLMAdapter::get_min_volatility() const {
+    if (token_weights_.empty()) return 0.0;
+    double mn = std::numeric_limits<double>::max();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.volatility_score < mn) mn = wt.volatility_score; }
+    return mn;
+}
+
+double LLMAdapter::get_max_volatility() const {
+    if (token_weights_.empty()) return 0.0;
+    double mx = std::numeric_limits<double>::lowest();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.volatility_score > mx) mx = wt.volatility_score; }
+    return mx;
+}
+
+double LLMAdapter::get_min_directional_bias() const {
+    if (token_weights_.empty()) return 0.0;
+    double mn = std::numeric_limits<double>::max();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.directional_bias < mn) mn = wt.directional_bias; }
+    return mn;
+}
+
+double LLMAdapter::get_max_directional_bias() const {
+    if (token_weights_.empty()) return 0.0;
+    double mx = std::numeric_limits<double>::lowest();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.directional_bias > mx) mx = wt.directional_bias; }
     return mx;
 }
 

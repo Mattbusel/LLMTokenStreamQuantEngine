@@ -550,6 +550,18 @@ public:
         return util > 1.0 ? 1.0 : util;
     }
 
+    /**
+     * @brief Return the fraction of evaluated signals that were blocked, in [0.0, 1.0].
+     *
+     * Computed as total_blocked / (signals_passed + total_blocked).
+     * Returns 0.0 if no signals have been evaluated.
+     *
+     * Thread-safe (reads atomic counters).
+     *
+     * @return Rejection rate in [0.0, 1.0].
+     */
+    double get_rejection_rate() const noexcept;
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);

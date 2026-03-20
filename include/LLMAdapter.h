@@ -413,6 +413,52 @@ public:
      */
     double get_max_sentiment() const;
 
+    /**
+     * @brief Return the spread between the most bullish and most bearish token sentiments.
+     *
+     * Computed as get_max_sentiment() - get_min_sentiment().
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Sentiment range (always >= 0).
+     */
+    double get_sentiment_range() const;
+
+    /**
+     * @brief Return the minimum volatility_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Minimum volatility_score in [0.0, 1.0].
+     */
+    double get_min_volatility() const;
+
+    /**
+     * @brief Return the maximum volatility_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Maximum volatility_score in [0.0, 1.0].
+     */
+    double get_max_volatility() const;
+
+    /**
+     * @brief Return the minimum directional_bias across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Minimum directional_bias in [-1.0, 1.0].
+     */
+    double get_min_directional_bias() const;
+
+    /**
+     * @brief Return the maximum directional_bias across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Maximum directional_bias in [-1.0, 1.0].
+     */
+    double get_max_directional_bias() const;
+
     std::string export_dictionary() const;
 
     /**

@@ -328,7 +328,11 @@ static bool is_chunk_size_line(const std::string& s) {
 
 void LLMStreamClient::reader_thread() {
     // Loop: send one request, stream the response, wait loop_interval, repeat.
+    bool first_connection = true;
     while (running_.load()) {
+        if (!first_connection)
+            reconnect_count_.fetch_add(1, std::memory_order_relaxed);
+        first_connection = false;
         // Fresh TCP (+TLS) connection per request — OpenAI closes after [DONE].
         if (!open_socket()) {
             if (done_cb_) done_cb_("connect failed");
@@ -472,6 +476,7 @@ void LLMStreamClient::reader_thread() {
                     if (payload == "[DONE]") { stream_done = true; break; }
                     std::string token = parse_sse_delta(payload);
                     if (!token.empty() && token_cb_) {
+                        tokens_received_.fetch_add(1, std::memory_order_relaxed);
                         try { token_cb_(token); } catch (const std::exception& e) {
                             spdlog::error("[stream] token_cb_ threw: {}", e.what());
                         } catch (...) {

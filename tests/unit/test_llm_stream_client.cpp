@@ -154,3 +154,15 @@ TEST(LLMStreamClientTest, KeepAliveReconnectStub) {
     SUCCEED();
 }
 
+TEST(LLMStreamClientTest, tokens_received_zero_before_connect) {
+    LLMStreamClient client(refused_config());
+    EXPECT_EQ(client.tokens_received(), 0u)
+        << "tokens_received must be 0 before connect is called";
+}
+
+TEST(LLMStreamClientTest, reconnect_count_zero_before_connect) {
+    LLMStreamClient client(refused_config());
+    EXPECT_EQ(client.reconnect_count(), 0u)
+        << "reconnect_count must be 0 before any connection attempts";
+}
+

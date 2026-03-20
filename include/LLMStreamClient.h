@@ -125,6 +125,28 @@ public:
     bool is_running() const { return running_.load(); }
 
     /**
+     * @brief Return the total number of non-empty tokens received since connect().
+     *
+     * Thread-safe (atomic read).
+     *
+     * @return Total tokens emitted via the token callback.
+     */
+    uint64_t tokens_received() const noexcept {
+        return tokens_received_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the number of times the reader thread has reconnected.
+     *
+     * Thread-safe (atomic read).
+     *
+     * @return Reconnect attempt count since connect().
+     */
+    uint64_t reconnect_count() const noexcept {
+        return reconnect_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Parse one SSE `data:` line and extract the token delta.
      *
      * Exposed as public static for unit testing of the parsing logic without
@@ -202,7 +224,9 @@ private:
     // after the failing call.  When stop() closes the socket from the main
     // thread while the reader thread is in recv(), the reader thread captures
     // the WSA error here atomically so it can be logged after the join.
-    std::atomic<int> last_socket_error_{0};
+    std::atomic<int>      last_socket_error_{0};
+    std::atomic<uint64_t> tokens_received_{0};
+    std::atomic<uint64_t> reconnect_count_{0};
 
 #ifdef LLMQUANT_TLS_ENABLED
     void* ssl_ctx_{nullptr};   ///< SSL_CTX* — opaque to avoid OpenSSL headers leaking.
