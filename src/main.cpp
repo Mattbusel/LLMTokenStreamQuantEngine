@@ -444,6 +444,7 @@ int main(int argc, char* argv[]) {
     if (dry_run)
         std::cout << "  DRY-RUN : signals suppressed — dictionary coverage mode\n";
     std::cout << DIV1 << "\n";
+    std::cout << config.to_summary_string() << "\n";
     std::cout << "  TIME(ms)     BIAS      VOL       LATENCY   GATE\n";
     std::cout << DIV2;
 
@@ -584,6 +585,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_aged_out_total Signals suppressed by the staleness guard\n"
                  << "# TYPE llmquant_signals_aged_out_total counter\n"
                  << "llmquant_signals_aged_out_total " << eng_stats.signals_aged_out.load() << "\n"
+                 << "# HELP llmquant_accumulator_clamped_total Times the bias accumulator cap was applied\n"
+                 << "# TYPE llmquant_accumulator_clamped_total counter\n"
+                 << "llmquant_accumulator_clamped_total " << eng_stats.accumulator_clamped.load() << "\n"
                  << "# HELP llmquant_memory_sink_size Current number of signals buffered in the in-memory sink\n"
                  << "# TYPE llmquant_memory_sink_size gauge\n"
                  << "llmquant_memory_sink_size " << memory_sink->size() << "\n"
@@ -719,8 +723,25 @@ int main(int argc, char* argv[]) {
                  << "llmquant_max_accumulated_bias " << trade_engine.get_config().max_accumulated_bias << "\n"
                  << "# HELP llmquant_p5_latency_us 5th-percentile latency of the sample window (microseconds)\n"
                  << "# TYPE llmquant_p5_latency_us gauge\n"
-                 << "llmquant_p5_latency_us " << stats.p5_latency.count() << "\n"
-                 << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
+                 << "llmquant_p5_latency_us " << stats.p5_latency.count() << "\n";
+            // Prometheus native histogram — cumulative latency buckets.
+            {
+                auto hb = latency_ctrl.histogram_buckets();
+                snap << "# HELP llmquant_token_latency_us Cumulative latency histogram of token-to-signal processing time (µs)\n"
+                     << "# TYPE llmquant_token_latency_us histogram\n";
+                uint64_t last_count = 0;
+                for (const auto& b : hb) {
+                    if (std::isinf(b.upper_bound_us)) {
+                        snap << "llmquant_token_latency_us_bucket{le=\"+Inf\"} " << b.count << "\n";
+                    } else {
+                        snap << "llmquant_token_latency_us_bucket{le=\"" << b.upper_bound_us << "\"} " << b.count << "\n";
+                    }
+                    last_count = b.count;
+                }
+                snap << "llmquant_token_latency_us_count " << last_count << "\n"
+                     << "llmquant_token_latency_us_sum "   << stats.avg_latency.count() * static_cast<long long>(stats.measurements) << "\n";
+            }
+            snap << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
                  << "# TYPE llmquant_drawdown_cumulative_bias gauge\n"
                  << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n"
                  << "# HELP llmquant_risk_pass_rate_pct Percentage of signals that passed all risk gates (0-100)\n"
@@ -827,6 +848,7 @@ int main(int argc, char* argv[]) {
                   << ads.cache_hits << "/" << ads.tokens_processed << ")\n";
     }
     std::cout << "  Signals aged out : " << trade_engine.get_stats().signals_aged_out.load() << "\n";
+    std::cout << "  Accum. clamped   : " << trade_engine.get_stats().accumulator_clamped.load() << "\n";
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
     std::cout << "  ---------------------------------------------------------\n\n";
 

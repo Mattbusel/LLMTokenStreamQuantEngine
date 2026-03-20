@@ -36,10 +36,17 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         int retries = 0;
         do {
             desired_bias = expected_bias * config_.signal_decay_rate + bias_contribution;
-            if (config_.max_accumulated_bias > 0.0)
-                desired_bias = std::clamp(desired_bias,
-                                          -config_.max_accumulated_bias,
-                                           config_.max_accumulated_bias);
+            if (config_.max_accumulated_bias > 0.0) {
+                double clamped = std::clamp(desired_bias,
+                                             -config_.max_accumulated_bias,
+                                              config_.max_accumulated_bias);
+                if (clamped != desired_bias) {
+                    desired_bias = clamped;
+                    if (stats_.accumulator_clamped.load(std::memory_order_relaxed) <
+                            std::numeric_limits<uint64_t>::max() - 1)
+                        stats_.accumulator_clamped.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
             if (++retries > 8) { std::this_thread::yield(); retries = 0; }
         } while (!accumulated_bias_.compare_exchange_weak(
                      expected_bias, desired_bias,
@@ -222,6 +229,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.signals_generated.store(0, std::memory_order_relaxed);
     stats_.signals_suppressed.store(0, std::memory_order_relaxed);
     stats_.signals_aged_out.store(0, std::memory_order_relaxed);
+    stats_.accumulator_clamped.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
 }
 

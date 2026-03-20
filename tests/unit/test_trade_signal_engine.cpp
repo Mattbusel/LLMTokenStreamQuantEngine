@@ -447,6 +447,58 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_clamps
 // add_sink_with_filter
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// accumulator_clamped counter
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_accumulator_clamped_increments_on_cap) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.max_accumulated_bias = 1.0;
+    cfg.min_bias_threshold   = 100.0;  // suppress emissions → no halving
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    // First token: desired_bias = 0*0.999 + 1.0 = 1.0. clamp(1.0, -1.0, 1.0) = 1.0 → no clamp.
+    // Second token: desired_bias = 1.0*0.999 + 1.0 = 1.999. Clamped to 1.0 → counter++.
+    for (int i = 0; i < 10; ++i) {
+        engine.process_semantic_weight(strong);
+    }
+    EXPECT_GT(engine.get_stats().accumulator_clamped.load(), uint64_t{0})
+        << "accumulator_clamped must increment when cap is applied";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_accumulator_clamped_zero_when_cap_disabled) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.5, 0);
+    cfg.max_accumulated_bias = 0.0;  // disabled
+    cfg.min_bias_threshold   = 100.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    for (int i = 0; i < 10; ++i) {
+        engine.process_semantic_weight(strong);
+    }
+    EXPECT_EQ(engine.get_stats().accumulator_clamped.load(), uint64_t{0})
+        << "accumulator_clamped must remain 0 when max_accumulated_bias is disabled";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_accumulator_clamped_reset_clears_counter) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.max_accumulated_bias = 1.0;
+    cfg.min_bias_threshold   = 100.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    for (int i = 0; i < 5; ++i) engine.process_semantic_weight(strong);
+    ASSERT_GT(engine.get_stats().accumulator_clamped.load(), uint64_t{0});
+
+    engine.reset();
+    EXPECT_EQ(engine.get_stats().accumulator_clamped.load(), uint64_t{0})
+        << "accumulator_clamped must be 0 after reset()";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_filtered_sink_only_receives_matching_signals) {
     TradeSignalEngine engine(make_config());
     engine.set_backtest_mode(true);
