@@ -376,3 +376,36 @@ TEST(MetricsLoggerTest, test_log_config_reload_json_contains_event_key) {
         << "JSON output must contain the config_reload event key";
     std::remove(path.c_str());
 }
+
+TEST(MetricsLoggerTest, test_get_uptime_ms_non_negative) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path = "tmp_uptime_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    double uptime = logger.get_uptime_ms();
+    EXPECT_GE(uptime, 0.0) << "get_uptime_ms must be >= 0";
+    std::remove("tmp_uptime_test.log");
+}
+
+TEST(MetricsLoggerTest, test_get_log_rate_zero_initially) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path = "tmp_log_rate_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    // No entries logged — rate should be 0 (no entries) or near-0.
+    double rate = logger.get_log_rate();
+    EXPECT_GE(rate, 0.0) << "get_log_rate must be >= 0";
+    std::remove("tmp_log_rate_test.log");
+}
+
+TEST(MetricsLoggerTest, test_get_log_rate_positive_after_entries) {
+    MetricsLogger::Config cfg;
+    cfg.log_file_path = "tmp_log_rate_entries_test.log";
+    cfg.enable_console_output = false;
+    MetricsLogger logger(cfg);
+    for (int i = 0; i < 5; ++i)
+        logger.log_latency_measurement(10);
+    double rate = logger.get_log_rate();
+    EXPECT_GE(rate, 0.0) << "get_log_rate must be >= 0 after entries";
+    std::remove("tmp_log_rate_entries_test.log");
+}

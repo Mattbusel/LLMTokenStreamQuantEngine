@@ -163,6 +163,38 @@ public:
         log_entries_.store(0, std::memory_order_release);
     }
 
+    /**
+     * @brief Return elapsed milliseconds since the logger was constructed.
+     *
+     * Useful for computing log throughput (entries / uptime_ms).
+     * Thread-safe (construction_time_ is const after construction).
+     *
+     * @return Uptime in milliseconds.
+     */
+    double get_uptime_ms() const noexcept {
+        auto now = std::chrono::high_resolution_clock::now();
+        return static_cast<double>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - construction_time_).count());
+    }
+
+    /**
+     * @brief Return the average log entry rate since construction.
+     *
+     * Computed as log_entries / uptime_seconds.  Returns 0.0 if less than
+     * 1 ms has elapsed.
+     *
+     * Thread-safe (atomic read + const construction_time_).
+     *
+     * @return Log entries per second since construction.
+     */
+    double get_log_rate() const noexcept {
+        double uptime_ms = get_uptime_ms();
+        if (uptime_ms < 1.0) return 0.0;
+        return static_cast<double>(
+            log_entries_.load(std::memory_order_relaxed)) / (uptime_ms / 1000.0);
+    }
+
 private:
     void initialize_loggers();
     void write_csv_header();
@@ -171,6 +203,8 @@ private:
     std::shared_ptr<spdlog::logger> file_logger_;
     std::shared_ptr<spdlog::logger> console_logger_;
     std::atomic<uint64_t> log_entries_{0};
+    std::chrono::high_resolution_clock::time_point construction_time_{
+        std::chrono::high_resolution_clock::now()};
 };
 
 } // namespace llmquant

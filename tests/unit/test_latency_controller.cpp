@@ -949,5 +949,32 @@ TEST(LatencyControllerTest, test_get_throughput_estimate_non_negative_after_reco
         << "throughput estimate must be >= 0 after recording measurements";
 }
 
+TEST(LatencyControllerTest, test_format_stats_no_data_message) {
+    LatencyController lc(make_config());
+    std::string s = lc.format_stats();
+    EXPECT_NE(s.find("n=0"), std::string::npos)
+        << "format_stats() must indicate zero measurements when none recorded";
+}
+
+TEST(LatencyControllerTest, test_format_stats_contains_key_fields_after_recording) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 10; ++i)
+        lc.record_latency(std::chrono::microseconds{5});
+    std::string s = lc.format_stats();
+    EXPECT_NE(s.find("p99="), std::string::npos) << "format_stats must contain p99";
+    EXPECT_NE(s.find("avg="),  std::string::npos) << "format_stats must contain avg";
+    EXPECT_NE(s.find("min="),  std::string::npos) << "format_stats must contain min";
+    EXPECT_NE(s.find("max="),  std::string::npos) << "format_stats must contain max";
+}
+
+TEST(LatencyControllerTest, test_format_stats_measurement_count_matches) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 7; ++i)
+        lc.record_latency(std::chrono::microseconds{3});
+    std::string s = lc.format_stats();
+    EXPECT_NE(s.find("n=7"), std::string::npos)
+        << "format_stats measurement count must match recorded count";
+}
+
 } // namespace
 } // namespace llmquant
