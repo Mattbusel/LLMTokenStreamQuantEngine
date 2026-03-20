@@ -470,5 +470,60 @@ TEST(LLMAdapterTest, test_llm_adapter_top_tokens_highest_sentiment_is_known_toke
         << "The highest-|sentiment| token must have |sentiment| >= 0.7";
 }
 
+// ---------------------------------------------------------------------------
+// remove_token_mapping
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_remove_existing_token_returns_true) {
+    LLMAdapter adapter;
+    ASSERT_TRUE(adapter.contains_token("crash"));
+    bool removed = adapter.remove_token_mapping("crash");
+    EXPECT_TRUE(removed) << "Removing an existing token must return true";
+    EXPECT_FALSE(adapter.contains_token("crash")) << "Token must be absent after removal";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_remove_nonexistent_token_returns_false) {
+    LLMAdapter adapter;
+    bool removed = adapter.remove_token_mapping("__no_such_token__");
+    EXPECT_FALSE(removed) << "Removing a non-existent token must return false";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_remove_then_add_mapping_works) {
+    LLMAdapter adapter;
+    adapter.remove_token_mapping("crash");
+    SemanticWeight custom{0.5, 0.8, 0.1, 0.6};
+    adapter.add_token_mapping("crash", custom);
+    SemanticWeight retrieved;
+    ASSERT_TRUE(adapter.get_token_mapping("crash", retrieved));
+    EXPECT_DOUBLE_EQ(retrieved.sentiment_score, 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// get_token_mapping
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_get_token_mapping_known_token) {
+    LLMAdapter adapter;
+    SemanticWeight w;
+    bool found = adapter.get_token_mapping("crash", w);
+    EXPECT_TRUE(found) << "Known token must be found";
+    EXPECT_LT(w.sentiment_score, 0.0) << "crash must have negative sentiment";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_get_token_mapping_unknown_token_returns_false) {
+    LLMAdapter adapter;
+    SemanticWeight w;
+    bool found = adapter.get_token_mapping("__unknown__", w);
+    EXPECT_FALSE(found);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_get_token_mapping_case_insensitive) {
+    LLMAdapter adapter;
+    SemanticWeight lower, upper;
+    ASSERT_TRUE(adapter.get_token_mapping("crash", lower));
+    ASSERT_TRUE(adapter.get_token_mapping("CRASH", upper));
+    EXPECT_DOUBLE_EQ(lower.sentiment_score, upper.sentiment_score);
+}
+
 } // namespace
 } // namespace llmquant

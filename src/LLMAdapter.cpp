@@ -238,6 +238,17 @@ bool LLMAdapter::contains_token(const std::string& token) const {
     return token_weights_.count(normalize_token(token)) > 0;
 }
 
+bool LLMAdapter::remove_token_mapping(const std::string& token) {
+    return token_weights_.erase(normalize_token(token)) > 0;
+}
+
+bool LLMAdapter::get_token_mapping(const std::string& token, SemanticWeight& weight) const {
+    auto it = token_weights_.find(normalize_token(token));
+    if (it == token_weights_.end()) return false;
+    weight = it->second;
+    return true;
+}
+
 std::vector<std::pair<std::string, double>>
 LLMAdapter::top_tokens_by_sentiment(size_t n) const {
     std::vector<std::pair<std::string, double>> result;
