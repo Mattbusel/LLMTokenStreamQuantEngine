@@ -673,5 +673,36 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_zero_d
         << "Without cap, accumulator should exceed 1.0 after many strongly-bullish tokens";
 }
 
+// ---------------------------------------------------------------------------
+// tokens_processed counter
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_tokens_processed_increments_per_token) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    EXPECT_EQ(engine.get_stats().tokens_processed.load(), 0u);
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(engine.get_stats().tokens_processed.load(), 1u);
+
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(engine.get_stats().tokens_processed.load(), 3u);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_tokens_processed_resets_on_reset) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.8};
+    for (int i = 0; i < 10; ++i) engine.process_semantic_weight(w);
+    ASSERT_EQ(engine.get_stats().tokens_processed.load(), 10u);
+
+    engine.reset();
+    EXPECT_EQ(engine.get_stats().tokens_processed.load(), 0u);
+}
+
 } // namespace
 } // namespace llmquant

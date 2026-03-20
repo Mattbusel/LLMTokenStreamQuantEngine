@@ -110,6 +110,7 @@ public:
         std::atomic<uint64_t> signals_suppressed{0};
         std::atomic<uint64_t> signals_aged_out{0};    ///< Signals suppressed by staleness guard.
         std::atomic<uint64_t> accumulator_clamped{0}; ///< Times max_accumulated_bias cap was applied.
+        std::atomic<uint64_t> tokens_processed{0};    ///< Total process_semantic_weight() calls since last reset.
         std::atomic<double>   avg_signal_strength{0.0};
         std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
 
@@ -121,6 +122,7 @@ public:
             , signals_suppressed{other.signals_suppressed.load()}
             , signals_aged_out{other.signals_aged_out.load()}
             , accumulator_clamped{other.accumulator_clamped.load()}
+            , tokens_processed{other.tokens_processed.load()}
             , avg_signal_strength{other.avg_signal_strength.load()}
             , peak_bias{other.peak_bias.load()} {}
 
@@ -131,6 +133,7 @@ public:
                 signals_suppressed.store(other.signals_suppressed.load());
                 signals_aged_out.store(other.signals_aged_out.load());
                 accumulator_clamped.store(other.accumulator_clamped.load());
+                tokens_processed.store(other.tokens_processed.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
                 peak_bias.store(other.peak_bias.load());
             }

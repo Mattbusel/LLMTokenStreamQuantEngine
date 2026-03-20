@@ -24,6 +24,9 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     // Record start time for latency_us population in emit_signal().
     processing_start_ = std::chrono::high_resolution_clock::now();
 
+    if (stats_.tokens_processed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+        stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
+
     // Apply sensitivity scaling
     double bias_contribution = weight.directional_bias * weight.confidence_score * config_.bias_sensitivity;
     double vol_contribution = weight.volatility_score * weight.confidence_score * config_.volatility_sensitivity;
@@ -247,6 +250,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.signals_suppressed.store(0, std::memory_order_relaxed);
     stats_.signals_aged_out.store(0, std::memory_order_relaxed);
     stats_.accumulator_clamped.store(0, std::memory_order_relaxed);
+    stats_.tokens_processed.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
 }

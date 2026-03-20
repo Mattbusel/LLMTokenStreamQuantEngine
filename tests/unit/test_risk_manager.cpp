@@ -609,6 +609,46 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_block_returns_reaso
 // ============================================================
 // Test: evaluate_with_reason() — each rejection reason maps correctly.
 // ============================================================
+// ============================================================
+// Test: get_drawdown_budget_remaining() returns correct headroom.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_full_at_start) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown = 5.0;
+    RiskManager rm(cfg);
+
+    // No signals yet — full budget available.
+    EXPECT_DOUBLE_EQ(rm.get_drawdown_budget_remaining(), 5.0);
+}
+
+TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_decreases_on_signal) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown           = 5.0;
+    cfg.max_signals_per_second = 1000;
+    RiskManager rm(cfg);
+
+    auto sig = make_signal(1.0, 0.1, 0.05, 0.8);
+    rm.evaluate(sig);  // cumulative_bias = 1.0
+
+    double remaining = rm.get_drawdown_budget_remaining();
+    // max_drawdown(5.0) - |cumulative_bias(1.0)| = 4.0
+    EXPECT_NEAR(remaining, 4.0, 1e-9);
+}
+
+TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_clamps_at_zero) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_drawdown           = 0.1;
+    cfg.max_signals_per_second = 1000;
+    cfg.disable_drawdown_gate  = true;  // bypass gate so we can accumulate beyond limit
+    RiskManager rm(cfg);
+
+    // Accumulate 3 * 0.4 = 1.2 bias >> 0.1 max_drawdown.
+    for (int i = 0; i < 3; ++i) rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));
+
+    // Budget must clamp at 0.0, not go negative.
+    EXPECT_DOUBLE_EQ(rm.get_drawdown_budget_remaining(), 0.0);
+}
+
 TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_confidence_reason) {
     RiskManager rm(default_config());
     std::string reason;

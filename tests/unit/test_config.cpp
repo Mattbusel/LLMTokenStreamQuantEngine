@@ -665,11 +665,11 @@ TEST(ConfigTest, test_config_load_from_env_multiple_vars_returns_correct_count) 
     setenv("LLMQUANT_SIGNAL_DECAY",     "0.9", 1);
 #endif
     Config cfg;
-    cfg.load("../config.yaml");
+    cfg.load_from_file("../config.yaml");
     int count = cfg.load_from_env();
     EXPECT_GE(count, 3) << "At least 3 env vars should have been applied";
 
-    const auto& t = cfg.get().trading;
+    const auto& t = cfg.get_config().trading;
     EXPECT_DOUBLE_EQ(t.bias_sensitivity,      2.5);
     EXPECT_DOUBLE_EQ(t.volatility_sensitivity, 1.5);
     EXPECT_DOUBLE_EQ(t.signal_decay_rate,      0.9);
@@ -692,11 +692,12 @@ TEST(ConfigTest, test_config_load_from_env_nan_value_is_ignored) {
     setenv("LLMQUANT_BIAS_SENSITIVITY", "nan", 1);
 #endif
     Config cfg;
-    cfg.load("../config.yaml");
-    double before = cfg.get().trading.bias_sensitivity;
+    cfg.load_from_file("../config.yaml");
+    double before = cfg.get_config().trading.bias_sensitivity;
     int count = cfg.load_from_env();
     // NaN is not finite — load_from_env must skip it.
-    EXPECT_NEAR(cfg.get().trading.bias_sensitivity, before, 1e-9);
+    const double after = cfg.get_config().trading.bias_sensitivity;
+    EXPECT_DOUBLE_EQ(after, before);
     EXPECT_EQ(count, 0);
 #ifdef _WIN32
     _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");

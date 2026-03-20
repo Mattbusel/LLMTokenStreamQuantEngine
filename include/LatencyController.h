@@ -51,6 +51,8 @@ public:
         double jitter_ms{0.0};
         /** @brief Total number of measurements recorded since construction or last reset. */
         uint64_t measurements{0};
+        /** @brief Number of samples that exceeded the configured target_latency. */
+        uint64_t target_breaches{0};
     };
 
     /**
@@ -223,6 +225,7 @@ private:
     std::atomic<uint64_t> total_latency_us_{0};
     std::atomic<uint64_t> min_latency_us_{UINT64_MAX};
     std::atomic<uint64_t> max_latency_us_{0};
+    std::atomic<uint64_t> target_breaches_{0};
 
     std::vector<std::chrono::microseconds> latency_samples_;    ///< Ring buffer, size == config_.sample_window.
     mutable std::vector<std::chrono::microseconds> percentile_scratch_;  ///< Reused buffer for percentile calc.

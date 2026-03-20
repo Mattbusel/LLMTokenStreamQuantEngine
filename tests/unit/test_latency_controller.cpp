@@ -488,5 +488,41 @@ TEST(LatencyControllerTest, test_histogram_buckets_empty_when_profiling_disabled
     }
 }
 
+// ---------------------------------------------------------------------------
+// target_breaches counter
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_target_breaches_zero_when_all_below_target) {
+    // target_latency = 10 µs; record samples all at or below target.
+    LatencyController lc(make_config());  // target = 10 µs
+    for (int i = 1; i <= 10; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});  // all <= 10 µs
+    }
+    EXPECT_EQ(lc.get_stats().target_breaches, 0u)
+        << "No breaches when all samples <= target_latency";
+}
+
+TEST(LatencyControllerTest, test_target_breaches_counts_samples_above_target) {
+    LatencyController lc(make_config());  // target = 10 µs
+    lc.record_latency(std::chrono::microseconds{5});   // below target
+    lc.record_latency(std::chrono::microseconds{10});  // exactly at target — not a breach
+    lc.record_latency(std::chrono::microseconds{11});  // above — breach
+    lc.record_latency(std::chrono::microseconds{50});  // above — breach
+    lc.record_latency(std::chrono::microseconds{100}); // above — breach
+
+    EXPECT_EQ(lc.get_stats().target_breaches, 3u)
+        << "Only samples strictly above target_latency count as breaches";
+}
+
+TEST(LatencyControllerTest, test_target_breaches_cleared_by_reset_stats) {
+    LatencyController lc(make_config());  // target = 10 µs
+    lc.record_latency(std::chrono::microseconds{100});  // breach
+    ASSERT_GT(lc.get_stats().target_breaches, 0u);
+
+    lc.reset_stats();
+    EXPECT_EQ(lc.get_stats().target_breaches, 0u)
+        << "target_breaches must be zero after reset_stats()";
+}
+
 } // namespace
 } // namespace llmquant

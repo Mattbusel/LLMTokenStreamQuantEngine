@@ -34,6 +34,9 @@ void LatencyController::record_latency(std::chrono::microseconds latency) {
         total_measurements_.fetch_add(1, std::memory_order_relaxed);
     if (total_latency_us_.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - latency_us)
         total_latency_us_.fetch_add(latency_us, std::memory_order_relaxed);
+
+    if (latency_us > static_cast<uint64_t>(config_.target_latency.count()))
+        target_breaches_.fetch_add(1, std::memory_order_relaxed);
     
     uint64_t current_min = min_latency_us_.load();
     {
@@ -70,10 +73,11 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
         return stats;
     }
     
-    stats.avg_latency = std::chrono::microseconds(total_latency_us_.load() / measurements);
-    stats.min_latency = std::chrono::microseconds(min_latency_us_.load());
-    stats.max_latency = std::chrono::microseconds(max_latency_us_.load());
-    stats.measurements = measurements;
+    stats.avg_latency     = std::chrono::microseconds(total_latency_us_.load() / measurements);
+    stats.min_latency     = std::chrono::microseconds(min_latency_us_.load());
+    stats.max_latency     = std::chrono::microseconds(max_latency_us_.load());
+    stats.measurements    = measurements;
+    stats.target_breaches = target_breaches_.load();
     
     // Calculate percentiles from samples
     if (config_.enable_profiling) {
@@ -176,6 +180,7 @@ void LatencyController::reset_stats() {
     total_latency_us_ = 0;
     min_latency_us_ = UINT64_MAX;
     max_latency_us_ = 0;
+    target_breaches_ = 0;
 
     std::lock_guard<std::mutex> lock(samples_mutex_);
     std::fill(latency_samples_.begin(), latency_samples_.end(),
