@@ -341,6 +341,16 @@ double RiskManager::get_rate_limit_utilization() const {
     return util > 1.0 ? 1.0 : util;
 }
 
+double RiskManager::get_signals_per_second() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto now     = std::chrono::high_resolution_clock::now();
+    double elapsed_ms = static_cast<double>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - rate_window_start_).count());
+    if (elapsed_ms < 1.0) return 0.0;
+    return static_cast<double>(signals_in_window_) / (elapsed_ms / 1000.0);
+}
+
 std::vector<bool> RiskManager::evaluate_batch(const std::vector<TradeSignal>& signals) {
     std::vector<bool> results;
     results.reserve(signals.size());

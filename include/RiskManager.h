@@ -413,6 +413,19 @@ public:
     Snapshot snapshot() const;
 
     /**
+     * @brief Return the approved-signal rate in the current rate-limit window.
+     *
+     * Computes signals_in_window_ / elapsed_seconds since the window last reset.
+     * Returns 0.0 if elapsed time is less than 1 millisecond (avoids
+     * divide-by-near-zero on the very first call).
+     *
+     * Thread-safe (acquires mutex_).
+     *
+     * @return Approved signals per second in the current rate-limit window.
+     */
+    double get_signals_per_second() const;
+
+    /**
      * @brief Evaluate a batch of signals in order, returning one result per signal.
      *
      * Equivalent to calling evaluate() for each element but cheaper when all

@@ -855,5 +855,38 @@ TEST(LLMAdapterTest, test_load_dictionary_from_tsv_skips_malformed_lines) {
         << "only well-formed lines must be imported";
 }
 
+TEST(LLMAdapterTest, test_decay_all_weights_reduces_confidence) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bullish", {0.8, 1.0, 0.1, 0.7});
+    adapter.decay_all_weights(0.5);
+    SemanticWeight w;
+    ASSERT_TRUE(adapter.get_token_mapping("bullish", w));
+    EXPECT_NEAR(w.confidence_score, 0.5, 1e-9)
+        << "decay_all_weights(0.5) must halve confidence_score";
+}
+
+TEST(LLMAdapterTest, test_decay_all_weights_factor_above_one_clamped) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("token", {0.5, 0.8, 0.2, 0.3});
+    adapter.decay_all_weights(2.0);  // >1.0 must be clamped to 1.0
+    SemanticWeight w;
+    ASSERT_TRUE(adapter.get_token_mapping("token", w));
+    EXPECT_NEAR(w.confidence_score, 0.8, 1e-9)
+        << "decay factor > 1.0 must be clamped to 1.0 (no amplification)";
+}
+
+TEST(LLMAdapterTest, test_decay_all_weights_zero_zeroes_confidence) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bearish", {-0.7, 0.9, 0.3, -0.6});
+    adapter.decay_all_weights(0.0);
+    SemanticWeight w;
+    ASSERT_TRUE(adapter.get_token_mapping("bearish", w));
+    EXPECT_NEAR(w.confidence_score, 0.0, 1e-9)
+        << "decay_all_weights(0.0) must zero all confidence scores";
+}
+
 } // namespace
 } // namespace llmquant

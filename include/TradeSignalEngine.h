@@ -223,6 +223,18 @@ public:
     void set_signal_cooldown(std::chrono::microseconds cooldown);
 
     /**
+     * @brief Update only the noise-gate threshold without replacing the whole config.
+     *
+     * Signals whose |accumulated_bias| falls below this threshold are suppressed
+     * and counted in stats_.noise_filtered.  Set to 0.0 to disable the noise gate.
+     * Must be called from the same thread as process_semantic_weight().
+     *
+     * @param threshold New minimum absolute bias required to emit a signal.
+     *                  Negative values are clamped to 0.0.
+     */
+    void set_min_bias_threshold(double threshold);
+
+    /**
      * @brief Return a copy of the current engine configuration.
      *
      * @return Copy of the active Config struct.

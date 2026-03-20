@@ -154,6 +154,10 @@ void TradeSignalEngine::set_signal_cooldown(std::chrono::microseconds cooldown) 
     config_.signal_cooldown = cooldown;
 }
 
+void TradeSignalEngine::set_min_bias_threshold(double threshold) {
+    config_.min_bias_threshold = (threshold < 0.0) ? 0.0 : threshold;
+}
+
 void TradeSignalEngine::set_signal_callback(TradeSignalCallback callback) {
     callback_ = std::move(callback);
 }

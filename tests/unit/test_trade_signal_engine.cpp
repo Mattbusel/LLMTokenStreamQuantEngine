@@ -1045,5 +1045,34 @@ TEST(TradeSignalEngineTest, test_get_session_duration_ms_resets_on_reset) {
         << "session duration must restart from 0 after reset()";
 }
 
+TEST(TradeSignalEngineTest, test_set_min_bias_threshold_reflects_in_get_config) {
+    TradeSignalEngine engine(make_config());
+    engine.set_min_bias_threshold(0.25);
+    EXPECT_NEAR(engine.get_config().min_bias_threshold, 0.25, 1e-9)
+        << "set_min_bias_threshold must update min_bias_threshold in config";
+}
+
+TEST(TradeSignalEngineTest, test_set_min_bias_threshold_negative_clamped_to_zero) {
+    TradeSignalEngine engine(make_config());
+    engine.set_min_bias_threshold(-1.0);
+    EXPECT_DOUBLE_EQ(engine.get_config().min_bias_threshold, 0.0)
+        << "negative threshold must be clamped to 0.0";
+}
+
+TEST(TradeSignalEngineTest, test_set_min_bias_threshold_suppresses_weak_signal) {
+    auto cfg = make_config();
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_min_bias_threshold(10.0); // extremely high threshold
+
+    std::atomic<int> count{0};
+    engine.set_signal_callback([&count](const TradeSignal&) { ++count; });
+
+    SemanticWeight w{0.01, 0.9, 0.01, 0.01};  // tiny bias
+    engine.process_semantic_weight(w);
+    EXPECT_EQ(count.load(), 0)
+        << "weak signal below threshold must be suppressed";
+}
+
 } // namespace
 } // namespace llmquant
