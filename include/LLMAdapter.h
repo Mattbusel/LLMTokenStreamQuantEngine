@@ -366,6 +366,30 @@ public:
         top_tokens_by_sentiment(size_t n = 10) const;
 
     /**
+     * @brief Return all tokens whose confidence_score is within [min_confidence, max_confidence].
+     *
+     * Useful for auditing low-confidence or high-confidence token sets.
+     *
+     * @param min_confidence Lower bound (inclusive) on confidence_score.
+     * @param max_confidence Upper bound (inclusive) on confidence_score.
+     * @return Vector of (token, confidence_score) pairs in unspecified order.
+     */
+    std::vector<std::pair<std::string, double>>
+        filter_tokens_by_confidence(double min_confidence, double max_confidence) const;
+
+    /**
+     * @brief Return the top N tokens sorted by volatility_score descending.
+     *
+     * Identifies the most volatility-contributing tokens in the dictionary.
+     *
+     * @param n Maximum number of tokens to return (default: 10).
+     *          If n >= dictionary size, all tokens are returned.
+     * @return Vector of (token, volatility_score) pairs, sorted descending.
+     */
+    std::vector<std::pair<std::string, double>>
+        top_tokens_by_volatility(size_t n = 10) const;
+
+    /**
      * @brief Return a snapshot of internal processing statistics.
      *
      * @return Struct with tokens_processed, cache_hits and cache_misses counts.

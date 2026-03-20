@@ -1164,6 +1164,59 @@ TEST(LLMAdapterTest, test_get_directional_bias_range_matches_max_minus_min) {
     EXPECT_NEAR(adapter.get_directional_bias_range(), expected, 1e-12);
 }
 
+TEST(LLMAdapterTest, test_filter_tokens_by_confidence_returns_empty_on_empty_dict) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    auto result = adapter.filter_tokens_by_confidence(0.0, 1.0);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST(LLMAdapterTest, test_filter_tokens_by_confidence_matches_range) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("low",  {0.3, 0.4, 0.1, 0.2});
+    adapter.add_token_mapping("high", {0.7, 0.95, 0.3, 0.6});
+    adapter.add_token_mapping("mid",  {-0.2, 0.7, 0.2, -0.1});
+    auto result = adapter.filter_tokens_by_confidence(0.6, 1.0);
+    // "high" (0.95) and "mid" (0.7) should be included; "low" (0.4) excluded.
+    EXPECT_EQ(result.size(), size_t{2});
+    for (const auto& [tok, conf] : result) {
+        EXPECT_GE(conf, 0.6);
+        EXPECT_LE(conf, 1.0);
+    }
+}
+
+TEST(LLMAdapterTest, test_top_tokens_by_volatility_returns_empty_on_empty_dict) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    auto result = adapter.top_tokens_by_volatility(5);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST(LLMAdapterTest, test_top_tokens_by_volatility_ordered_descending) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("calm",     {0.1, 0.8, 0.1, 0.0});
+    adapter.add_token_mapping("volatile", {-0.5, 0.7, 0.8, -0.3});
+    adapter.add_token_mapping("moderate", {0.3, 0.9, 0.4, 0.2});
+    auto result = adapter.top_tokens_by_volatility(3);
+    ASSERT_EQ(result.size(), size_t{3});
+    for (size_t i = 1; i < result.size(); ++i) {
+        EXPECT_GE(result[i-1].second, result[i].second)
+            << "top_tokens_by_volatility must be in descending order";
+    }
+}
+
+TEST(LLMAdapterTest, test_top_tokens_by_volatility_respects_n_limit) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("a", {0.5, 0.9, 0.9, 0.4});
+    adapter.add_token_mapping("b", {-0.3, 0.8, 0.7, -0.2});
+    adapter.add_token_mapping("c", {0.2, 0.7, 0.5, 0.1});
+    auto result = adapter.top_tokens_by_volatility(2);
+    EXPECT_EQ(result.size(), size_t{2});
+}
+
 TEST(LLMAdapterTest, test_get_cache_hit_rate_zero_before_processing) {
     LLMAdapter adapter;
     adapter.reset_stats();
