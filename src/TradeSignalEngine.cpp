@@ -201,6 +201,7 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     signal.signal_quality = signal.confidence
                           * std::clamp(magnitude_avg, 0.0, 1.0);
     last_signal_quality_.store(signal.signal_quality, std::memory_order_relaxed);
+    last_signal_timestamp_ns_.store(signal.timestamp_ns, std::memory_order_relaxed);
     // Do NOT overwrite signal.confidence here — it must be set by the caller
     // (process_semantic_weight) before calling emit_signal().  Overwriting it
     // would silently discard any per-signal confidence already populated.
@@ -258,6 +259,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
     last_signal_quality_.store(0.0, std::memory_order_relaxed);
+    last_signal_timestamp_ns_.store(0, std::memory_order_relaxed);
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {

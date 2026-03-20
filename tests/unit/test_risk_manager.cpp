@@ -924,3 +924,32 @@ TEST(RiskManagerTest, test_risk_manager_blocked_rate_correct_fraction) {
     // 1 blocked out of 2 evaluated -> 0.5
     EXPECT_NEAR(rm.get_blocked_rate(), 0.5, 1e-9);
 }
+
+// ============================================================
+// Test: try_evaluate() — nullopt on pass.
+// ============================================================
+TEST(RiskManagerTest, test_try_evaluate_returns_nullopt_on_pass) {
+    RiskManager rm(default_config());
+    auto result = rm.try_evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+    EXPECT_FALSE(result.has_value()) << "try_evaluate must return nullopt when signal passes";
+}
+
+// ============================================================
+// Test: try_evaluate() — returns reason string on block.
+// ============================================================
+TEST(RiskManagerTest, test_try_evaluate_returns_reason_on_block) {
+    RiskManager rm(default_config());
+    auto result = rm.try_evaluate(make_signal(5.0, 0.1, 0.05, 0.8));
+    ASSERT_TRUE(result.has_value()) << "try_evaluate must return a reason when signal is blocked";
+    EXPECT_EQ(*result, "magnitude_exceeded");
+}
+
+// ============================================================
+// Test: try_evaluate() — confidence block returns correct reason.
+// ============================================================
+TEST(RiskManagerTest, test_try_evaluate_confidence_reason) {
+    RiskManager rm(default_config());
+    auto result = rm.try_evaluate(make_signal(0.1, 0.1, 0.05, 0.01));
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(*result, "confidence_below_minimum");
+}

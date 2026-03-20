@@ -1,6 +1,7 @@
 #include "RiskManager.h"
 #include "MetricsLogger.h"
 #include <cmath>
+#include <optional>
 #include <limits>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
@@ -146,6 +147,12 @@ bool RiskManager::evaluate_with_reason(const TradeSignal& signal, std::string& r
     }
     reason = std::move(captured);
     return result;
+}
+
+std::optional<std::string> RiskManager::try_evaluate(const TradeSignal& signal) {
+    std::string reason;
+    if (evaluate_with_reason(signal, reason)) return std::nullopt;
+    return reason;
 }
 
 void RiskManager::set_alert_callback(AlertCallback cb) {

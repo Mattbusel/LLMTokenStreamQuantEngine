@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 #include "TradeSignalEngine.h"
@@ -160,6 +161,23 @@ public:
      * @return true if the signal passes all checks; false if blocked.
      */
     bool evaluate_with_reason(const TradeSignal& signal, std::string& reason);
+
+    /**
+     * @brief Evaluate a signal; return nullopt on pass or the rejection reason string on block.
+     *
+     * Convenience wrapper around evaluate_with_reason().  Callers that prefer
+     * a single return value over an output parameter can use this overload:
+     *
+     * @code
+     *   if (auto reason = rm.try_evaluate(sig)) {
+     *       log_rejection(*reason);
+     *   }
+     * @endcode
+     *
+     * @param signal The TradeSignal to evaluate.
+     * @return std::nullopt if the signal passes; a non-empty reason string if blocked.
+     */
+    std::optional<std::string> try_evaluate(const TradeSignal& signal);
 
     /**
      * @brief Register a callback to be invoked when a signal is blocked.

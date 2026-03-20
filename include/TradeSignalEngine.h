@@ -364,7 +364,9 @@ private:
     std::chrono::high_resolution_clock::time_point processing_start_;
     Stats stats_;
     /// signal_quality of the last emitted signal; updated by emit_signal().
-    std::atomic<double> last_signal_quality_{0.0};
+    std::atomic<double>   last_signal_quality_{0.0};
+    /// Nanosecond timestamp (since epoch) of the most recent emit_signal() call; 0 = never.
+    std::atomic<uint64_t> last_signal_timestamp_ns_{0};
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;
     std::vector<std::pair<std::shared_ptr<OutputSink>, SinkPredicate>> filtered_sinks_;
 };
