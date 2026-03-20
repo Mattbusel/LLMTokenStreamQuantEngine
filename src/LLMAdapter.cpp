@@ -253,6 +253,24 @@ double LLMAdapter::get_avg_confidence() const {
     return sum / static_cast<double>(token_weights_.size());
 }
 
+double LLMAdapter::get_min_confidence() const {
+    if (token_weights_.empty()) return 0.0;
+    double mn = std::numeric_limits<double>::max();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.confidence_score < mn) mn = wt.confidence_score; }
+    return mn;
+}
+
+double LLMAdapter::get_max_confidence() const {
+    if (token_weights_.empty()) return 0.0;
+    double mx = std::numeric_limits<double>::lowest();
+    for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.confidence_score > mx) mx = wt.confidence_score; }
+    return mx;
+}
+
+double LLMAdapter::get_confidence_range() const {
+    return get_max_confidence() - get_min_confidence();
+}
+
 double LLMAdapter::get_avg_sentiment() const {
     if (token_weights_.empty()) return 0.0;
     double sum = 0.0;

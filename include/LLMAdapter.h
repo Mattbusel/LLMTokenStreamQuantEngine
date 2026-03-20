@@ -166,6 +166,34 @@ public:
     double get_avg_confidence() const;
 
     /**
+     * @brief Return the minimum confidence_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Minimum confidence_score in [0.0, 1.0].
+     */
+    double get_min_confidence() const;
+
+    /**
+     * @brief Return the maximum confidence_score across all dictionary tokens.
+     *
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Maximum confidence_score in [0.0, 1.0].
+     */
+    double get_max_confidence() const;
+
+    /**
+     * @brief Return the spread between the highest and lowest confidence_score in the dictionary.
+     *
+     * Computed as get_max_confidence() - get_min_confidence().
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Confidence range (always >= 0).
+     */
+    double get_confidence_range() const;
+
+    /**
      * @brief Return the mean sentiment_score across all tokens in the dictionary.
      *
      * Returns 0.0 if the dictionary is empty.
