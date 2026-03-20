@@ -435,35 +435,6 @@ LLMAdapter::top_tokens_by_sentiment(size_t n) const {
     return result;
 }
 
-std::vector<std::pair<std::string, double>>
-LLMAdapter::filter_tokens_by_confidence(double min_confidence, double max_confidence) const {
-    std::vector<std::pair<std::string, double>> result;
-    for (const auto& [tok, weight] : token_weights_) {
-        if (weight.confidence_score >= min_confidence && weight.confidence_score <= max_confidence) {
-            result.emplace_back(tok, weight.confidence_score);
-        }
-    }
-    return result;
-}
-
-std::vector<std::pair<std::string, double>>
-LLMAdapter::top_tokens_by_volatility(size_t n) const {
-    std::vector<std::pair<std::string, double>> result;
-    result.reserve(token_weights_.size());
-    for (const auto& [tok, weight] : token_weights_) {
-        result.emplace_back(tok, weight.volatility_score);
-    }
-    size_t take = std::min(n, result.size());
-    std::partial_sort(result.begin(),
-                      result.begin() + static_cast<std::ptrdiff_t>(take),
-                      result.end(),
-                      [](const auto& a, const auto& b) {
-                          return a.second > b.second;
-                      });
-    result.resize(take);
-    return result;
-}
-
 void LLMAdapter::initialize_default_mappings() {
     // Fear/Uncertainty tokens
     add_token_mapping("crash", {-0.9, 0.9, 0.8, -0.7});

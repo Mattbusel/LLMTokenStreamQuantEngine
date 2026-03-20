@@ -283,3 +283,22 @@ TEST(PrometheusExporterTest, test_format_info_empty_labels_produces_empty_braces
     EXPECT_NE(result.find("{} 1"), std::string::npos)
         << "format_info with no labels must produce empty label set {}";
 }
+
+TEST(PrometheusExporterTest, test_scrape_count_zero_before_start) {
+    PrometheusExporter::Config cfg;
+    cfg.port = 19901;
+    PrometheusExporter exporter(cfg);
+    EXPECT_EQ(exporter.scrape_count(), 0u)
+        << "scrape_count must be 0 before any scrapes are served";
+}
+
+TEST(PrometheusExporterTest, test_scrape_count_zero_after_stop_without_scrape) {
+    PrometheusExporter::Config cfg;
+    cfg.port = 19902;
+    PrometheusExporter exporter(cfg);
+    exporter.set_metrics_callback([] { return std::string("# no metrics\n"); });
+    exporter.start();
+    exporter.stop();
+    EXPECT_EQ(exporter.scrape_count(), 0u)
+        << "scrape_count must be 0 when stopped before any client connected";
+}

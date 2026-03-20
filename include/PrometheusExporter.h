@@ -80,6 +80,18 @@ public:
      */
     bool is_running() const { return running_.load(); }
 
+    /**
+     * @brief Return the number of successful /metrics scrapes served since start().
+     *
+     * Incremented each time a complete HTTP response is written to a scraper.
+     * Thread-safe (atomic read).
+     *
+     * @return Scrape count.
+     */
+    uint64_t scrape_count() const noexcept {
+        return scrape_count_.load(std::memory_order_relaxed);
+    }
+
     // -----------------------------------------------------------------------
     // Static text-format helpers
     // -----------------------------------------------------------------------
@@ -166,11 +178,12 @@ private:
 
     Config            config_;
     MetricsCallback   metrics_cb_;
-    std::atomic<bool> running_{false};
+    std::atomic<bool>     running_{false};
     /// Guards metrics_cb_ against re-entrancy if a slow scrape triggers another scrape.
-    std::atomic<bool> callback_in_progress_{false};
-    std::thread       thread_;
-    int               listen_fd_{-1};
+    std::atomic<bool>     callback_in_progress_{false};
+    std::atomic<uint64_t> scrape_count_{0};
+    std::thread           thread_;
+    int                   listen_fd_{-1};
 };
 
 } // namespace llmquant

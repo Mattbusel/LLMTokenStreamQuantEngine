@@ -193,6 +193,8 @@ void PrometheusExporter::server_thread() {
             if (n <= 0) break;
             sent += static_cast<size_t>(n);
         }
+        if (sent == resp_str.size())
+            scrape_count_.fetch_add(1, std::memory_order_relaxed);
 
 #ifdef _WIN32
         closesocket(client_fd);
