@@ -793,5 +793,67 @@ TEST(LLMAdapterTest, test_export_dictionary_is_sorted_alphabetically) {
     EXPECT_LT(pos_mango, pos_zebra) << "mango must come before zebra";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 35: load_dictionary_from_tsv() — import/export roundtrip
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_load_dictionary_from_tsv_empty_input_returns_zero) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    size_t imported = adapter.load_dictionary_from_tsv("");
+    EXPECT_EQ(imported, 0u)
+        << "empty TSV must import 0 entries";
+}
+
+TEST(LLMAdapterTest, test_load_dictionary_from_tsv_roundtrip_preserves_values) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bullish", { 0.7, 0.8, 0.3, 0.6});
+    adapter.add_token_mapping("bearish", {-0.6, 0.7, 0.4, -0.5});
+
+    std::string exported = adapter.export_dictionary();
+
+    LLMAdapter adapter2;
+    adapter2.clear_custom_mappings();
+    size_t imported = adapter2.load_dictionary_from_tsv(exported);
+    EXPECT_EQ(imported, 2u) << "must import exactly 2 tokens";
+
+    SemanticWeight w;
+    ASSERT_TRUE(adapter2.get_token_mapping("bullish", w));
+    EXPECT_NEAR(w.sentiment_score,  0.7, 1e-5);
+    EXPECT_NEAR(w.confidence_score, 0.8, 1e-5);
+    EXPECT_NEAR(w.volatility_score, 0.3, 1e-5);
+    EXPECT_NEAR(w.directional_bias, 0.6, 1e-5);
+}
+
+TEST(LLMAdapterTest, test_load_dictionary_from_tsv_overwrites_existing_token) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("rally", {0.5, 0.6, 0.2, 0.4});
+
+    // Import a TSV that redefines "rally" with different values.
+    std::string tsv = "rally\t0.900000\t0.950000\t0.100000\t0.800000\n";
+    size_t imported = adapter.load_dictionary_from_tsv(tsv);
+    EXPECT_EQ(imported, 1u);
+
+    SemanticWeight w;
+    ASSERT_TRUE(adapter.get_token_mapping("rally", w));
+    EXPECT_NEAR(w.sentiment_score, 0.9, 1e-5)
+        << "load_dictionary_from_tsv must overwrite existing token";
+}
+
+TEST(LLMAdapterTest, test_load_dictionary_from_tsv_skips_malformed_lines) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    // Lines with wrong field counts or non-numeric values.
+    std::string tsv = "good_token\t0.5\t0.6\t0.2\t0.4\n"
+                      "bad_no_fields\n"
+                      "partial\t0.1\t0.2\n"
+                      "nonnumeric\tabc\t0.2\t0.1\t0.1\n";
+    size_t imported = adapter.load_dictionary_from_tsv(tsv);
+    EXPECT_EQ(imported, 1u)
+        << "only well-formed lines must be imported";
+}
+
 } // namespace
 } // namespace llmquant

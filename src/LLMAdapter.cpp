@@ -238,6 +238,16 @@ std::vector<std::string> LLMAdapter::get_all_token_keys() const {
     return keys;
 }
 
+void LLMAdapter::decay_all_weights(double factor) {
+    // Clamp to [0, 1] — negative factor zeroes confidence, >1 is not valid decay.
+    if (factor < 0.0) factor = 0.0;
+    if (factor > 1.0) factor = 1.0;
+    for (auto& [tok, wt] : token_weights_) {
+        (void)tok;
+        wt.confidence_score *= factor;
+    }
+}
+
 void LLMAdapter::clear_custom_mappings() {
     // Clears ALL mappings (both built-in and custom) since there is no distinction
     // between them in the map. Call initialize_default_mappings() after if needed.
@@ -484,6 +494,33 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("parabolic",  { 0.6, 0.75, 0.90,  0.65});
     add_token_mapping("divergence", { 0.0, 0.65, 0.70,  0.0});
     add_token_mapping("liquidated", {-0.7, 0.85, 0.85, -0.75});
+}
+
+size_t LLMAdapter::load_dictionary_from_tsv(const std::string& tsv_data) {
+    size_t imported = 0;
+    std::istringstream ss(tsv_data);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line.empty()) continue;
+        std::istringstream ls(line);
+        std::string token;
+        double sentiment{}, confidence{}, volatility{}, bias{};
+        if (!std::getline(ls, token, '\t')) continue;
+        if (!(ls >> sentiment)) continue;
+        char sep{}; ls >> sep;
+        if (!(ls >> confidence)) continue;
+        ls >> sep;
+        if (!(ls >> volatility)) continue;
+        ls >> sep;
+        if (!(ls >> bias)) continue;
+        if (!std::isfinite(sentiment) || !std::isfinite(confidence) ||
+            !std::isfinite(volatility) || !std::isfinite(bias)) continue;
+        SemanticWeight w{sentiment, confidence, volatility, bias};
+        auto key = normalize_token(token);
+        token_weights_[key] = w;
+        ++imported;
+    }
+    return imported;
 }
 
 } // namespace llmquant

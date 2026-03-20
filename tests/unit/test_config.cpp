@@ -766,5 +766,37 @@ TEST(ConfigTest, test_config_validate_returns_vector_of_strings) {
     EXPECT_EQ(errors.size(), 0u);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 35: Config::is_valid()
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_is_valid_true_for_default_config) {
+    Config cfg;
+    EXPECT_TRUE(cfg.is_valid())
+        << "default-constructed Config must be valid";
+}
+
+TEST(ConfigTest, test_config_is_valid_true_after_valid_yaml_load) {
+    Config cfg;
+    cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    EXPECT_TRUE(cfg.is_valid())
+        << "Config loaded from valid YAML must report is_valid() == true";
+}
+
+TEST(ConfigTest, test_config_is_valid_consistent_with_validate) {
+    Config cfg;
+    // is_valid() must agree with validate().empty() on the same instance.
+    bool via_is_valid = cfg.is_valid();
+    bool via_validate = cfg.validate().empty();
+    EXPECT_EQ(via_is_valid, via_validate)
+        << "is_valid() must return the same result as validate().empty()";
+}
+
 } // namespace
 } // namespace llmquant

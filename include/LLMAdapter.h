@@ -194,6 +194,19 @@ public:
     bool get_token_mapping(const std::string& token, SemanticWeight& weight) const;
 
     /**
+     * @brief Multiply every token's confidence_score by @p factor.
+     *
+     * Useful for simulating information aging in long-running sessions: after
+     * calling this, older sentiment contributions have less influence on new
+     * predictions until refreshed.  @p factor is clamped to [0.0, 1.0] so
+     * calling with factor > 1.0 does not amplify confidence beyond the valid
+     * range.  Factor < 0 is treated as 0 (zeroes all confidence scores).
+     *
+     * @param factor Decay multiplier in [0.0, 1.0]; clamped if out of range.
+     */
+    void decay_all_weights(double factor);
+
+    /**
      * @brief Distribution of tokens across sentiment polarity buckets.
      */
     struct SentimentDistribution {
@@ -287,6 +300,21 @@ public:
      * @return Multi-line TSV string; empty string if the dictionary is empty.
      */
     std::string export_dictionary() const;
+
+    /**
+     * @brief Import token mappings from a TSV string produced by export_dictionary().
+     *
+     * Parses each line of the format:
+     *   token\tsentiment\tconfidence\tvolatility\tdirectional_bias
+     *
+     * Existing mappings are replaced for tokens already in the dictionary;
+     * new tokens are added.  Lines that cannot be parsed (wrong field count
+     * or non-numeric values) are silently skipped.
+     *
+     * @param tsv_data Multi-line TSV string (as returned by export_dictionary()).
+     * @return Number of token entries successfully imported.
+     */
+    size_t load_dictionary_from_tsv(const std::string& tsv_data);
 
 private:
     void initialize_default_mappings();

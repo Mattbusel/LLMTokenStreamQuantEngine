@@ -891,5 +891,48 @@ TEST(LatencyControllerTest, test_latency_budget_remaining_zero_at_exactly_target
         << "budget must be near zero when all samples equal target_latency_us";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 35: get_health_state()
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_get_health_state_default_is_healthy) {
+    LatencyController lc(make_config(true, 100));
+    auto hs = lc.get_health_state();
+    EXPECT_TRUE(hs.slo_met)         << "slo_met must be true before any samples";
+    EXPECT_FALSE(hs.warmed_up)      << "warmed_up must be false before any samples";
+    EXPECT_DOUBLE_EQ(hs.slo_breach_rate,    0.0);
+    EXPECT_DOUBLE_EQ(hs.backoff_multiplier, 1.0);
+    EXPECT_DOUBLE_EQ(hs.budget_remaining_us, 10.0); // target = 10µs
+}
+
+TEST(LatencyControllerTest, test_get_health_state_slo_met_false_when_over_target) {
+    LatencyController lc(make_config(true, 200));
+    // Feed samples at 100 µs — well above 10 µs target.
+    for (int i = 0; i < 200; ++i)
+        lc.record_latency(std::chrono::microseconds{100});
+    auto hs = lc.get_health_state();
+    EXPECT_FALSE(hs.slo_met) << "slo_met must be false when p99 > target";
+    EXPECT_LT(hs.budget_remaining_us, 0.0) << "budget must be negative when over SLO";
+}
+
+TEST(LatencyControllerTest, test_get_health_state_warmed_up_after_half_window) {
+    LatencyController lc(make_config(true, 100));
+    // Fill exactly 50% of the window.
+    for (int i = 0; i < 50; ++i)
+        lc.record_latency(std::chrono::microseconds{5});
+    auto hs = lc.get_health_state();
+    EXPECT_TRUE(hs.warmed_up) << "warmed_up must be true at 50% window fill";
+}
+
+TEST(LatencyControllerTest, test_get_health_state_backoff_rises_under_pressure) {
+    LatencyController lc(make_config(true, 100));
+    // Drive ingestion pressure to maximum.
+    for (int i = 0; i < 5; ++i)
+        lc.update_ingestion_pressure(10000.0, 10000.0);
+    auto hs = lc.get_health_state();
+    EXPECT_GT(hs.backoff_multiplier, 1.0)
+        << "backoff_multiplier must rise above 1.0 under full pressure";
+}
+
 } // namespace
 } // namespace llmquant

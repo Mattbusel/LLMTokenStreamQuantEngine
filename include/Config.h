@@ -284,6 +284,18 @@ public:
      */
     std::vector<std::string> validate() const;
 
+    /**
+     * @brief Return true if the current configuration passes all validation checks.
+     *
+     * Convenience wrapper around validate() that returns true when the error
+     * list is empty.  Useful as a pre-flight guard in pipeline initialisation.
+     *
+     * Thread-safe (delegates to validate() which acquires config_mutex_).
+     *
+     * @return true if validate() returns an empty vector.
+     */
+    bool is_valid() const { return validate().empty(); }
+
 private:
     SystemConfig config_;
     mutable std::mutex config_mutex_;  ///< Guards config_ during hot-reload.

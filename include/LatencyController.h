@@ -164,6 +164,34 @@ public:
     };
 
     /**
+     * @brief Consolidated health snapshot for the latency sub-system.
+     *
+     * Aggregates the most latency-relevant diagnostic fields into a single
+     * struct so callers don't need to fan out across get_stats(), get_pressure(),
+     * is_warmed_up(), and get_slo_breach_rate() separately.
+     */
+    struct HealthState {
+        bool   slo_met{true};            ///< true if p99 <= target_latency_us.
+        bool   warmed_up{false};         ///< true if sample window is >= 50% full.
+        double slo_breach_rate{0.0};     ///< Fraction of samples exceeding the target.
+        double backoff_multiplier{1.0};  ///< Current backoff multiplier (1.0 = no backoff).
+        double budget_remaining_us{0.0}; ///< Signed budget: target_us - p99_us.
+    };
+
+    /**
+     * @brief Return a consolidated health snapshot.
+     *
+     * Equivalent to calling get_stats(), get_pressure(), is_warmed_up(),
+     * get_slo_breach_rate(), get_latency_budget_remaining_us(), and
+     * get_backoff_multiplier() in one go.
+     *
+     * Thread-safe (delegates to existing thread-safe accessors).
+     *
+     * @return HealthState snapshot.
+     */
+    HealthState get_health_state() const;
+
+    /**
      * @brief Update the ingestion pressure component.
      *
      * Call this once per token with the current observed arrival rate

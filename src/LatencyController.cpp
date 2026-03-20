@@ -288,6 +288,19 @@ void LatencyController::reset_pressure() {
     backoff_multiplier_ = 1.0;
 }
 
+LatencyController::HealthState LatencyController::get_health_state() const {
+    HealthState hs;
+    const auto stats = get_stats();
+    const double target_us = static_cast<double>(config_.target_latency.count());
+    const double p99_us    = static_cast<double>(stats.p99_latency.count());
+    hs.slo_met            = (stats.measurements == 0) || (p99_us <= target_us);
+    hs.warmed_up          = is_warmed_up();
+    hs.slo_breach_rate    = get_slo_breach_rate();
+    hs.backoff_multiplier = get_backoff_multiplier();
+    hs.budget_remaining_us = (stats.measurements == 0) ? target_us : (target_us - p99_us);
+    return hs;
+}
+
 double LatencyController::get_latency_budget_remaining_us() const {
     const auto stats = get_stats();
     const double target_us = static_cast<double>(config_.target_latency.count());
