@@ -459,6 +459,27 @@ public:
      */
     double get_max_directional_bias() const;
 
+    /**
+     * @brief Return the spread between the highest and lowest volatility_score in the dictionary.
+     *
+     * Computed as get_max_volatility() - get_min_volatility().
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Volatility range (always >= 0).
+     */
+    double get_volatility_range() const;
+
+    /**
+     * @brief Return the spread between the most bullish and most bearish directional_bias
+     *        in the dictionary.
+     *
+     * Computed as get_max_directional_bias() - get_min_directional_bias().
+     * Returns 0.0 if the dictionary is empty.
+     *
+     * @return Directional bias range (always >= 0).
+     */
+    double get_directional_bias_range() const;
+
     std::string export_dictionary() const;
 
     /**
