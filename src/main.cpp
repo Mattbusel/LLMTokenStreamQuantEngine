@@ -703,7 +703,10 @@ int main(int argc, char* argv[]) {
                      << eng_stats.avg_signal_strength.load() << "\n"
                  << "# HELP llmquant_latency_measurements_total Total latency samples recorded\n"
                  << "# TYPE llmquant_latency_measurements_total counter\n"
-                 << "llmquant_latency_measurements_total " << stats.measurements << "\n";
+                 << "llmquant_latency_measurements_total " << stats.measurements << "\n"
+                 << "# HELP llmquant_signal_age_threshold_us Configured staleness guard threshold (0=disabled)\n"
+                 << "# TYPE llmquant_signal_age_threshold_us gauge\n"
+                 << "llmquant_signal_age_threshold_us " << trade_engine.get_config().max_signal_age_us << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -794,6 +797,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Cache hit rate   : " << hit_pct2 << "% ("
                   << ads.cache_hits << "/" << ads.tokens_processed << ")\n";
     }
+    std::cout << "  Signals aged out : " << trade_engine.get_stats().signals_aged_out.load() << "\n";
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
     std::cout << "  ---------------------------------------------------------\n\n";
 
