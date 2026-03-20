@@ -181,3 +181,78 @@ TEST(MetricsLoggerTest, MetricsLoggerNonAsciiToken) {
         logger.flush();
     });
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 16: get_log_entry_count, log_risk_rejection, log_performance_summary
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_metrics_logger_get_entry_count_increments) {
+    const std::string path = "/tmp/test_metrics_entry_count.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{0});
+        logger.log_token_received("bullish", 1);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{1});
+        logger.log_signal_generated(0.5, 0.2, 7);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{2});
+        logger.log_risk_rejection("magnitude_exceeded", 1.5, 0.9);
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{3});
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_metrics_logger_log_risk_rejection_does_not_throw) {
+    const std::string path = "/tmp/test_metrics_risk_rejection.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        EXPECT_NO_THROW(logger.log_risk_rejection("magnitude_exceeded", 2.0, 0.95));
+        EXPECT_NO_THROW(logger.log_risk_rejection("confidence_too_low",  0.1, 0.15));
+        EXPECT_NO_THROW(logger.log_risk_rejection("rate_limit",          0.5, 0.7));
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{3});
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_metrics_logger_log_risk_rejection_json_contains_reason) {
+    const std::string path = "/tmp/test_metrics_risk_json.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_risk_rejection("drawdown_exceeded", 0.8, 0.6);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("drawdown_exceeded"), std::string::npos)
+        << "JSON output must contain the rejection reason";
+    EXPECT_NE(content.find("risk_rejection"), std::string::npos)
+        << "JSON output must contain the event type";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_metrics_logger_log_performance_summary_does_not_throw) {
+    const std::string path = "/tmp/test_metrics_perf_summary.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        logger.log_token_received("momentum", 1);
+        logger.log_signal_generated(0.3, 0.1, 5);
+        EXPECT_NO_THROW(logger.log_performance_summary());
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_metrics_logger_entry_count_not_incremented_by_non_counting_methods) {
+    // log_latency_measurement and log_system_stats do NOT count as log entries
+    // (they are monitoring helpers, not pipeline events).
+    const std::string path = "/tmp/test_metrics_no_count.log";
+    {
+        MetricsLogger logger(make_csv_config(path));
+        logger.log_latency_measurement(10);
+        logger.log_system_stats(1024 * 1024, 5.0);
+        logger.log_performance_summary();
+        // Only methods that increment log_entries_ are token/signal/risk_rejection.
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{0});
+    }
+    std::remove(path.c_str());
+}
