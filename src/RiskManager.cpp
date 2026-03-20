@@ -4,6 +4,7 @@
 #include <optional>
 #include <limits>
 #include <spdlog/spdlog.h>
+#include <sstream>
 #include <stdexcept>
 
 // Helper: saturating increment for uint64_t atomics.
@@ -428,6 +429,31 @@ uint64_t RiskManager::get_total_signals_evaluated() const noexcept {
          + s.signals_blocked_rate.load(std::memory_order_relaxed)
          + s.signals_blocked_drawdown.load(std::memory_order_relaxed)
          + s.signals_blocked_position.load(std::memory_order_relaxed);
+}
+
+std::string RiskManager::format_stats() const {
+    const auto& s = stats_;
+    uint64_t passed  = s.signals_passed.load(std::memory_order_relaxed);
+    uint64_t mag     = s.signals_blocked_magnitude.load(std::memory_order_relaxed);
+    uint64_t conf    = s.signals_blocked_confidence.load(std::memory_order_relaxed);
+    uint64_t rate    = s.signals_blocked_rate.load(std::memory_order_relaxed);
+    uint64_t dd      = s.signals_blocked_drawdown.load(std::memory_order_relaxed);
+    uint64_t pos     = s.signals_blocked_position.load(std::memory_order_relaxed);
+    uint64_t blocked = mag + conf + rate + dd + pos;
+    uint64_t total   = passed + blocked;
+    double blocked_rate = (total == 0) ? 0.0 : static_cast<double>(blocked) / static_cast<double>(total);
+    std::ostringstream oss;
+    oss << "evaluated=" << total
+        << " passed="   << passed
+        << " blocked="  << blocked
+        << " blocked_rate=" << blocked_rate
+        << " mag="  << mag
+        << " conf=" << conf
+        << " rate=" << rate
+        << " dd="   << dd
+        << " pos="  << pos
+        << " healthy=" << (is_healthy() ? "true" : "false");
+    return oss.str();
 }
 
 } // namespace llmquant

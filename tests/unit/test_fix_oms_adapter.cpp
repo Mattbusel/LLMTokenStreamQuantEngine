@@ -404,3 +404,15 @@ TEST(FixOmsAdapterParsingTest, test_fix_description_format) {
     EXPECT_NE(desc.find("QUANT->PRIME"), std::string::npos)
         << "description() must show SenderCompID->TargetCompID";
 }
+
+TEST(FixOmsAdapterParsingTest, test_get_reconnect_count_zero_before_start) {
+    FixOmsAdapter adapter(make_test_config());
+    EXPECT_EQ(adapter.get_reconnect_count(), 0u)
+        << "get_reconnect_count must be 0 before any connection attempts";
+}
+
+TEST(FixOmsAdapterParsingTest, test_get_seq_num_one_before_start) {
+    FixOmsAdapter adapter(make_test_config());
+    EXPECT_EQ(adapter.get_seq_num(), 1u)
+        << "Initial FIX seq_num must be 1 per FIX 4.2 specification";
+}

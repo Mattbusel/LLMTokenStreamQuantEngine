@@ -1050,5 +1050,18 @@ TEST(LatencyControllerTest, test_get_stddev_us_non_negative) {
     EXPECT_GE(lc.get_stddev_us(), 0.0);
 }
 
+TEST(LatencyControllerTest, test_is_under_target_true_with_no_measurements) {
+    LatencyController lc(make_config());
+    EXPECT_TRUE(lc.is_under_target());
+}
+
+TEST(LatencyControllerTest, test_is_under_target_false_when_avg_exceeds_target) {
+    // target = 10us; record samples well above target
+    LatencyController lc(make_config());
+    for (int i = 0; i < 5; ++i)
+        lc.record_latency(std::chrono::microseconds{1000});
+    EXPECT_FALSE(lc.is_under_target());
+}
+
 } // namespace
 } // namespace llmquant

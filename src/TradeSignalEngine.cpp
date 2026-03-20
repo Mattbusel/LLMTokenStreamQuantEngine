@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <thread>
 
@@ -375,6 +376,28 @@ void TradeSignalEngine::flush_sinks() {
         (void)pred;
         try { sink->flush(); } catch (...) {}
     }
+}
+
+std::string TradeSignalEngine::format_stats() const {
+    uint64_t tokens    = stats_.tokens_processed.load(std::memory_order_relaxed);
+    if (tokens == 0) return "tokens=0 (no data)";
+    uint64_t generated  = stats_.signals_generated.load(std::memory_order_relaxed);
+    uint64_t suppressed = stats_.signals_suppressed.load(std::memory_order_relaxed);
+    uint64_t aged_out   = stats_.signals_aged_out.load(std::memory_order_relaxed);
+    double eff   = static_cast<double>(generated)  / static_cast<double>(tokens);
+    double supp  = static_cast<double>(suppressed) / static_cast<double>(tokens);
+    double bias  = accumulated_bias_.load(std::memory_order_relaxed);
+    double vol   = accumulated_volatility_.load(std::memory_order_relaxed);
+    std::ostringstream oss;
+    oss << "tokens="    << tokens
+        << " generated=" << generated
+        << " suppressed=" << suppressed
+        << " aged_out="  << aged_out
+        << " efficiency=" << eff
+        << " suppression_rate=" << supp
+        << " bias=" << bias
+        << " vol="  << vol;
+    return oss.str();
 }
 
 } // namespace llmquant

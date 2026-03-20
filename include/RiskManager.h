@@ -316,6 +316,18 @@ public:
     uint64_t get_total_evaluated() const noexcept;
 
     /**
+     * @brief Return a single-line human-readable summary of risk statistics.
+     *
+     * Format: "evaluated=<n> passed=<n> blocked=<n> blocked_rate=<rate>
+     *          mag=<n> conf=<n> rate=<n> dd=<n> pos=<n> healthy=<true|false>"
+     *
+     * Thread-safe (delegates to existing thread-safe accessors).
+     *
+     * @return Single-line stats summary string.
+     */
+    std::string format_stats() const;
+
+    /**
      * @brief Return true if all risk gates are nominally healthy.
      *
      * Checks:
@@ -570,6 +582,20 @@ public:
      * @return Total evaluation count since construction or last reset_stats().
      */
     uint64_t get_total_signals_evaluated() const noexcept;
+
+    /**
+     * @brief Return the fraction of evaluated signals that passed all gates, in [0.0, 1.0].
+     *
+     * Computed as 1.0 - get_rejection_rate(). Returns 1.0 if no signals have
+     * been evaluated.
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Pass rate in [0.0, 1.0].
+     */
+    double get_pass_rate() const noexcept {
+        return 1.0 - get_rejection_rate();
+    }
 
 private:
     bool check_magnitude(const TradeSignal& signal);

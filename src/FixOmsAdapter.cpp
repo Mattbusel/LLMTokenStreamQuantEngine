@@ -393,6 +393,7 @@ void FixOmsAdapter::emit_position() {
 // ---------------------------------------------------------------------------
 
 bool FixOmsAdapter::reconnect_with_backoff() {
+    reconnect_count_.fetch_add(1, std::memory_order_relaxed);
     close_socket();
     int backoff_s = std::min(1 << reconnect_attempts_, kMaxReconnectBackoffSeconds);
     spdlog::info("[FixOmsAdapter] reconnecting in {} seconds", backoff_s);

@@ -425,6 +425,22 @@ public:
     }
 
     /**
+     * @brief Return the average accumulated bias per token processed.
+     *
+     * Computed as |accumulated_bias| / tokens_processed.
+     * Returns 0.0 if no tokens have been processed yet.
+     * Thread-safe (reads atomics with relaxed ordering).
+     *
+     * @return Average absolute bias contribution per token.
+     */
+    double get_avg_bias_per_token() const noexcept {
+        uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
+        if (tokens == 0) return 0.0;
+        return std::fabs(accumulated_bias_.load(std::memory_order_relaxed))
+             / static_cast<double>(tokens);
+    }
+
+    /**
      * @brief Return the signal_quality field of the most recently emitted signal.
      *
      * Returns 0.0 if no signal has been emitted yet.
@@ -586,6 +602,19 @@ public:
      * to disk.  Not thread-safe — call from the same thread as emit_signal().
      */
     void flush_sinks();
+
+    /**
+     * @brief Return a single-line human-readable summary of engine statistics.
+     *
+     * Format: "tokens=<n> generated=<n> suppressed=<n> aged_out=<n>
+     *          efficiency=<rate> suppression_rate=<rate> bias=<val> vol=<val>"
+     * If no tokens have been processed, returns "tokens=0 (no data)".
+     *
+     * Thread-safe (reads atomic counters and accumulator).
+     *
+     * @return Single-line stats summary string.
+     */
+    std::string format_stats() const;
 
     /**
      * @brief Immutable state snapshot for dashboards and health checks.

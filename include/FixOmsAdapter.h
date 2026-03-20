@@ -82,6 +82,29 @@ public:
      */
     uint64_t messages_parsed() const { return messages_parsed_.load(); }
 
+    /**
+     * @brief Return the number of times the FIX session has reconnected since start().
+     *
+     * Incremented each time reconnect_with_backoff() is called.
+     * Thread-safe (atomic read).
+     *
+     * @return Reconnect attempt count.
+     */
+    uint64_t get_reconnect_count() const noexcept {
+        return reconnect_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the current outbound FIX message sequence number.
+     *
+     * Returns the next sequence number that will be assigned to an outgoing
+     * message.  Starts at 1 (per FIX 4.2 spec) and increments per message.
+     * Not thread-safe — must be called before start() or after stop().
+     *
+     * @return Current outbound sequence number.
+     */
+    uint32_t get_seq_num() const noexcept { return seq_num_; }
+
 protected:
     /**
      * @brief Compute the FIX 4.2 checksum for a message body string.
@@ -141,6 +164,7 @@ private:
     double pnl_{0.0};
 
     std::atomic<uint64_t> messages_parsed_{0};
+    std::atomic<uint64_t> reconnect_count_{0};
     int  reconnect_attempts_{0};
     bool wsa_initialized_{false}; ///< True iff WSAStartup succeeded (Windows only).
     static constexpr int kMaxReconnectBackoffSeconds = 60;

@@ -399,6 +399,25 @@ public:
      */
     double get_stddev_us() const;
 
+    /**
+     * @brief Return true if the average latency is below the configured target.
+     *
+     * Computes avg_latency = total_latency_us / total_measurements and compares
+     * to config_.target_latency. Returns true if no measurements have been
+     * recorded yet (assumes healthy until proven otherwise).
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return true if avg latency < target_latency; false otherwise.
+     */
+    bool is_under_target() const noexcept {
+        uint64_t n = total_measurements_.load(std::memory_order_relaxed);
+        if (n == 0) return true;
+        uint64_t sum = total_latency_us_.load(std::memory_order_relaxed);
+        double avg_us = static_cast<double>(sum) / static_cast<double>(n);
+        return avg_us < static_cast<double>(config_.target_latency.count());
+    }
+
 private:
     Config config_;
     std::chrono::high_resolution_clock::time_point construction_time_{

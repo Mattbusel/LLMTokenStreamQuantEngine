@@ -1324,5 +1324,51 @@ TEST(TradeSignalEngineTest, test_get_signals_aged_out_resets_with_reset) {
     EXPECT_EQ(engine.get_signals_aged_out(), uint64_t{0});
 }
 
+TEST(TradeSignalEngineTest, test_get_avg_bias_per_token_zero_before_processing) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_avg_bias_per_token(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_avg_bias_per_token_non_negative_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.8, 0.9, 0.2, 0.7};
+    engine.process_semantic_weight(w);
+    EXPECT_GE(engine.get_avg_bias_per_token(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_no_data_before_processing) {
+    TradeSignalEngine engine(make_config());
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("tokens=0"), std::string::npos)
+        << "format_stats must indicate zero tokens before any processing";
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_contains_key_fields_after_processing) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.8, 0.9, 0.2, 0.7};
+    engine.process_semantic_weight(w);
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("tokens="),     std::string::npos);
+    EXPECT_NE(s.find("generated="),  std::string::npos);
+    EXPECT_NE(s.find("suppressed="), std::string::npos);
+    EXPECT_NE(s.find("efficiency="), std::string::npos);
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_token_count_matches) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.6, 0.8, 0.2, 0.5};
+    engine.process_semantic_weight(w);
+    engine.process_semantic_weight(w);
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("tokens=2"), std::string::npos)
+        << "format_stats token count must match processed count";
+}
+
 } // namespace
 } // namespace llmquant

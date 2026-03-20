@@ -1478,3 +1478,46 @@ TEST(RiskManagerTest, test_get_total_signals_evaluated_counts_all) {
     rm.evaluate(make_signal(9.9));  // blocked
     EXPECT_EQ(rm.get_total_signals_evaluated(), uint64_t{2});
 }
+
+TEST(RiskManagerTest, test_get_pass_rate_one_before_any_signals) {
+    RiskManager rm(default_config());
+    EXPECT_DOUBLE_EQ(rm.get_pass_rate(), 1.0);
+}
+
+TEST(RiskManagerTest, test_get_pass_rate_plus_rejection_rate_equals_one) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude = 0.5;
+    RiskManager rm(cfg);
+    rm.evaluate(make_signal(0.1));
+    rm.evaluate(make_signal(9.9));
+    double p = rm.get_pass_rate();
+    double r = rm.get_rejection_rate();
+    EXPECT_NEAR(p + r, 1.0, 1e-12);
+}
+
+TEST(RiskManagerTest, test_format_stats_contains_evaluated) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(0.1));
+    std::string s = rm.format_stats();
+    EXPECT_NE(s.find("evaluated="), std::string::npos);
+}
+
+TEST(RiskManagerTest, test_format_stats_contains_passed_and_blocked) {
+    RiskManager rm(default_config());
+    rm.evaluate(make_signal(0.1));
+    std::string s = rm.format_stats();
+    EXPECT_NE(s.find("passed="),  std::string::npos);
+    EXPECT_NE(s.find("blocked="), std::string::npos);
+}
+
+TEST(RiskManagerTest, test_format_stats_contains_healthy_field) {
+    RiskManager rm(default_config());
+    std::string s = rm.format_stats();
+    EXPECT_NE(s.find("healthy="), std::string::npos);
+}
+
+TEST(RiskManagerTest, test_format_stats_zero_evaluated_before_any_signals) {
+    RiskManager rm(default_config());
+    std::string s = rm.format_stats();
+    EXPECT_NE(s.find("evaluated=0"), std::string::npos);
+}
