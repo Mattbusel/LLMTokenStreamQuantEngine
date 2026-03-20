@@ -477,3 +477,52 @@ TEST(RiskManagerTest, test_risk_manager_get_cumulative_bias_updates_and_resets) 
     rm.reset();
     EXPECT_DOUBLE_EQ(rm.get_cumulative_bias(), 0.0);
 }
+
+// ============================================================
+// Test 22: alert callback fires once per blocked signal.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_alert_callback_fires_for_each_blocked_signal) {
+    RiskManager rm(default_config());
+
+    std::atomic<int> alert_count{0};
+    rm.set_alert_callback([&](const std::string&, const TradeSignal&) {
+        alert_count.fetch_add(1, std::memory_order_relaxed);
+    });
+
+    // 3 signals that exceed the max_bias_magnitude (1.0).
+    for (int i = 0; i < 3; ++i) {
+        rm.evaluate(make_signal(9.0, 0.1, 0.05, 0.8));
+    }
+
+    EXPECT_EQ(alert_count.load(), 3)
+        << "Alert callback must fire exactly once per blocked signal";
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 3u);
+}
+
+// ============================================================
+// Test 23: short position blocks additional negative-bias signals.
+// ============================================================
+TEST(RiskManagerTest, test_risk_manager_short_position_blocks_negative_bias) {
+    // Position already at -0.95 (short) with limit 1.0.
+    // A signal with delta_bias_shift = -0.2 projects to -1.15 which exceeds
+    // the absolute limit of 1.0.
+    RiskManager::Config cfg = default_config();
+    cfg.disable_magnitude_gate  = true;   // allow large magnitude so position gate fires
+    cfg.disable_drawdown_gate   = true;
+    cfg.disable_rate_gate       = true;
+    RiskManager rm(cfg);
+
+    RiskManager::PositionState pos;
+    pos.net_position   = -0.95;
+    pos.position_limit =  1.0;
+    pos.pnl            =  0.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    // Negative bias projects position further negative — must be blocked.
+    auto sig = make_signal(-0.2, 0.1, 0.05, 0.8);
+    bool passed = rm.evaluate(sig);
+
+    EXPECT_FALSE(passed) << "Negative bias on short position exceeding limit must be blocked";
+    EXPECT_GT(rm.get_stats().signals_blocked_position.load(), 0u);
+}

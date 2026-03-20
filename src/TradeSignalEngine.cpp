@@ -36,6 +36,10 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         int retries = 0;
         do {
             desired_bias = expected_bias * config_.signal_decay_rate + bias_contribution;
+            if (config_.max_accumulated_bias > 0.0)
+                desired_bias = std::clamp(desired_bias,
+                                          -config_.max_accumulated_bias,
+                                           config_.max_accumulated_bias);
             if (++retries > 8) { std::this_thread::yield(); retries = 0; }
         } while (!accumulated_bias_.compare_exchange_weak(
                      expected_bias, desired_bias,

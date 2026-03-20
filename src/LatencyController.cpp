@@ -96,20 +96,27 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
             // The conditional decrement is equivalent to direct subtraction but
             // guards against p95_idx==0 (only possible when N==0, already
             // excluded by the outer sample_count_ > 0 check).
+            size_t p5_idx  = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.05));
+            if (p5_idx  > 0) p5_idx--;
             size_t p50_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.50));
             if (p50_idx > 0) p50_idx--;
             size_t p95_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.95));
             if (p95_idx > 0) p95_idx--;
             size_t p99_idx = static_cast<size_t>(std::ceil(static_cast<double>(N) * 0.99));
             if (p99_idx > 0) p99_idx--;
+            p5_idx  = std::min(p5_idx,  N - 1);
             p50_idx = std::min(p50_idx, N - 1);
             p95_idx = std::min(p95_idx, N - 1);
             p99_idx = std::min(p99_idx, N - 1);
 
-            // Run nth_element for p50 first (smallest index), then p95, then p99.
-            // Both use the full range — the standard only guarantees correctness
-            // when the range contains the nth element and all elements that
-            // should be before/after it.
+            // nth_element calls must be made in ascending index order.
+            // Each call partitions [begin,end) around the nth position; calling
+            // in ascending order preserves the correctness of all prior calls.
+            std::nth_element(samples_copy.begin(),
+                             samples_copy.begin() + static_cast<std::ptrdiff_t>(p5_idx),
+                             samples_copy.end());
+            stats.p5_latency  = samples_copy[p5_idx];
+
             std::nth_element(samples_copy.begin(),
                              samples_copy.begin() + static_cast<std::ptrdiff_t>(p50_idx),
                              samples_copy.end());

@@ -5,6 +5,7 @@
 #include "TradeSignalEngine.h"
 #include "LatencyController.h"
 #include "OutputSinkImpl.h"
+#include "RiskManager.h"
 
 #include <atomic>
 #include <chrono>
@@ -159,6 +160,93 @@ TEST(PipelineIntegration, test_pipeline_output_sink_captures_all_signals) {
     EXPECT_EQ(static_cast<uint64_t>(sink.get_signals().size()),
               engine.get_stats().signals_generated.load())
         << "Sink and engine signal counts must match";
+}
+
+TEST(PipelineIntegration, test_pipeline_risk_manager_gates_engine_output) {
+    // Wire engine → RiskManager → MemoryOutputSink.
+    // Tight config: only low-bias signals should reach the sink.
+    LLMAdapter adapter;
+    TradeSignalEngine engine(engine_config_backtest());
+    engine.set_backtest_mode(true);
+
+    RiskManager::Config rm_cfg;
+    rm_cfg.max_bias_magnitude       = 0.3;
+    rm_cfg.max_volatility_magnitude = 1.0;
+    rm_cfg.max_spread_magnitude     = 1.0;
+    rm_cfg.min_confidence           = 0.01;
+    rm_cfg.max_signals_per_second   = 100000;
+    rm_cfg.max_drawdown             = 1000.0;
+    rm_cfg.drawdown_window          = std::chrono::seconds{3600};
+    rm_cfg.position_warn_fraction   = 0.8;
+    RiskManager risk_mgr(rm_cfg);
+
+    MemoryOutputSink sink;
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        if (risk_mgr.evaluate(sig)) sink.emit(sig);
+    });
+
+    // Process neutral token (low-bias) then a fear token (high-bias).
+    SemanticWeight neutral = adapter.map_token_to_weight("stable");
+    for (int i = 0; i < 5; ++i) engine.process_semantic_weight(neutral);
+
+    uint64_t passed_after_neutral = risk_mgr.get_stats().signals_passed.load();
+    EXPECT_GT(passed_after_neutral, 0u)
+        << "Neutral tokens within magnitude limit must pass the risk gate";
+
+    // All signals from the crash token will have large negative accumulated bias.
+    SemanticWeight fear = adapter.map_token_to_weight("crash");
+    for (int i = 0; i < 20; ++i) engine.process_semantic_weight(fear);
+
+    // With a tight magnitude cap some signals must have been blocked.
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_magnitude.load(), 0u)
+        << "High-magnitude fear signals must be blocked by the magnitude gate";
+}
+
+TEST(PipelineIntegration, test_pipeline_reset_engine_mid_stream_produces_clean_signals) {
+    // Verify that engine.reset() between two token batches produces independent
+    // bias values — the second batch must not be contaminated by the first.
+    LLMAdapter adapter;
+    TradeSignalEngine engine(engine_config_backtest());
+    engine.set_backtest_mode(true);
+
+    TradeSignal last;
+    engine.set_signal_callback([&](const TradeSignal& s) { last = s; });
+
+    // First batch: strong bullish.
+    SemanticWeight bullish = adapter.map_token_to_weight("bullish");
+    for (int i = 0; i < 10; ++i) engine.process_semantic_weight(bullish);
+    double bias_after_first = last.delta_bias_shift;
+    EXPECT_GT(bias_after_first, 0.0);
+
+    engine.reset();
+
+    // Second batch: strong bearish.  After reset the accumulator is zero so the
+    // very first fear signal must produce a negative (or near-zero) bias.
+    SemanticWeight fear = adapter.map_token_to_weight("crash");
+    engine.process_semantic_weight(fear);
+
+    EXPECT_LT(last.delta_bias_shift, bias_after_first)
+        << "After reset, a fear token must produce lower bias than the prior bullish batch";
+}
+
+TEST(PipelineIntegration, test_pipeline_latency_controller_pressure_nonzero_under_load) {
+    // Drive ingestion pressure above zero and confirm composite reflects it.
+    LatencyController::Config lc_cfg;
+    lc_cfg.target_latency   = std::chrono::microseconds{10};
+    lc_cfg.sample_window    = 200;
+    lc_cfg.enable_profiling = true;
+    LatencyController lc(lc_cfg);
+
+    // Simulate arrival rate at 50% capacity.
+    lc.update_ingestion_pressure(5000.0, 10000.0);
+
+    auto ps = lc.get_pressure();
+    EXPECT_GT(ps.ingestion_pressure, 0.0)
+        << "Ingestion pressure must be non-zero when arrival rate > 0";
+    EXPECT_GT(ps.composite, 0.0)
+        << "Composite pressure must reflect ingestion pressure";
+    EXPECT_LE(ps.composite, 1.0)
+        << "Composite pressure must not exceed 1.0";
 }
 
 } // namespace

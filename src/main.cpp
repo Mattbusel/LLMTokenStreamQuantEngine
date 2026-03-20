@@ -201,7 +201,8 @@ int main(int argc, char* argv[]) {
         .signal_decay_rate    = sys_config.trading.signal_decay_rate,
         .signal_cooldown      = std::chrono::microseconds(sys_config.trading.signal_cooldown_us),
         .max_signal_age_us    = sys_config.trading.max_signal_age_us,
-        .min_bias_threshold   = sys_config.trading.min_bias_threshold
+        .min_bias_threshold   = sys_config.trading.min_bias_threshold,
+        .max_accumulated_bias = sys_config.trading.max_accumulated_bias
     });
 
     // Backtest mode: emit on every token, ignoring the cooldown timer.
@@ -258,6 +259,7 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
         new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
         new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
+        new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
         trade_engine.update_config(new_eng_cfg);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
@@ -712,9 +714,28 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_min_bias_threshold Configured noise-filter minimum |bias| threshold (0=disabled)\n"
                  << "# TYPE llmquant_min_bias_threshold gauge\n"
                  << "llmquant_min_bias_threshold " << trade_engine.get_config().min_bias_threshold << "\n"
+                 << "# HELP llmquant_max_accumulated_bias Configured accumulator cap (0=disabled)\n"
+                 << "# TYPE llmquant_max_accumulated_bias gauge\n"
+                 << "llmquant_max_accumulated_bias " << trade_engine.get_config().max_accumulated_bias << "\n"
+                 << "# HELP llmquant_p5_latency_us 5th-percentile latency of the sample window (microseconds)\n"
+                 << "# TYPE llmquant_p5_latency_us gauge\n"
+                 << "llmquant_p5_latency_us " << stats.p5_latency.count() << "\n"
                  << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
                  << "# TYPE llmquant_drawdown_cumulative_bias gauge\n"
-                 << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n";
+                 << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n"
+                 << "# HELP llmquant_risk_pass_rate_pct Percentage of signals that passed all risk gates (0-100)\n"
+                 << "# TYPE llmquant_risk_pass_rate_pct gauge\n"
+                 << "llmquant_risk_pass_rate_pct " << [&]() -> double {
+                        uint64_t passed  = rs.signals_passed.load();
+                        uint64_t blocked_total = rs.signals_blocked_magnitude.load()
+                                               + rs.signals_blocked_confidence.load()
+                                               + rs.signals_blocked_rate.load()
+                                               + rs.signals_blocked_drawdown.load()
+                                               + rs.signals_blocked_position.load()
+                                               + rs.signals_blocked_pnl.load();
+                        uint64_t total = (passed > UINT64_MAX - blocked_total) ? UINT64_MAX : passed + blocked_total;
+                        return (total > 0) ? (static_cast<double>(passed) * 100.0 / static_cast<double>(total)) : 100.0;
+                    }() << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

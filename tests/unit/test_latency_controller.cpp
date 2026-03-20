@@ -266,5 +266,67 @@ TEST(LatencyControllerTest, test_concurrent_record_and_get_stats_is_safe) {
     SUCCEED();
 }
 
+TEST(LatencyControllerTest, test_latency_controller_profiling_hooks_do_not_crash) {
+    // Verify that the three profiling hooks run without throwing or crashing.
+    LatencyController lc(make_config(true /*enable profiling*/));
+    EXPECT_NO_THROW({
+        lc.profile_token_processing();
+        lc.profile_signal_generation();
+        lc.profile_queue_lag();
+    });
+}
+
+TEST(LatencyControllerTest, test_latency_controller_profiling_hooks_disabled_do_not_crash) {
+    // With profiling disabled, the hooks must be no-ops.
+    LatencyController lc(make_config(false /*disable profiling*/));
+    EXPECT_NO_THROW({
+        lc.profile_token_processing();
+        lc.profile_signal_generation();
+        lc.profile_queue_lag();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// p5 (5th-percentile) latency
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_controller_p5_is_populated) {
+    LatencyController lc(make_config(true, 200));
+
+    // Insert 100 samples: 1..100 µs. The 5th-percentile nearest-rank is the
+    // 5th value (1-indexed) in a sorted array = 5 µs; allow ±5 µs tolerance.
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto stats = lc.get_stats();
+    EXPECT_GT(stats.p5_latency.count(), 0)  << "p5_latency must be non-zero when samples exist";
+    EXPECT_GE(stats.p5_latency.count(), 1);
+    EXPECT_LE(stats.p5_latency.count(), 10) << "p5 of [1..100] should be near 5 µs";
+}
+
+TEST(LatencyControllerTest, test_latency_controller_p5_le_p50_le_p95) {
+    LatencyController lc(make_config(true, 200));
+
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto s = lc.get_stats();
+    EXPECT_LE(s.p5_latency.count(),  s.p50_latency.count())  << "p5 must be <= p50";
+    EXPECT_LE(s.p50_latency.count(), s.p95_latency.count())  << "p50 must be <= p95";
+    EXPECT_LE(s.p95_latency.count(), s.p99_latency.count())  << "p95 must be <= p99";
+}
+
+TEST(LatencyControllerTest, test_latency_controller_reset_clears_p5) {
+    LatencyController lc(make_config());
+
+    lc.record_latency(std::chrono::microseconds{999});
+    lc.reset_stats();
+
+    auto stats = lc.get_stats();
+    EXPECT_EQ(stats.p5_latency.count(), 0) << "p5_latency must be zero after reset";
+}
+
 } // namespace
 } // namespace llmquant

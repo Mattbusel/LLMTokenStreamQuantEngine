@@ -421,5 +421,45 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_clear_sinks_removes_all) {
     EXPECT_EQ(engine.get_stats().signals_suppressed.load(), 1u);
 }
 
+// ---------------------------------------------------------------------------
+// max_accumulated_bias cap
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_clamps_accumulator) {
+    // With a cap of 1.0 and no decay (decay=1.0 not allowed; use 0.999 ≈ no decay),
+    // feed many strongly-bullish tokens and verify |accumulated_bias| never exceeds 1.0.
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.max_accumulated_bias = 1.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&){});  // consume signals
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};  // bias_contribution = 1.0 per token
+    for (int i = 0; i < 50; ++i) {
+        engine.process_semantic_weight(strong);
+        double bias = engine.get_accumulated_bias();
+        EXPECT_LE(std::fabs(bias), 1.0 + 1e-9)
+            << "accumulated_bias exceeded max_accumulated_bias cap at iteration " << i;
+    }
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_zero_disabled) {
+    // With max_accumulated_bias=0.0 (disabled), the accumulator is free to grow above 1.0.
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.max_accumulated_bias = 0.0;  // disabled
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&){});
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    for (int i = 0; i < 20; ++i) {
+        engine.process_semantic_weight(strong);
+    }
+    // With decay=0.999 and contribution=1.0, after many tokens bias approaches ~1000 * 1.0 / (1-0.999)
+    // In practice after 20 steps: roughly 1 + 0.999 + 0.999^2 + ... ≈ 19+ for large count.
+    EXPECT_GT(engine.get_accumulated_bias(), 1.0)
+        << "Without cap, accumulator should exceed 1.0 after many strongly-bullish tokens";
+}
+
 } // namespace
 } // namespace llmquant

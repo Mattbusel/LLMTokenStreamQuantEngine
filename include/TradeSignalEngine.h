@@ -89,6 +89,11 @@ public:
         /// and suppressed (counted in signals_suppressed).
         /// Set to 0.0 to disable (default).
         double min_bias_threshold{0.0};
+        /// Maximum absolute value of the accumulated bias.
+        /// The accumulator is clamped to [-max_accumulated_bias, +max_accumulated_bias]
+        /// after every token update to prevent runaway compounding.
+        /// Set to 0.0 to disable (default).
+        double max_accumulated_bias{0.0};
     };
 
     /**

@@ -43,8 +43,9 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (t["volatility_sensitivity"]) tmp.trading.volatility_sensitivity = t["volatility_sensitivity"].as<double>();
             if (t["signal_decay_rate"]) tmp.trading.signal_decay_rate = t["signal_decay_rate"].as<double>();
             if (t["signal_cooldown_us"]) tmp.trading.signal_cooldown_us = t["signal_cooldown_us"].as<int>();
-            if (t["max_signal_age_us"])   tmp.trading.max_signal_age_us   = t["max_signal_age_us"].as<double>();
-            if (t["min_bias_threshold"])  tmp.trading.min_bias_threshold  = t["min_bias_threshold"].as<double>();
+            if (t["max_signal_age_us"])      tmp.trading.max_signal_age_us      = t["max_signal_age_us"].as<double>();
+            if (t["min_bias_threshold"])     tmp.trading.min_bias_threshold     = t["min_bias_threshold"].as<double>();
+            if (t["max_accumulated_bias"])   tmp.trading.max_accumulated_bias   = t["max_accumulated_bias"].as<double>();
         }
 
         // Latency settings
@@ -150,6 +151,11 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
+        if (!std::isfinite(tr.max_accumulated_bias) || tr.max_accumulated_bias < 0.0) {
+            spdlog::error("Config validation failed: trading.max_accumulated_bias must be >= 0");
+            set_defaults();
+            return false;
+        }
         if (lat.target_latency_us <= 0) {
             spdlog::error("Config validation failed: target_latency_us must be > 0");
             set_defaults();
@@ -244,8 +250,9 @@ bool Config::save_to_file(const std::string& filepath) const {
     yaml["trading"]["volatility_sensitivity"] = snap_cfg.trading.volatility_sensitivity;
     yaml["trading"]["signal_decay_rate"] = snap_cfg.trading.signal_decay_rate;
     yaml["trading"]["signal_cooldown_us"]  = snap_cfg.trading.signal_cooldown_us;
-    yaml["trading"]["max_signal_age_us"]   = snap_cfg.trading.max_signal_age_us;
+    yaml["trading"]["max_signal_age_us"]    = snap_cfg.trading.max_signal_age_us;
     yaml["trading"]["min_bias_threshold"]  = snap_cfg.trading.min_bias_threshold;
+    yaml["trading"]["max_accumulated_bias"] = snap_cfg.trading.max_accumulated_bias;
 
     // Latency
     yaml["latency"]["target_latency_us"] = snap_cfg.latency.target_latency_us;

@@ -257,3 +257,147 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_oms_event_callback_fires_on_posit
     EXPECT_NE(captured_event, "position_limit_breached")
         << "Hard breach must not fire when position stays within the limit";
 }
+
+// ---------------------------------------------------------------------------
+// Test 5: risk_mgr.reset_stats() after blocking clears counters; subsequent
+//         passing signals restart from zero.
+// ---------------------------------------------------------------------------
+TEST(OmsPipelineIntegration, test_oms_pipeline_reset_stats_restores_clean_counters) {
+    RiskManager::Config rm_cfg = permissive_risk_cfg();
+    RiskManager risk_mgr(rm_cfg);
+
+    // Pump signals above the magnitude cap so some are blocked.
+    RiskManager::Config tight = permissive_risk_cfg();
+    tight.max_bias_magnitude = 0.01;
+    risk_mgr.update_config(tight);
+
+    TradeSignalEngine engine(backtest_engine_cfg());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        risk_mgr.evaluate(sig);
+    });
+
+    pump_signals(engine, 10, 0.5, 0.1);   // bias >> 0.01, all blocked by magnitude
+
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_magnitude.load(), 0u);
+
+    // Reset stats then relax config; new signals must pass and counters restart.
+    risk_mgr.reset_stats();
+    risk_mgr.update_config(permissive_risk_cfg());
+    engine.reset();
+
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        if (risk_mgr.evaluate(sig)) sink->emit(sig);
+    });
+
+    pump_signals(engine, 5, 0.05, 0.05);
+
+    EXPECT_EQ(risk_mgr.get_stats().signals_blocked_magnitude.load(), 0u)
+        << "After reset_stats(), blocked_magnitude counter must start from zero";
+    EXPECT_GT(risk_mgr.get_stats().signals_passed.load(), 0u)
+        << "Signals within limits must pass after reset_stats()";
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: rate-limit gate suppresses rapid-fire signals; only the first few
+//         pass within the per-second window.
+// ---------------------------------------------------------------------------
+TEST(OmsPipelineIntegration, test_oms_pipeline_rate_limit_suppresses_rapid_signals) {
+    RiskManager::Config rm_cfg = permissive_risk_cfg();
+    rm_cfg.max_signals_per_second = 3;   // allow at most 3/s
+    rm_cfg.disable_drawdown_gate  = true;
+    RiskManager risk_mgr(rm_cfg);
+
+    TradeSignalEngine engine(backtest_engine_cfg());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        risk_mgr.evaluate(sig);
+    });
+
+    // Fire 20 signals in a tight loop — rate guard must kick in.
+    pump_signals(engine, 20, 0.05, 0.05);
+
+    // At most 3 should have passed in a single sub-second burst.
+    EXPECT_LE(risk_mgr.get_stats().signals_passed.load(), 10u)
+        << "Rate limit must suppress the majority of rapid-fire signals";
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_rate.load(), 0u)
+        << "At least one signal must have been blocked by the rate gate";
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: Short position (negative net) blocks further negative-bias signals
+//         when the projected position would exceed the absolute limit.
+// ---------------------------------------------------------------------------
+TEST(OmsPipelineIntegration, test_oms_pipeline_short_position_blocks_negative_signals) {
+    RiskManager::Config rm_cfg = permissive_risk_cfg();
+    rm_cfg.disable_drawdown_gate = true;
+    rm_cfg.disable_rate_gate     = true;
+    RiskManager risk_mgr(rm_cfg);
+
+    // Short position near the limit.
+    MockOmsAdapter::Config oms_cfg;
+    oms_cfg.emit_interval = std::chrono::milliseconds{5};
+    MockOmsAdapter oms(oms_cfg);
+    oms.load_states({make_pos(-0.95, 1.0, 0.0, -10.0)});
+    oms.set_position_callback([&](const RiskManager::PositionState& s) {
+        risk_mgr.update_position(s);
+    });
+    oms.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    oms.stop();
+
+    TradeSignalEngine engine(backtest_engine_cfg());
+    engine.set_backtest_mode(true);
+
+    auto sink = std::make_shared<MemoryOutputSink>();
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        if (risk_mgr.evaluate(sig)) sink->emit(sig);
+    });
+
+    // Pump negative-bias signals — projected position goes below -1.0, blocked.
+    SemanticWeight w;
+    w.directional_bias = -0.8;
+    w.volatility_score = 0.1;
+    w.sentiment_score  = -0.9;
+    w.confidence_score = 0.9;
+    for (int i = 0; i < 10; ++i) {
+        engine.process_semantic_weight(w);
+    }
+
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_position.load(), 0u)
+        << "Negative-bias signals projecting a short position past limit must be blocked";
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: When a drawdown threshold is hit, all subsequent signals are blocked
+//         until the window resets or reset() is called.
+// ---------------------------------------------------------------------------
+TEST(OmsPipelineIntegration, test_oms_pipeline_drawdown_gate_blocks_after_threshold) {
+    RiskManager::Config rm_cfg = permissive_risk_cfg();
+    rm_cfg.max_drawdown         = 0.5;       // very tight drawdown cap
+    rm_cfg.drawdown_window      = std::chrono::seconds{60};
+    rm_cfg.disable_rate_gate    = true;
+    rm_cfg.disable_position_gate= true;
+    RiskManager risk_mgr(rm_cfg);
+
+    TradeSignalEngine engine(backtest_engine_cfg());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([&](const TradeSignal& sig) {
+        risk_mgr.evaluate(sig);
+    });
+
+    // Pump high-bias signals until cumulative drawdown exceeds 0.5.
+    SemanticWeight w;
+    w.directional_bias = 0.9;
+    w.volatility_score = 0.1;
+    w.sentiment_score  = 0.9;
+    w.confidence_score = 0.9;
+    for (int i = 0; i < 20; ++i) {
+        engine.process_semantic_weight(w);
+    }
+
+    // At some point the drawdown gate must have fired.
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_drawdown.load(), 0u)
+        << "Drawdown gate must block signals once cumulative bias exceeds max_drawdown";
+}

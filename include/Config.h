@@ -43,6 +43,11 @@ struct TradingConfig {
      *  Signals with |accumulated_bias| < this value are suppressed as noise.
      *  Set to 0.0 to disable the noise filter (default). */
     double min_bias_threshold{0.0};
+    /** @brief Maximum absolute value of the accumulated bias.
+     *  The accumulator is clamped to [-max_accumulated_bias, +max_accumulated_bias]
+     *  after every update to prevent runaway compounding.
+     *  Set to 0.0 to disable (default). */
+    double max_accumulated_bias{0.0};
 };
 
 /**
