@@ -365,6 +365,35 @@ TEST(LatencyControllerTest, test_histogram_buckets_cumulative_and_ordered) {
 // get_window_fill_ratio
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// p25 (first quartile) latency
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_latency_controller_p25_is_populated) {
+    LatencyController lc(make_config(true, 200));
+
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto stats = lc.get_stats();
+    // Nearest-rank p25 of [1..100]: ceil(100*0.25)-1 = 24 (0-indexed) = 25 µs.
+    EXPECT_GE(stats.p25_latency.count(), 20) << "p25 of [1..100] should be near 25 µs";
+    EXPECT_LE(stats.p25_latency.count(), 30);
+}
+
+TEST(LatencyControllerTest, test_latency_controller_p5_le_p25_le_p50) {
+    LatencyController lc(make_config(true, 200));
+
+    for (int i = 1; i <= 100; ++i) {
+        lc.record_latency(std::chrono::microseconds{i});
+    }
+
+    auto s = lc.get_stats();
+    EXPECT_LE(s.p5_latency.count(),  s.p25_latency.count()) << "p5 must be <= p25";
+    EXPECT_LE(s.p25_latency.count(), s.p50_latency.count()) << "p25 must be <= p50";
+}
+
 TEST(LatencyControllerTest, test_window_fill_ratio_zero_before_measurements) {
     LatencyController lc(make_config(true, 100));
     EXPECT_DOUBLE_EQ(lc.get_window_fill_ratio(), 0.0)

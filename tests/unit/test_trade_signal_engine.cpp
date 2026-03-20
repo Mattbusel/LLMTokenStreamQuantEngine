@@ -483,6 +483,43 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_max_accumulated_bias_clamps
 // accumulator_clamped counter
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// peak_bias stat
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_peak_bias_tracks_maximum) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.min_bias_threshold = 100.0;  // suppress emissions / halving
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    EXPECT_DOUBLE_EQ(engine.get_stats().peak_bias.load(), 0.0)
+        << "peak_bias must be 0 initially";
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    for (int i = 0; i < 10; ++i) engine.process_semantic_weight(strong);
+
+    double peak = engine.get_stats().peak_bias.load();
+    EXPECT_GT(peak, 0.0) << "peak_bias must be > 0 after processing bullish tokens";
+    // peak must be >= current accumulated bias
+    EXPECT_GE(peak, std::fabs(engine.get_accumulated_bias()) - 1e-9);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_engine_peak_bias_reset_clears) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.min_bias_threshold = 100.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight strong{1.0, 1.0, 0.5, 1.0};
+    for (int i = 0; i < 5; ++i) engine.process_semantic_weight(strong);
+    ASSERT_GT(engine.get_stats().peak_bias.load(), 0.0);
+
+    engine.reset();
+    EXPECT_DOUBLE_EQ(engine.get_stats().peak_bias.load(), 0.0)
+        << "peak_bias must be 0 after reset()";
+}
+
 TEST(TradeSignalEngineTest, test_trade_signal_engine_accumulator_clamped_increments_on_cap) {
     TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
     cfg.max_accumulated_bias = 1.0;
