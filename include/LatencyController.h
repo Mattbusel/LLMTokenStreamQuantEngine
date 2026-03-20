@@ -191,6 +191,17 @@ public:
     bool is_warmed_up() const { return get_window_fill_ratio() >= 0.5; }
 
     /**
+     * @brief Return true once the sample window is at least @p fraction populated.
+     *
+     * @param fraction Minimum fill ratio required, clamped to [0.0, 1.0].
+     * @return true if get_window_fill_ratio() >= fraction.
+     */
+    bool is_warmed_up(double fraction) const {
+        double f = fraction < 0.0 ? 0.0 : (fraction > 1.0 ? 1.0 : fraction);
+        return get_window_fill_ratio() >= f;
+    }
+
+    /**
      * @brief Return the fraction of the sample window currently populated, in [0.0, 1.0].
      *
      * Rises from 0.0 to 1.0 as measurements are recorded up to the configured

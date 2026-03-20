@@ -111,6 +111,10 @@ public:
         std::atomic<uint64_t> signals_aged_out{0};    ///< Signals suppressed by staleness guard.
         std::atomic<uint64_t> accumulator_clamped{0}; ///< Times max_accumulated_bias cap was applied.
         std::atomic<uint64_t> tokens_processed{0};    ///< Total process_semantic_weight() calls since last reset.
+        /// Tokens rejected by the noise gate (|accumulated_bias| < min_bias_threshold).
+        /// Unlike signals_suppressed, this counter is NOT incremented for signals
+        /// that were emitted but had no registered callback or sink.
+        std::atomic<uint64_t> noise_filtered{0};
         std::atomic<double>   avg_signal_strength{0.0};
         std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
 
@@ -123,6 +127,7 @@ public:
             , signals_aged_out{other.signals_aged_out.load()}
             , accumulator_clamped{other.accumulator_clamped.load()}
             , tokens_processed{other.tokens_processed.load()}
+            , noise_filtered{other.noise_filtered.load()}
             , avg_signal_strength{other.avg_signal_strength.load()}
             , peak_bias{other.peak_bias.load()} {}
 
@@ -134,6 +139,7 @@ public:
                 signals_aged_out.store(other.signals_aged_out.load());
                 accumulator_clamped.store(other.accumulator_clamped.load());
                 tokens_processed.store(other.tokens_processed.load());
+                noise_filtered.store(other.noise_filtered.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
                 peak_bias.store(other.peak_bias.load());
             }
@@ -259,6 +265,18 @@ public:
     }
 
     /**
+     * @brief Return the signal_quality field of the most recently emitted signal.
+     *
+     * Returns 0.0 if no signal has been emitted yet.
+     * Thread-safe (atomic read).
+     *
+     * @return signal_quality of the last emitted signal in [0.0, 1.0].
+     */
+    double get_last_signal_quality() const noexcept {
+        return last_signal_quality_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Register an OutputSink to receive all emitted signals.
      *
      * The sink is called synchronously inside emit_signal() after the
@@ -328,6 +346,8 @@ private:
     /// compute the token-to-signal latency for the TradeSignal::latency_us field.
     std::chrono::high_resolution_clock::time_point processing_start_;
     Stats stats_;
+    /// signal_quality of the last emitted signal; updated by emit_signal().
+    std::atomic<double> last_signal_quality_{0.0};
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;
     std::vector<std::pair<std::shared_ptr<OutputSink>, SinkPredicate>> filtered_sinks_;
 };

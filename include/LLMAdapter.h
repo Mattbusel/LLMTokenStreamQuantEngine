@@ -146,6 +146,19 @@ public:
     bool remove_token_mapping(const std::string& token);
 
     /**
+     * @brief Update the numeric fields of an existing token mapping in-place.
+     *
+     * Only modifies an entry if it already exists in the dictionary.
+     * Useful for live recalibration without the remove + add roundtrip.
+     * Applies the same normalisation as map_token_to_weight().
+     *
+     * @param token  Raw token string.
+     * @param weight New weight values to store.
+     * @return true if the entry was found and updated; false if not found.
+     */
+    bool update_token_weight(const std::string& token, const SemanticWeight& weight);
+
+    /**
      * @brief Retrieve the SemanticWeight associated with a token.
      *
      * Applies the same normalisation as map_token_to_weight().

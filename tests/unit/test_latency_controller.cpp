@@ -576,5 +576,36 @@ TEST(LatencyControllerTest, test_slo_breach_rate_correct_fraction) {
         << "2 of 4 samples above target → breach rate = 0.5";
 }
 
+// ---------------------------------------------------------------------------
+// is_warmed_up(double fraction) overload
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_is_warmed_up_fraction_false_below_custom_threshold) {
+    LatencyController lc(make_config(true, 100));
+
+    // Fill 70% of window.
+    for (int i = 0; i < 70; ++i) lc.record_latency(std::chrono::microseconds{i + 1});
+
+    // 0.9 fraction requires 90% — not yet reached.
+    EXPECT_FALSE(lc.is_warmed_up(0.9))
+        << "is_warmed_up(0.9) must return false at 70% fill";
+    // 0.5 fraction (default) should be true.
+    EXPECT_TRUE(lc.is_warmed_up(0.5));
+    // 0.0 fraction always true.
+    EXPECT_TRUE(lc.is_warmed_up(0.0));
+}
+
+TEST(LatencyControllerTest, test_is_warmed_up_fraction_clamped) {
+    LatencyController lc(make_config(true, 10));
+    for (int i = 0; i < 10; ++i) lc.record_latency(std::chrono::microseconds{i + 1});
+
+    // Fraction > 1.0 is clamped to 1.0 — window must be fully filled.
+    EXPECT_TRUE(lc.is_warmed_up(2.0))
+        << "is_warmed_up(2.0) must clamp to 1.0 and return true when window is full";
+    // Fraction < 0.0 is clamped to 0.0 — always true.
+    EXPECT_TRUE(lc.is_warmed_up(-1.0))
+        << "is_warmed_up(-1.0) must clamp to 0.0 and return true";
+}
+
 } // namespace
 } // namespace llmquant

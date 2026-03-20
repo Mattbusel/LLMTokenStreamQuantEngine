@@ -741,5 +741,88 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_tokens_processed_resets_on_
     EXPECT_EQ(engine.get_stats().tokens_processed.load(), 0u);
 }
 
+// ---------------------------------------------------------------------------
+// get_last_signal_quality
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_last_signal_quality_zero_before_emission) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_last_signal_quality(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_last_signal_quality_in_unit_interval_after_emission) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&){});
+
+    SemanticWeight w{0.8, 0.9, 0.3, 0.9};
+    engine.process_semantic_weight(w);
+
+    double q = engine.get_last_signal_quality();
+    EXPECT_GE(q, 0.0);
+    EXPECT_LE(q, 1.0);
+}
+
+TEST(TradeSignalEngineTest, test_last_signal_quality_reset_clears_to_zero) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&){});
+
+    engine.process_semantic_weight({0.8, 0.9, 0.3, 0.9});
+    ASSERT_GT(engine.get_last_signal_quality(), 0.0);
+
+    engine.reset();
+    EXPECT_DOUBLE_EQ(engine.get_last_signal_quality(), 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// noise_filtered counter
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_noise_filtered_zero_with_no_threshold) {
+    // Default min_bias_threshold=0.0 means noise gate is disabled.
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    SemanticWeight w{0.5, 0.5, 0.2, 0.9};
+    engine.process_semantic_weight(w);
+
+    EXPECT_EQ(engine.get_stats().noise_filtered.load(), 0u)
+        << "noise_filtered must be 0 when min_bias_threshold is disabled";
+}
+
+TEST(TradeSignalEngineTest, test_noise_filtered_counts_threshold_rejections) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.min_bias_threshold = 100.0;  // suppress everything
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight w{0.1, 0.1, 0.1, 0.9};
+    for (int i = 0; i < 5; ++i) engine.process_semantic_weight(w);
+
+    EXPECT_EQ(engine.get_stats().noise_filtered.load(), 5u)
+        << "noise_filtered must count every noise-gate rejection";
+    // noise_filtered must equal signals_suppressed in this pure-threshold scenario
+    // (no unrouted signals since nothing is emitted).
+    EXPECT_EQ(engine.get_stats().noise_filtered.load(),
+              engine.get_stats().signals_suppressed.load());
+}
+
+TEST(TradeSignalEngineTest, test_noise_filtered_resets_on_reset) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.min_bias_threshold = 100.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    SemanticWeight w{0.1, 0.1, 0.1, 0.9};
+    engine.process_semantic_weight(w);
+    ASSERT_GT(engine.get_stats().noise_filtered.load(), 0u);
+
+    engine.reset();
+    EXPECT_EQ(engine.get_stats().noise_filtered.load(), 0u)
+        << "noise_filtered must be zero after reset()";
+}
+
 } // namespace
 } // namespace llmquant

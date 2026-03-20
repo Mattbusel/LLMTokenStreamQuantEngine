@@ -249,6 +249,13 @@ bool LLMAdapter::get_token_mapping(const std::string& token, SemanticWeight& wei
     return true;
 }
 
+bool LLMAdapter::update_token_weight(const std::string& token, const SemanticWeight& weight) {
+    auto it = token_weights_.find(normalize_token(token));
+    if (it == token_weights_.end()) return false;
+    it->second = weight;
+    return true;
+}
+
 std::vector<std::pair<std::string, double>>
 LLMAdapter::top_tokens_by_sentiment(size_t n) const {
     std::vector<std::pair<std::string, double>> result;

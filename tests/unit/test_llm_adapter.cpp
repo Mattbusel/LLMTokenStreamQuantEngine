@@ -525,5 +525,36 @@ TEST(LLMAdapterTest, test_llm_adapter_get_token_mapping_case_insensitive) {
     EXPECT_DOUBLE_EQ(lower.sentiment_score, upper.sentiment_score);
 }
 
+// ---------------------------------------------------------------------------
+// update_token_weight
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_update_token_weight_existing_token) {
+    LLMAdapter adapter;
+    ASSERT_TRUE(adapter.contains_token("crash"));
+    SemanticWeight new_w{0.5, 0.5, 0.1, 0.5};
+    bool updated = adapter.update_token_weight("crash", new_w);
+    EXPECT_TRUE(updated) << "update_token_weight on existing token must return true";
+
+    SemanticWeight retrieved;
+    ASSERT_TRUE(adapter.get_token_mapping("crash", retrieved));
+    EXPECT_DOUBLE_EQ(retrieved.sentiment_score, 0.5);
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_update_token_weight_nonexistent_returns_false) {
+    LLMAdapter adapter;
+    SemanticWeight w{0.1, 0.1, 0.1, 0.1};
+    EXPECT_FALSE(adapter.update_token_weight("__no_such_token__", w));
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_update_token_weight_case_insensitive) {
+    LLMAdapter adapter;
+    SemanticWeight new_w{0.3, 0.3, 0.3, 0.3};
+    ASSERT_TRUE(adapter.update_token_weight("CRASH", new_w));  // uppercase key
+    SemanticWeight retrieved;
+    ASSERT_TRUE(adapter.get_token_mapping("crash", retrieved));
+    EXPECT_DOUBLE_EQ(retrieved.sentiment_score, 0.3);
+}
+
 } // namespace
 } // namespace llmquant

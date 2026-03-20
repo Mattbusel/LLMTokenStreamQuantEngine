@@ -98,6 +98,24 @@ public:
         std::atomic<uint64_t> signals_blocked_drawdown{0};
         std::atomic<uint64_t> signals_blocked_position{0};
         std::atomic<uint64_t> signals_blocked_pnl{0};
+
+        /**
+         * @brief Sum of all blocked counters excluding the PnL sub-counter.
+         *
+         * signals_blocked_pnl is a strict subset of signals_blocked_position
+         * (both are incremented on PnL breach).  Excluding it prevents
+         * double-counting when a caller simply needs the total blocked signal
+         * count for rate/ratio calculations.
+         *
+         * @return Total number of blocked signals since construction or last reset_stats().
+         */
+        uint64_t blocked_total() const noexcept {
+            return signals_blocked_magnitude.load(std::memory_order_relaxed)
+                 + signals_blocked_confidence.load(std::memory_order_relaxed)
+                 + signals_blocked_rate.load(std::memory_order_relaxed)
+                 + signals_blocked_drawdown.load(std::memory_order_relaxed)
+                 + signals_blocked_position.load(std::memory_order_relaxed);
+        }
     };
 
     /**
@@ -215,6 +233,18 @@ public:
      * @return Rate-limit utilization fraction.
      */
     double get_rate_limit_utilization() const;
+
+    /**
+     * @brief Return the fraction of evaluated signals that were blocked by any
+     *        gate, in [0.0, 1.0].
+     *
+     * Computed as total_blocked / (total_blocked + signals_passed).
+     * Returns 0.0 if no signals have been evaluated yet.
+     * Thread-safe (reads atomic stats without acquiring mutex_).
+     *
+     * @return Block rate in [0.0, 1.0].
+     */
+    double get_blocked_rate() const noexcept;
 
     /**
      * @brief Attach a MetricsLogger for structured rejection logging.

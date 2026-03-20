@@ -276,6 +276,13 @@ double RiskManager::get_drawdown_budget_remaining() const {
     return remaining < 0.0 ? 0.0 : remaining;
 }
 
+double RiskManager::get_blocked_rate() const noexcept {
+    uint64_t blocked = stats_.blocked_total();
+    uint64_t passed  = stats_.signals_passed.load(std::memory_order_relaxed);
+    uint64_t total   = blocked + passed;
+    return (total == 0) ? 0.0 : static_cast<double>(blocked) / static_cast<double>(total);
+}
+
 double RiskManager::get_rate_limit_utilization() const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (config_.max_signals_per_second == 0) return 1.0;

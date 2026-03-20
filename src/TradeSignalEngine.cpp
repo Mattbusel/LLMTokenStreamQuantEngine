@@ -92,6 +92,8 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
         std::fabs(current_bias) < config_.min_bias_threshold) {
         if (stats_.signals_suppressed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
             stats_.signals_suppressed.fetch_add(1, std::memory_order_relaxed);
+        if (stats_.noise_filtered.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+            stats_.noise_filtered.fetch_add(1, std::memory_order_relaxed);
         return;
     }
 
@@ -198,6 +200,7 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
                           + std::fabs(signal.volatility_adjustment)) * 0.5;
     signal.signal_quality = signal.confidence
                           * std::clamp(magnitude_avg, 0.0, 1.0);
+    last_signal_quality_.store(signal.signal_quality, std::memory_order_relaxed);
     // Do NOT overwrite signal.confidence here — it must be set by the caller
     // (process_semantic_weight) before calling emit_signal().  Overwriting it
     // would silently discard any per-signal confidence already populated.
@@ -251,8 +254,10 @@ void TradeSignalEngine::reset() noexcept {
     stats_.signals_aged_out.store(0, std::memory_order_relaxed);
     stats_.accumulator_clamped.store(0, std::memory_order_relaxed);
     stats_.tokens_processed.store(0, std::memory_order_relaxed);
+    stats_.noise_filtered.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
+    last_signal_quality_.store(0.0, std::memory_order_relaxed);
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
