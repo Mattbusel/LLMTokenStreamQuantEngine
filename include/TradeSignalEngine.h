@@ -108,9 +108,10 @@ public:
     struct Stats {
         std::atomic<uint64_t> signals_generated{0};
         std::atomic<uint64_t> signals_suppressed{0};
-        std::atomic<uint64_t> signals_aged_out{0};   ///< Signals suppressed by staleness guard.
+        std::atomic<uint64_t> signals_aged_out{0};    ///< Signals suppressed by staleness guard.
         std::atomic<uint64_t> accumulator_clamped{0}; ///< Times max_accumulated_bias cap was applied.
         std::atomic<double>   avg_signal_strength{0.0};
+        std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
 
         Stats() = default;
 
@@ -120,7 +121,8 @@ public:
             , signals_suppressed{other.signals_suppressed.load()}
             , signals_aged_out{other.signals_aged_out.load()}
             , accumulator_clamped{other.accumulator_clamped.load()}
-            , avg_signal_strength{other.avg_signal_strength.load()} {}
+            , avg_signal_strength{other.avg_signal_strength.load()}
+            , peak_bias{other.peak_bias.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
         Stats& operator=(const Stats& other) {
@@ -130,6 +132,7 @@ public:
                 signals_aged_out.store(other.signals_aged_out.load());
                 accumulator_clamped.store(other.accumulator_clamped.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
+                peak_bias.store(other.peak_bias.load());
             }
             return *this;
         }

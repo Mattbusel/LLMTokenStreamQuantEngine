@@ -69,7 +69,18 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
 
     double current_bias = desired_bias;
     double current_vol  = desired_vol;
-    
+
+    // Track peak |bias| for observability — lock-free CAS max update.
+    {
+        double abs_bias = std::fabs(current_bias);
+        double old_peak = stats_.peak_bias.load(std::memory_order_relaxed);
+        while (abs_bias > old_peak &&
+               !stats_.peak_bias.compare_exchange_weak(old_peak, abs_bias,
+                   std::memory_order_release, std::memory_order_relaxed)) {
+            // old_peak refreshed by CAS failure
+        }
+    }
+
     // Record latest confidence for use in emitted signals.
     last_confidence_ = weight.confidence_score;
 
@@ -237,6 +248,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.signals_aged_out.store(0, std::memory_order_relaxed);
     stats_.accumulator_clamped.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
+    stats_.peak_bias.store(0.0, std::memory_order_relaxed);
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {

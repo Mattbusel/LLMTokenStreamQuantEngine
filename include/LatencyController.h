@@ -42,6 +42,7 @@ public:
         std::chrono::microseconds min_latency{0};
         std::chrono::microseconds max_latency{0};
         std::chrono::microseconds p5_latency{0};   ///< 5th-percentile latency (fast-path lower bound).
+        std::chrono::microseconds p25_latency{0};  ///< 25th-percentile latency (first quartile).
         std::chrono::microseconds p50_latency{0};
         std::chrono::microseconds p95_latency{0};
         std::chrono::microseconds p99_latency{0};

@@ -726,7 +726,13 @@ int main(int argc, char* argv[]) {
                  << "llmquant_max_accumulated_bias " << trade_engine.get_config().max_accumulated_bias << "\n"
                  << "# HELP llmquant_p5_latency_us 5th-percentile latency of the sample window (microseconds)\n"
                  << "# TYPE llmquant_p5_latency_us gauge\n"
-                 << "llmquant_p5_latency_us " << stats.p5_latency.count() << "\n";
+                 << "llmquant_p5_latency_us " << stats.p5_latency.count() << "\n"
+                 << "# HELP llmquant_p25_latency_us 25th-percentile (Q1) latency (microseconds)\n"
+                 << "# TYPE llmquant_p25_latency_us gauge\n"
+                 << "llmquant_p25_latency_us " << stats.p25_latency.count() << "\n"
+                 << "# HELP llmquant_peak_bias Peak absolute value of the accumulated bias since last reset\n"
+                 << "# TYPE llmquant_peak_bias gauge\n"
+                 << "llmquant_peak_bias " << std::fixed << std::setprecision(6) << trade_engine.get_stats().peak_bias.load() << "\n";
             // Prometheus native histogram — cumulative latency buckets.
             {
                 auto hb = latency_ctrl.histogram_buckets();
