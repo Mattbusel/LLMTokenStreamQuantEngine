@@ -142,6 +142,18 @@ public:
         };
     }
 
+    /**
+     * @brief Reset all processing statistics (tokens_processed, cache_hits, cache_misses) to zero.
+     *
+     * Thread-safe: each counter is independently atomic.
+     * Useful when starting a new session without restarting the process.
+     */
+    void reset_stats() noexcept {
+        stats_.tokens_processed.store(0, std::memory_order_relaxed);
+        stats_.cache_hits.store(0, std::memory_order_relaxed);
+        stats_.cache_misses.store(0, std::memory_order_relaxed);
+    }
+
 private:
     void initialize_default_mappings();
 

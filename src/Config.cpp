@@ -43,6 +43,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (t["volatility_sensitivity"]) tmp.trading.volatility_sensitivity = t["volatility_sensitivity"].as<double>();
             if (t["signal_decay_rate"]) tmp.trading.signal_decay_rate = t["signal_decay_rate"].as<double>();
             if (t["signal_cooldown_us"]) tmp.trading.signal_cooldown_us = t["signal_cooldown_us"].as<int>();
+            if (t["max_signal_age_us"])  tmp.trading.max_signal_age_us  = t["max_signal_age_us"].as<double>();
         }
 
         // Latency settings
@@ -135,6 +136,11 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
         }
         if (tr.signal_cooldown_us < 0) {
             spdlog::error("Config validation failed: signal_cooldown_us must be >= 0");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(tr.max_signal_age_us) || tr.max_signal_age_us < 0.0) {
+            spdlog::error("Config validation failed: trading.max_signal_age_us must be >= 0");
             set_defaults();
             return false;
         }
@@ -231,7 +237,8 @@ bool Config::save_to_file(const std::string& filepath) const {
     yaml["trading"]["bias_sensitivity"] = snap_cfg.trading.bias_sensitivity;
     yaml["trading"]["volatility_sensitivity"] = snap_cfg.trading.volatility_sensitivity;
     yaml["trading"]["signal_decay_rate"] = snap_cfg.trading.signal_decay_rate;
-    yaml["trading"]["signal_cooldown_us"] = snap_cfg.trading.signal_cooldown_us;
+    yaml["trading"]["signal_cooldown_us"]  = snap_cfg.trading.signal_cooldown_us;
+    yaml["trading"]["max_signal_age_us"]   = snap_cfg.trading.max_signal_age_us;
 
     // Latency
     yaml["latency"]["target_latency_us"] = snap_cfg.latency.target_latency_us;

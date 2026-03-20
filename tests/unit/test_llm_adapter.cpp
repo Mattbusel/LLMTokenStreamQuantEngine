@@ -329,5 +329,25 @@ TEST(LLMAdapterTest, test_llm_adapter_load_sentiment_dictionary_case_normalises_
     std::remove(tmp.c_str());
 }
 
+TEST(LLMAdapterTest, test_llm_adapter_reset_stats_clears_counters) {
+    LLMAdapter adapter;
+
+    // Process some tokens to populate the stats.
+    adapter.map_token_to_weight("bullish");    // cache hit
+    adapter.map_token_to_weight("unknown_xyz"); // cache miss
+    ASSERT_GT(adapter.get_stats().tokens_processed, 0u);
+
+    adapter.reset_stats();
+
+    auto stats = adapter.get_stats();
+    EXPECT_EQ(stats.tokens_processed, 0u);
+    EXPECT_EQ(stats.cache_hits,       0u);
+    EXPECT_EQ(stats.cache_misses,     0u);
+
+    // Must still work normally after reset.
+    adapter.map_token_to_weight("bearish");
+    EXPECT_EQ(adapter.get_stats().tokens_processed, 1u);
+}
+
 } // namespace
 } // namespace llmquant

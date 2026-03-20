@@ -436,6 +436,33 @@ TEST(ConfigTest, test_config_save_and_reload_preserves_risk_thresholds) {
     std::remove(tmp_path.c_str());
 }
 
+TEST(ConfigTest, test_config_max_signal_age_us_parsed_from_yaml) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "  max_signal_age_us: 500.0\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    ASSERT_TRUE(ok);
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.max_signal_age_us, 500.0);
+}
+
+TEST(ConfigTest, test_config_negative_max_signal_age_us_returns_false) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "  max_signal_age_us: -1.0\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  flush_interval_ms: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    EXPECT_FALSE(ok) << "Negative max_signal_age_us must fail validation";
+}
+
 TEST(ConfigTest, test_config_metrics_port_parsed_from_yaml) {
     Config cfg;
     bool ok = cfg.load_from_yaml_string(

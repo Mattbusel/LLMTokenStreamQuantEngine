@@ -196,10 +196,11 @@ int main(int argc, char* argv[]) {
     LLMAdapter llm_adapter;
 
     TradeSignalEngine trade_engine({
-        .bias_sensitivity = sys_config.trading.bias_sensitivity,
+        .bias_sensitivity     = sys_config.trading.bias_sensitivity,
         .volatility_sensitivity = sys_config.trading.volatility_sensitivity,
-        .signal_decay_rate = sys_config.trading.signal_decay_rate,
-        .signal_cooldown = std::chrono::microseconds(sys_config.trading.signal_cooldown_us)
+        .signal_decay_rate    = sys_config.trading.signal_decay_rate,
+        .signal_cooldown      = std::chrono::microseconds(sys_config.trading.signal_cooldown_us),
+        .max_signal_age_us    = sys_config.trading.max_signal_age_us
     });
 
     // Backtest mode: emit on every token, ignoring the cooldown timer.
@@ -254,6 +255,7 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.volatility_sensitivity = updated.trading.volatility_sensitivity;
         new_eng_cfg.signal_decay_rate      = updated.trading.signal_decay_rate;
         new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
+        new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
         trade_engine.update_config(new_eng_cfg);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
@@ -575,6 +577,15 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_suppressed_total Signals with no callback or sink (fully suppressed)\n"
                  << "# TYPE llmquant_signals_suppressed_total counter\n"
                  << "llmquant_signals_suppressed_total " << eng_stats.signals_suppressed.load() << "\n"
+                 << "# HELP llmquant_signals_aged_out_total Signals suppressed by the staleness guard\n"
+                 << "# TYPE llmquant_signals_aged_out_total counter\n"
+                 << "llmquant_signals_aged_out_total " << eng_stats.signals_aged_out.load() << "\n"
+                 << "# HELP llmquant_memory_sink_size Current number of signals buffered in the in-memory sink\n"
+                 << "# TYPE llmquant_memory_sink_size gauge\n"
+                 << "llmquant_memory_sink_size " << memory_sink->size() << "\n"
+                 << "# HELP llmquant_memory_sink_dropped_total Signals evicted from memory sink due to capacity cap\n"
+                 << "# TYPE llmquant_memory_sink_dropped_total counter\n"
+                 << "llmquant_memory_sink_dropped_total " << memory_sink->dropped_count() << "\n"
                  << "# HELP llmquant_signals_blocked_total Total trade signals blocked by risk\n"
                  << "# TYPE llmquant_signals_blocked_total counter\n"
                  << "llmquant_signals_blocked_total " << blocked << "\n"

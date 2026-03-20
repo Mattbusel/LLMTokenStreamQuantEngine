@@ -35,6 +35,10 @@ struct TradingConfig {
     double signal_decay_rate{0.95};
     /** @brief Minimum time that must elapse between consecutive signal emissions, in microseconds. */
     int signal_cooldown_us{1000};
+    /** @brief Maximum allowed token-to-signal processing latency in microseconds.
+     *  Signals whose processing time exceeds this value are suppressed as stale.
+     *  Set to 0.0 to disable the staleness guard (default). */
+    double max_signal_age_us{0.0};
 };
 
 /**
