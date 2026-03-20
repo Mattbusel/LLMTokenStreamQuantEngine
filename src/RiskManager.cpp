@@ -420,4 +420,14 @@ double RiskManager::get_rejection_rate() const noexcept {
     return static_cast<double>(blocked) / static_cast<double>(total);
 }
 
+uint64_t RiskManager::get_total_signals_evaluated() const noexcept {
+    const auto& s = stats_;
+    return s.signals_passed.load(std::memory_order_relaxed)
+         + s.signals_blocked_magnitude.load(std::memory_order_relaxed)
+         + s.signals_blocked_confidence.load(std::memory_order_relaxed)
+         + s.signals_blocked_rate.load(std::memory_order_relaxed)
+         + s.signals_blocked_drawdown.load(std::memory_order_relaxed)
+         + s.signals_blocked_position.load(std::memory_order_relaxed);
+}
+
 } // namespace llmquant

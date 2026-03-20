@@ -342,6 +342,17 @@ double TradeSignalEngine::get_session_duration_ms() const noexcept {
         std::chrono::duration_cast<std::chrono::milliseconds>(now - reset_time_).count());
 }
 
+double TradeSignalEngine::get_time_since_last_signal_us() const noexcept {
+    auto now = std::chrono::high_resolution_clock::now();
+    return static_cast<double>(
+        std::chrono::duration_cast<std::chrono::microseconds>(now - last_signal_time_).count());
+}
+
+bool TradeSignalEngine::is_in_cooldown() const noexcept {
+    return get_time_since_last_signal_us()
+        < static_cast<double>(config_.signal_cooldown.count());
+}
+
 TradeSignalEngine::Snapshot TradeSignalEngine::snapshot() const noexcept {
     Snapshot snap;
     snap.config                = config_;

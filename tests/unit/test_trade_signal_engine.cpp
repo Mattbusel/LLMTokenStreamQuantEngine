@@ -1240,5 +1240,56 @@ TEST(TradeSignalEngineTest, test_generated_plus_suppressed_equals_processed_or_l
               engine.get_tokens_processed());
 }
 
+TEST(TradeSignalEngineTest, test_get_time_since_last_signal_us_non_negative) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_GE(engine.get_time_since_last_signal_us(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_time_since_last_signal_us_grows_over_time) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.9, 0.95, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    double t0 = engine.get_time_since_last_signal_us();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    double t1 = engine.get_time_since_last_signal_us();
+    EXPECT_GE(t1, t0);
+}
+
+TEST(TradeSignalEngineTest, test_is_in_cooldown_false_initially) {
+    TradeSignalEngine engine(make_config());
+    // No signal emitted yet — last_signal_time_ is epoch, so time elapsed is very large.
+    EXPECT_FALSE(engine.is_in_cooldown());
+}
+
+TEST(TradeSignalEngineTest, test_is_in_cooldown_true_immediately_after_signal) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.signal_cooldown = std::chrono::microseconds{100000}; // 100ms cooldown
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.9, 0.95, 0.2, 0.8};
+    engine.process_semantic_weight(w);
+    // Immediately after emission, should be in cooldown.
+    EXPECT_TRUE(engine.is_in_cooldown());
+}
+
+TEST(TradeSignalEngineTest, test_get_signal_efficiency_zero_before_any_tokens) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_signal_efficiency(), 0.0);
+}
+
+TEST(TradeSignalEngineTest, test_get_signal_efficiency_in_range) {
+    TradeSignalEngine engine(make_config());
+    engine.set_realtime_mode(false);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    SemanticWeight w{0.8, 0.9, 0.2, 0.7};
+    engine.process_semantic_weight(w);
+    double eff = engine.get_signal_efficiency();
+    EXPECT_GE(eff, 0.0);
+    EXPECT_LE(eff, 1.0);
+}
+
 } // namespace
 } // namespace llmquant

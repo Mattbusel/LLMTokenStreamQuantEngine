@@ -562,6 +562,15 @@ public:
      */
     double get_rejection_rate() const noexcept;
 
+    /**
+     * @brief Return the total number of signals evaluated (passed + all blocked).
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Total evaluation count since construction or last reset_stats().
+     */
+    uint64_t get_total_signals_evaluated() const noexcept;
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);

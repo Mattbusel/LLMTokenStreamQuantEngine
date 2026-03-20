@@ -1464,3 +1464,17 @@ TEST(RiskManagerTest, test_get_rejection_rate_in_range_after_mix) {
     EXPECT_LE(rate, 1.0);
     EXPECT_GT(rate, 0.0);
 }
+
+TEST(RiskManagerTest, test_get_total_signals_evaluated_zero_initially) {
+    RiskManager rm(default_config());
+    EXPECT_EQ(rm.get_total_signals_evaluated(), uint64_t{0});
+}
+
+TEST(RiskManagerTest, test_get_total_signals_evaluated_counts_all) {
+    RiskManager::Config cfg = default_config();
+    cfg.max_bias_magnitude = 0.5;
+    RiskManager rm(cfg);
+    rm.evaluate(make_signal(0.1));  // passes
+    rm.evaluate(make_signal(9.9));  // blocked
+    EXPECT_EQ(rm.get_total_signals_evaluated(), uint64_t{2});
+}

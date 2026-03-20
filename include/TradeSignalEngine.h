@@ -379,6 +379,24 @@ public:
     }
 
     /**
+     * @brief Compute the ratio of generated signals to tokens processed.
+     *
+     * Returns signals_generated / tokens_processed, or 0.0 if no tokens
+     * have been processed. Useful for measuring how often the noise gate
+     * allows signal emission.
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Signal efficiency in [0.0, 1.0].
+     */
+    double get_signal_efficiency() const noexcept {
+        uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
+        if (tokens == 0) return 0.0;
+        return static_cast<double>(stats_.signals_generated.load(std::memory_order_relaxed))
+             / static_cast<double>(tokens);
+    }
+
+    /**
      * @brief Return the signal_quality field of the most recently emitted signal.
      *
      * Returns 0.0 if no signal has been emitted yet.
@@ -509,6 +527,29 @@ public:
      * @return Elapsed session duration in milliseconds.
      */
     double get_session_duration_ms() const noexcept;
+
+    /**
+     * @brief Return the time elapsed since the last signal emission in microseconds.
+     *
+     * Returns the full session duration if no signal has been emitted yet
+     * (i.e., last_signal_time_ is at the epoch).
+     *
+     * Not thread-safe: call from the same thread as process_semantic_weight().
+     *
+     * @return Microseconds since last signal emission.
+     */
+    double get_time_since_last_signal_us() const noexcept;
+
+    /**
+     * @brief Return true if the engine is currently within the cooldown window.
+     *
+     * Equivalent to get_time_since_last_signal_us() < signal_cooldown.count().
+     *
+     * Not thread-safe: call from the same thread as process_semantic_weight().
+     *
+     * @return true if a new signal would be rate-limited by the cooldown.
+     */
+    bool is_in_cooldown() const noexcept;
 
     /**
      * @brief Flush all registered output sinks.
