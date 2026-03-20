@@ -193,6 +193,13 @@ public:
     const std::vector<TradeSignal>& get_signals() const { return signals_; }
 
     /**
+     * @brief Alias for get_signals() — provided for API symmetry.
+     *
+     * @return Const reference to the internal signal vector.
+     */
+    const std::vector<TradeSignal>& signals() const { return signals_; }
+
+    /**
      * @brief Return the number of signals currently stored in the buffer.
      *
      * @return Signal count (never exceeds max_capacity if a cap is set).

@@ -478,10 +478,10 @@ TEST(TradeSignalEngineTest, test_trade_signal_engine_filtered_sink_only_receives
     // bullish_sink must have at least one positive-bias signal.
     EXPECT_GT(bullish_sink->size(), 0u) << "Bullish sink must receive at least one bullish signal";
     // bearish signals must not arrive in bullish_sink and vice-versa.
-    for (const auto& s : bullish_sink->signals()) {
+    for (const auto& s : bullish_sink->get_signals()) {
         EXPECT_GT(s.delta_bias_shift, 0.0) << "Bullish sink must only contain positive-bias signals";
     }
-    for (const auto& s : bearish_sink->signals()) {
+    for (const auto& s : bearish_sink->get_signals()) {
         EXPECT_LT(s.delta_bias_shift, 0.0) << "Bearish sink must only contain negative-bias signals";
     }
 }

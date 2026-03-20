@@ -269,3 +269,40 @@ TEST(DeduplicatorTest, test_in_process_dedup_background_purge_start_stop_is_safe
     // Second stop must also be safe.
     EXPECT_NO_THROW(dedup.stop_background_purge());
 }
+
+// ---------------------------------------------------------------------------
+// Deduplicator::get_stats()
+// ---------------------------------------------------------------------------
+
+TEST(DeduplicatorTest, test_in_process_dedup_get_stats_tracks_novel_and_duplicate) {
+    InProcessDeduplicator dedup;
+    auto k1 = DedupKey::from_token("alpha");
+    auto k2 = DedupKey::from_token("beta");
+
+    dedup.check_and_register(k1, ms{5000});  // novel
+    dedup.check_and_register(k2, ms{5000});  // novel
+    dedup.check_and_register(k1, ms{5000});  // duplicate
+
+    auto stats = dedup.get_stats();
+    EXPECT_EQ(stats.total_novel,      uint64_t{2}) << "Two novel registrations expected";
+    EXPECT_EQ(stats.total_duplicates, uint64_t{1}) << "One duplicate hit expected";
+    EXPECT_EQ(stats.current_size,     static_cast<size_t>(2)) << "Two entries in the live table";
+}
+
+TEST(DeduplicatorTest, test_in_process_dedup_get_stats_reset_reflects_cleared_state) {
+    InProcessDeduplicator dedup;
+    auto key = DedupKey::from_token("gamma");
+
+    dedup.check_and_register(key, ms{5000});
+    dedup.check_and_register(key, ms{5000});
+
+    auto before = dedup.get_stats();
+    EXPECT_EQ(before.total_novel,      uint64_t{1});
+    EXPECT_EQ(before.total_duplicates, uint64_t{1});
+
+    dedup.reset();
+    auto after = dedup.get_stats();
+    EXPECT_EQ(after.total_novel,      uint64_t{0}) << "total_novel must be 0 after reset";
+    EXPECT_EQ(after.total_duplicates, uint64_t{0}) << "total_duplicates must be 0 after reset";
+    EXPECT_EQ(after.current_size,     static_cast<size_t>(0)) << "current_size must be 0 after reset";
+}

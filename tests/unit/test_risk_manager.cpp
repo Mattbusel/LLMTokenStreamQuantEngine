@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include "RiskManager.h"
+#include <stdexcept>
 #include <thread>
 #include <chrono>
 #include <string>
@@ -525,4 +526,59 @@ TEST(RiskManagerTest, test_risk_manager_short_position_blocks_negative_bias) {
 
     EXPECT_FALSE(passed) << "Negative bias on short position exceeding limit must be blocked";
     EXPECT_GT(rm.get_stats().signals_blocked_position.load(), 0u);
+}
+
+// ============================================================
+// Test 24: update_config() throws on negative/invalid limits.
+// ============================================================
+
+TEST(RiskManagerTest, test_risk_manager_update_config_negative_bias_magnitude_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.max_bias_magnitude = -1.0;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_negative_volatility_magnitude_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.max_volatility_magnitude = -0.5;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_negative_spread_magnitude_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.max_spread_magnitude = -0.1;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_confidence_above_one_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.min_confidence = 1.5;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_negative_confidence_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.min_confidence = -0.1;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_negative_drawdown_throws) {
+    RiskManager rm(default_config());
+    RiskManager::Config bad = default_config();
+    bad.max_drawdown = -5.0;
+    EXPECT_THROW(rm.update_config(bad), std::invalid_argument);
+}
+
+TEST(RiskManagerTest, test_risk_manager_update_config_valid_succeeds) {
+    RiskManager rm(default_config());
+    RiskManager::Config good = default_config();
+    good.max_bias_magnitude = 2.0;
+    good.min_confidence     = 0.05;
+    EXPECT_NO_THROW(rm.update_config(good));
+    EXPECT_DOUBLE_EQ(rm.get_config().max_bias_magnitude, 2.0);
 }

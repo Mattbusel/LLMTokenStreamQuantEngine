@@ -391,5 +391,39 @@ TEST(LLMAdapterTest, test_llm_adapter_add_token_mapping_overrides_existing) {
         << "add_token_mapping must override the existing entry for 'bullish'";
 }
 
+// ---------------------------------------------------------------------------
+// contains_token
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_llm_adapter_contains_token_finds_built_in) {
+    LLMAdapter adapter;
+    EXPECT_TRUE(adapter.contains_token("bullish"))
+        << "contains_token must return true for a built-in token";
+    EXPECT_TRUE(adapter.contains_token("bearish"))
+        << "contains_token must return true for a built-in token";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_contains_token_returns_false_for_unknown) {
+    LLMAdapter adapter;
+    EXPECT_FALSE(adapter.contains_token("xyzzy_unknown_token_42"))
+        << "contains_token must return false for an unknown token";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_contains_token_normalises_case_and_whitespace) {
+    LLMAdapter adapter;
+    // "bullish" is built-in; check that contains_token applies same normalisation.
+    EXPECT_TRUE(adapter.contains_token("  BULLISH  "))
+        << "contains_token must apply the same case/whitespace normalisation as map_token_to_weight";
+}
+
+TEST(LLMAdapterTest, test_llm_adapter_contains_token_reflects_add_token_mapping) {
+    LLMAdapter adapter;
+    const std::string token = "xyzzy_custom_token";
+    ASSERT_FALSE(adapter.contains_token(token));
+    adapter.add_token_mapping(token, {0.5, 0.3, 0.1, 0.8});
+    EXPECT_TRUE(adapter.contains_token(token))
+        << "contains_token must return true after add_token_mapping";
+}
+
 } // namespace
 } // namespace llmquant

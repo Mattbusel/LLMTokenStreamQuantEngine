@@ -181,6 +181,28 @@ public:
     uint64_t total_novel() const noexcept { return total_novel_.load(); }
 
     /**
+     * @brief Aggregated statistics snapshot.
+     */
+    struct Stats {
+        uint64_t total_novel{0};       ///< Novel registrations since construction/last reset.
+        uint64_t total_duplicates{0};  ///< Duplicate hits since construction/last reset.
+        size_t   current_size{0};      ///< Entries currently in the live table.
+    };
+
+    /**
+     * @brief Return a snapshot of all deduplication statistics.
+     *
+     * @return Stats struct populated with current counter and table-size values.
+     */
+    Stats get_stats() const {
+        Stats s;
+        s.total_novel      = total_novel_.load(std::memory_order_relaxed);
+        s.total_duplicates = total_duplicates_.load(std::memory_order_relaxed);
+        s.current_size     = size();
+        return s;
+    }
+
+    /**
      * @brief Reset all state: clear the key table and zero the novel/duplicate counters.
      *
      * Useful at session boundaries to reuse the same backend across sessions.
