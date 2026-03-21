@@ -371,6 +371,7 @@ double get_pass_rate() const noexcept;            // 1 - rejection_rate
 double get_magnitude_block_rate() const noexcept;
 double get_confidence_block_rate() const noexcept;
 uint64_t get_total_signals_evaluated() const noexcept;
+std::string get_most_blocked_gate() const;        // "magnitude"|"confidence"|"rate"|"drawdown"|"position"|"pnl"|"none"
 
 // Position and drawdown
 double get_net_exposure() const;
