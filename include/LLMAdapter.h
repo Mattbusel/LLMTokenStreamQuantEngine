@@ -413,6 +413,32 @@ public:
         top_tokens_by_volatility(size_t n = 10) const;
 
     /**
+     * @brief Return all tokens whose directional_bias falls within [min_bias, max_bias].
+     *
+     * Useful for isolating strongly bullish (> 0.5) or strongly bearish (< -0.5) tokens,
+     * or finding near-neutral tokens ([-0.1, 0.1]) for noise analysis.
+     * Both bounds are inclusive.
+     *
+     * @param min_bias Lower bound (inclusive) on directional_bias.
+     * @param max_bias Upper bound (inclusive) on directional_bias.
+     * @return Vector of (token, directional_bias) pairs in unspecified order.
+     */
+    std::vector<std::pair<std::string, double>>
+        filter_tokens_by_directional_bias(double min_bias, double max_bias) const;
+
+    /**
+     * @brief Return the top N tokens sorted by absolute directional_bias descending.
+     *
+     * Identifies the most directionally influential tokens regardless of sign.
+     *
+     * @param n Maximum number of tokens to return (default: 10).
+     *          If n >= dictionary size, all tokens are returned.
+     * @return Vector of (token, directional_bias) pairs, sorted descending by |directional_bias|.
+     */
+    std::vector<std::pair<std::string, double>>
+        top_tokens_by_directional_bias(size_t n = 10) const;
+
+    /**
      * @brief Return a snapshot of internal processing statistics.
      *
      * @return Struct with tokens_processed, cache_hits and cache_misses counts.

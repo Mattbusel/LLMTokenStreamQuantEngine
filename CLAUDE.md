@@ -106,30 +106,42 @@ clang-format --dry-run src/*.cpp include/*.h
 - OutputSink concrete classes (CsvOutputSink, JsonOutputSink, MemoryOutputSink)
   are implemented inline in OutputSink.h because they are thin wrappers over
   std::ofstream / std::vector with no separate compilation unit needed.
+- `--list-tokens` and `--export-dict` both exit before the full engine pipeline
+  is constructed. They run after `LLMAdapter` construction so the default
+  dictionary is populated, but before `TradeSignalEngine`, `RiskManager`, OMS
+  adapters etc. are created — intentional to keep startup-inspection flags cheap.
+- `export_dictionary()` outputs TSV with no header row (round-trip compatible with
+  `load_dictionary_from_tsv()`). `--list-tokens` adds a header row to stdout
+  because it is for human inspection, not round-trip import.
+- "Tokens processed" in the stats bar and session summary reads from
+  `LLMAdapter::get_stats().tokens_processed`, not `variance_n`. The Welford
+  variance accumulator resets every 60 s to prevent catastrophic cancellation;
+  using it as a token counter caused undercount after the first reset window.
 
 ## Test Coverage Summary
 | Test File | Count | Coverage |
 |-----------|-------|----------|
-| test_config.cpp | 20 | YAML parse, missing fields, hot-reload, risk_thresholds, pressure validation, concurrent hot-reload |
-| test_llm_adapter.cpp | 25 | Token lookup, sequences, SIMD, dictionary, load_sentiment_dictionary |
-| test_latency_controller.cpp | 16 | Stats, percentiles, p50, pressure, backoff, reset, concurrent |
-| test_metrics_logger.cpp | 9 | Construction, log events, flush |
-| test_token_stream_simulator.cpp | 9 | Load, callback, ring buffer |
-| test_trade_signal_engine.cpp | 16 | Signals, fields, backtest, cooldown, reset, latency_us, update_config, get_config, flush_sinks |
-| test_output_sink.cpp | 13 | CSV, JSON, memory sink, NaN/Inf guard, capacity cap |
-| test_risk_manager.cpp | 19 | Magnitude, confidence, rate, drawdown, OMS gates, update_config, get_config, concurrent evaluate |
-| test_pipeline.cpp (integration) | 5 | End-to-end, latency, accumulation |
-| bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput |
-| test_llm_stream_client.cpp | 14 | Connect/stop lifecycle, done callback, error paths |
-| test_deduplicator.cpp | 19 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
-| test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline, concurrent dedup+signal |
-| test_invariants.cpp (unit) | 6 | Dedup key determinism, sentiment sign, risk counter identity, latency avg bounds, signal confidence interval, dedup novel+dup sum |
-| test_oms_adapter.cpp (unit) | 21 | Mock/REST/FIX OMS adapter full coverage |
-| test_oms_pipeline.cpp (integration) | 4 | Position overlimit blocks signals; safe position allows signals; PnL breach blocks all; OMS callback fires on approach |
-| test_prometheus_exporter.cpp | 4 | Start/stop, double-start, scrape serves metrics, no-callback |
+| test_llm_adapter.cpp | 141 | Token lookup, sequences, SIMD, dictionary analytics, hit counts, top-N frequency, all analytics APIs |
+| test_risk_manager.cpp | 113 | Magnitude, confidence, rate, drawdown, OMS gates, evaluate_with_reason, get_most_blocked_gate, batch evaluate |
+| test_trade_signal_engine.cpp | 111 | Signals, fields, backtest, cooldown, reset, stats accessors, signal quality, to_json, flush_sinks |
+| test_latency_controller.cpp | 88 | Stats, percentiles, p50, pressure, backoff, reset, concurrent, get_total_latency_us |
+| test_config.cpp | 45 | YAML parse, missing fields, hot-reload, risk_thresholds, pressure validation, SemanticWeightsConfig validation |
 | test_edge_cases.cpp | 33 | Empty/null inputs, overflow, NaN, invalid params across all major APIs |
-| test_network_error_paths.cpp | 23 | Network error paths for LLMStreamClient and OMS adapters |
+| test_metrics_logger.cpp | 28 | Construction, log events, flush, log_trade_signal, log_risk_rejection, log_pipeline_health |
+| test_deduplicator.cpp | 28 | Key determinism, TTL, evict, concurrent, Redis stub, facade |
 | test_production_readiness.cpp | 26 | Production path coverage for all modules |
-| test_fix_oms_adapter.cpp | 21 | FIX 4.2 session management, heartbeats, sequence recovery |
+| test_oms_adapter.cpp | 24 | Mock/REST/FIX OMS adapter full coverage |
+| test_network_error_paths.cpp | 23 | Network error paths for LLMStreamClient and OMS adapters |
+| test_fix_oms_adapter.cpp | 23 | FIX 4.2 session management, heartbeats, sequence recovery |
+| test_token_stream_simulator.cpp | 21 | Load, callback, ring buffer, emit rate, drop rate |
+| test_prometheus_exporter.cpp | 19 | Start/stop, double-start, scrape serves metrics, no-callback |
+| test_output_sink.cpp | 19 | CSV, JSON, memory sink, NaN/Inf guard, capacity cap, signal_quality field |
+| test_llm_stream_client.cpp | 16 | Connect/stop lifecycle, done callback, error paths |
 | test_full_pipeline.cpp (integration) | 16 | 5-stage pipeline end-to-end, all risk gates |
-| **Total** | **~341** | |
+| test_pipeline_integration.cpp (integration) | 12 | Pipeline with OMS and Prometheus wired together |
+| test_invariants.cpp | 10 | Dedup key determinism, sentiment sign, risk counter identity, latency avg bounds, confidence interval |
+| test_oms_pipeline.cpp (integration) | 8 | Position overlimit blocks signals; safe position; PnL breach; callback fires on approach |
+| test_pipeline.cpp (integration) | 8 | End-to-end, latency, accumulation |
+| test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline |
+| bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput, SIMD vs scalar |
+| **Total** | **~823** | |

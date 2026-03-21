@@ -326,6 +326,13 @@ int main(int argc, char* argv[]) {
     auto memory_sink = std::make_shared<llmquant::MemoryOutputSink>();
     trade_engine.add_output_sink(memory_sink);
 
+    // Semantic weight multipliers as atomics so the hot-reload callback can update
+    // them without a mutex on the process_token hot path.
+    std::atomic<double> sem_mult_sentiment{sys_config.semantic_weights.sentiment_multiplier};
+    std::atomic<double> sem_mult_confidence{sys_config.semantic_weights.confidence_multiplier};
+    std::atomic<double> sem_mult_volatility{sys_config.semantic_weights.volatility_multiplier};
+    std::atomic<double> sem_mult_bias{sys_config.semantic_weights.bias_multiplier};
+
     // Risk manager — thresholds driven from config (hot-reloadable via YAML).
     const auto& rt = sys_config.risk_thresholds;
     llmquant::RiskManager::Config risk_cfg;
@@ -347,7 +354,9 @@ int main(int argc, char* argv[]) {
 
     // Start config hot-reload watcher now that risk_mgr exists so the callback
     // can update risk thresholds live without requiring a restart.
-    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &logger, &config_file](const llmquant::SystemConfig& updated) {
+    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &logger, &config_file,
+                                              &sem_mult_sentiment, &sem_mult_confidence,
+                                              &sem_mult_volatility, &sem_mult_bias](const llmquant::SystemConfig& updated) {
         const auto& u = updated.risk_thresholds;
         llmquant::RiskManager::Config new_risk_cfg;
         new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;
@@ -373,11 +382,21 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
         new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
         trade_engine.update_config(new_eng_cfg);
+        // Update semantic weight multipliers atomically — visible to process_token
+        // on the very next token without requiring a process restart.
+        const auto& sw = updated.semantic_weights;
+        sem_mult_sentiment.store(sw.sentiment_multiplier,  std::memory_order_relaxed);
+        sem_mult_confidence.store(sw.confidence_multiplier, std::memory_order_relaxed);
+        sem_mult_volatility.store(sw.volatility_multiplier, std::memory_order_relaxed);
+        sem_mult_bias.store(sw.bias_multiplier,            std::memory_order_relaxed);
         logger.log_config_reload(config_file, true);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
                   << "  max_bias=" << u.max_bias_magnitude
-                  << "  max_signals/s=" << u.max_signals_per_second << std::endl;
+                  << "  max_signals/s=" << u.max_signals_per_second
+                  << "  sem_wts=[" << sw.sentiment_multiplier << ","
+                  << sw.confidence_multiplier << "," << sw.volatility_multiplier
+                  << "," << sw.bias_multiplier << "]" << std::endl;
     })) {
         spdlog::warn("Config hot-reload watcher failed to start");
     }
@@ -447,13 +466,12 @@ int main(int argc, char* argv[]) {
 
         auto weight = llm_adapter.map_token_to_weight(text);
 
-        // Apply per-category semantic weight multipliers from config.
-        // Multipliers of 1.0 (default) leave raw dictionary weights unchanged.
-        const auto& sw = sys_config.semantic_weights;
-        weight.sentiment_score  *= sw.sentiment_multiplier;
-        weight.confidence_score *= sw.confidence_multiplier;
-        weight.volatility_score *= sw.volatility_multiplier;
-        weight.directional_bias *= sw.bias_multiplier;
+        // Apply per-category semantic weight multipliers (hot-reloadable).
+        // Read atomically so hot-reload updates are visible without a mutex.
+        weight.sentiment_score  *= sem_mult_sentiment.load(std::memory_order_relaxed);
+        weight.confidence_score *= sem_mult_confidence.load(std::memory_order_relaxed);
+        weight.volatility_score *= sem_mult_volatility.load(std::memory_order_relaxed);
+        weight.directional_bias *= sem_mult_bias.load(std::memory_order_relaxed);
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -982,6 +1000,14 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
                  << "# TYPE llmquant_risk_healthy gauge\n"
                  << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n";
+            // Export most-blocked gate as a Prometheus info metric with a label.
+            // Emits exactly one time-series per scrape: gauge value 1 with {gate=<name>}.
+            {
+                snap << "# HELP llmquant_most_blocked_gate_info Risk gate with the highest block count since startup\n"
+                     << "# TYPE llmquant_most_blocked_gate_info gauge\n"
+                     << "llmquant_most_blocked_gate_info{gate=\""
+                     << risk_mgr.get_most_blocked_gate() << "\"} 1\n";
+            }
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -1098,6 +1124,9 @@ int main(int argc, char* argv[]) {
     std::cout << "  Signals aged out : " << trade_engine.get_stats().signals_aged_out.load() << "\n";
     std::cout << "  Accum. clamped   : " << trade_engine.get_stats().accumulator_clamped.load() << "\n";
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
+    std::cout << "  Top blocked gate : " << risk_mgr.get_most_blocked_gate() << "\n";
+    std::cout << "  Latency warmup   : " << std::fixed << std::setprecision(0)
+              << (latency_ctrl.get_window_fill_ratio() * 100.0) << "% window filled\n";
     {
         auto ds = dedup_backend->get_stats();
         uint64_t total_dedup = ds.total_novel + ds.total_duplicates;

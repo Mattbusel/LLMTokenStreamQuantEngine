@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 17 — 2026-03-21)
+- Semantic weight multipliers are now **hot-reloadable**.  Four
+  `std::atomic<double>` variables (`sem_mult_sentiment`, `sem_mult_confidence`,
+  `sem_mult_volatility`, `sem_mult_bias`) replace the startup-snapshot `sys_config`
+  reference in `process_token`.  The `config.start_watching()` callback now stores
+  the updated multipliers atomically so the very next token sees the new values
+  without a process restart.  The hot-reload console line now also prints the new
+  `sem_wts=[...]` tuple so operators can confirm the change was applied.
+- Prometheus: `llmquant_most_blocked_gate_info{gate="<name>"}` info gauge added.
+  Emits a single time-series with value 1 and a `gate` label identifying which
+  risk gate has the highest block count (`magnitude`, `confidence`, `rate`,
+  `drawdown`, `position`, or `none`).  Allows Grafana to display the dominant
+  bottleneck as a stat panel without a PromQL aggregation query.
+
 ### Added (Cycle 16 — 2026-03-21)
 - `MetricsLogger::log_dedup_event()` now called in `process_token` for every dedup check
   (novel and duplicate alike) — previously implemented but never invoked, so no dedup

@@ -1,6 +1,7 @@
 {
   "name": "llmtokenstreamquantengine",
   "version": "1.1.0",
+  "builtin-baseline": "29f10019c26142cc4689b53b8c91da519db09e5c",
   "dependencies": [
     { "name": "spdlog", "version>=": "1.13.0" },
     { "name": "yaml-cpp", "version>=": "0.8.0" },
