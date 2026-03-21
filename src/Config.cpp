@@ -639,4 +639,110 @@ std::string Config::to_summary_string() const {
     return ss.str();
 }
 
+std::vector<std::string> Config::diff_from_defaults() const {
+    SystemConfig snap;
+    {
+        std::lock_guard<std::mutex> lk(config_mutex_);
+        snap = config_;
+    }
+    const SystemConfig def{};
+    std::vector<std::string> diffs;
+
+    auto dbl = [&](const char* key, double cur, double dflt) {
+        if (cur != dflt) {
+            std::ostringstream oss;
+            oss << key << " = " << cur << "  (default: " << dflt << ")";
+            diffs.push_back(oss.str());
+        }
+    };
+    auto i32 = [&](const char* key, int cur, int dflt) {
+        if (cur != dflt) {
+            diffs.push_back(std::string(key) + " = " + std::to_string(cur)
+                            + "  (default: " + std::to_string(dflt) + ")");
+        }
+    };
+    auto u64 = [&](const char* key, size_t cur, size_t dflt) {
+        if (cur != dflt) {
+            diffs.push_back(std::string(key) + " = " + std::to_string(cur)
+                            + "  (default: " + std::to_string(dflt) + ")");
+        }
+    };
+    auto str = [&](const char* key, const std::string& cur, const std::string& dflt) {
+        if (cur != dflt) {
+            diffs.push_back(std::string(key) + " = \"" + cur
+                            + "\"  (default: \"" + dflt + "\")");
+        }
+    };
+    auto bl = [&](const char* key, bool cur, bool dflt) {
+        if (cur != dflt) {
+            diffs.push_back(std::string(key) + " = " + (cur ? "true" : "false")
+                            + "  (default: " + (dflt ? "true" : "false") + ")");
+        }
+    };
+
+    // token_stream
+    str("token_stream.data_file_path",    snap.token_stream.data_file_path,    def.token_stream.data_file_path);
+    i32("token_stream.token_interval_ms", snap.token_stream.token_interval_ms, def.token_stream.token_interval_ms);
+    u64("token_stream.buffer_size",       snap.token_stream.buffer_size,       def.token_stream.buffer_size);
+    bl ("token_stream.use_memory_stream", snap.token_stream.use_memory_stream, def.token_stream.use_memory_stream);
+    i32("token_stream.dedup_ttl_ms",      snap.token_stream.dedup_ttl_ms,      def.token_stream.dedup_ttl_ms);
+
+    // trading
+    dbl("trading.bias_sensitivity",      snap.trading.bias_sensitivity,      def.trading.bias_sensitivity);
+    dbl("trading.volatility_sensitivity",snap.trading.volatility_sensitivity,def.trading.volatility_sensitivity);
+    dbl("trading.signal_decay_rate",     snap.trading.signal_decay_rate,     def.trading.signal_decay_rate);
+    i32("trading.signal_cooldown_us",    snap.trading.signal_cooldown_us,    def.trading.signal_cooldown_us);
+    dbl("trading.max_signal_age_us",     snap.trading.max_signal_age_us,     def.trading.max_signal_age_us);
+    dbl("trading.min_bias_threshold",    snap.trading.min_bias_threshold,    def.trading.min_bias_threshold);
+    dbl("trading.max_accumulated_bias",  snap.trading.max_accumulated_bias,  def.trading.max_accumulated_bias);
+
+    // latency
+    i32("latency.target_latency_us", snap.latency.target_latency_us, def.latency.target_latency_us);
+    u64("latency.sample_window",     snap.latency.sample_window,     def.latency.sample_window);
+    bl ("latency.enable_profiling",  snap.latency.enable_profiling,  def.latency.enable_profiling);
+
+    // logging
+    str("logging.log_file_path",   snap.logging.log_file_path,   def.logging.log_file_path);
+    str("logging.format",          snap.logging.format,          def.logging.format);
+    bl ("logging.enable_console",  snap.logging.enable_console,  def.logging.enable_console);
+    i32("logging.flush_interval_ms",snap.logging.flush_interval_ms,def.logging.flush_interval_ms);
+
+    // metrics
+    if (snap.metrics.stats_port != def.metrics.stats_port) {
+        diffs.push_back(std::string("metrics.stats_port = ")
+                        + std::to_string(snap.metrics.stats_port)
+                        + "  (default: " + std::to_string(def.metrics.stats_port) + ")");
+    }
+    str("metrics.bind_address", snap.metrics.bind_address, def.metrics.bind_address);
+
+    // pressure
+    dbl("pressure.max_ingestion_rate_tps", snap.pressure.max_ingestion_rate_tps, def.pressure.max_ingestion_rate_tps);
+    dbl("pressure.backoff_scale_factor",   snap.pressure.backoff_scale_factor,   def.pressure.backoff_scale_factor);
+
+    // risk_thresholds
+    dbl("risk_thresholds.max_bias_magnitude",      snap.risk_thresholds.max_bias_magnitude,      def.risk_thresholds.max_bias_magnitude);
+    dbl("risk_thresholds.max_volatility_magnitude",snap.risk_thresholds.max_volatility_magnitude,def.risk_thresholds.max_volatility_magnitude);
+    dbl("risk_thresholds.max_spread_magnitude",    snap.risk_thresholds.max_spread_magnitude,    def.risk_thresholds.max_spread_magnitude);
+    dbl("risk_thresholds.min_confidence",          snap.risk_thresholds.min_confidence,          def.risk_thresholds.min_confidence);
+    u64("risk_thresholds.max_signals_per_second",  snap.risk_thresholds.max_signals_per_second,  def.risk_thresholds.max_signals_per_second);
+    dbl("risk_thresholds.max_drawdown",            snap.risk_thresholds.max_drawdown,            def.risk_thresholds.max_drawdown);
+    i32("risk_thresholds.drawdown_window_s",       snap.risk_thresholds.drawdown_window_s,       def.risk_thresholds.drawdown_window_s);
+    dbl("risk_thresholds.position_warn_fraction",  snap.risk_thresholds.position_warn_fraction,  def.risk_thresholds.position_warn_fraction);
+
+    // risk_overrides
+    bl("risk_overrides.disable_magnitude_gate",  snap.risk_overrides.disable_magnitude_gate,  def.risk_overrides.disable_magnitude_gate);
+    bl("risk_overrides.disable_confidence_gate", snap.risk_overrides.disable_confidence_gate, def.risk_overrides.disable_confidence_gate);
+    bl("risk_overrides.disable_rate_gate",       snap.risk_overrides.disable_rate_gate,       def.risk_overrides.disable_rate_gate);
+    bl("risk_overrides.disable_drawdown_gate",   snap.risk_overrides.disable_drawdown_gate,   def.risk_overrides.disable_drawdown_gate);
+    bl("risk_overrides.disable_position_gate",   snap.risk_overrides.disable_position_gate,   def.risk_overrides.disable_position_gate);
+
+    // semantic_weights
+    dbl("semantic_weights.sentiment_multiplier",  snap.semantic_weights.sentiment_multiplier,  def.semantic_weights.sentiment_multiplier);
+    dbl("semantic_weights.confidence_multiplier", snap.semantic_weights.confidence_multiplier, def.semantic_weights.confidence_multiplier);
+    dbl("semantic_weights.volatility_multiplier", snap.semantic_weights.volatility_multiplier, def.semantic_weights.volatility_multiplier);
+    dbl("semantic_weights.bias_multiplier",       snap.semantic_weights.bias_multiplier,       def.semantic_weights.bias_multiplier);
+
+    return diffs;
+}
+
 } // namespace llmquant

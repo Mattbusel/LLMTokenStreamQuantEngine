@@ -1669,5 +1669,67 @@ TEST(TradeSignalEngineTest, test_to_stats_json_tokens_processed_matches_call_cou
     EXPECT_NE(json.find("\"tokens_processed\":3"), std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 24: SuppressionBreakdown / get_suppression_breakdown()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_suppression_breakdown_all_zero_initially) {
+    TradeSignalEngine engine(make_config());
+    auto bd = engine.get_suppression_breakdown();
+    EXPECT_EQ(bd.noise_filtered,      0u);
+    EXPECT_EQ(bd.aged_out,            0u);
+    EXPECT_EQ(bd.cooldown_suppressed, 0u);
+    EXPECT_EQ(bd.total,               0u);
+}
+
+TEST(TradeSignalEngineTest, test_suppression_breakdown_noise_increments_when_below_threshold) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 0.5;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    // Low-bias token should be filtered by noise gate.
+    engine.process_semantic_weight({0.1, 0.5, 0.1, 0.05});
+    auto bd = engine.get_suppression_breakdown();
+    EXPECT_EQ(bd.noise_filtered, 1u) << "noise gate must count the suppressed token";
+    EXPECT_GE(bd.total, 1u);
+}
+
+TEST(TradeSignalEngineTest, test_suppression_breakdown_cooldown_increments_in_realtime_mode) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.signal_cooldown = std::chrono::microseconds{1'000'000}; // 1 second
+    TradeSignalEngine engine(cfg);
+    engine.set_realtime_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    // First token emits (cooldown not yet active), subsequent tokens are in cooldown.
+    engine.process_semantic_weight({0.9, 0.9, 0.5, 0.8});
+    engine.process_semantic_weight({0.9, 0.9, 0.5, 0.8});
+    engine.process_semantic_weight({0.9, 0.9, 0.5, 0.8});
+
+    auto bd = engine.get_suppression_breakdown();
+    EXPECT_GE(bd.cooldown_suppressed, 1u)
+        << "at least two tokens must be suppressed by the 1-second cooldown";
+}
+
+TEST(TradeSignalEngineTest, test_suppression_breakdown_resets_on_reset) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 0.5;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    engine.process_semantic_weight({0.1, 0.5, 0.1, 0.05}); // noise-filtered
+    EXPECT_GE(engine.get_suppression_breakdown().noise_filtered, 1u);
+
+    engine.reset();
+    auto bd = engine.get_suppression_breakdown();
+    EXPECT_EQ(bd.noise_filtered,      0u);
+    EXPECT_EQ(bd.cooldown_suppressed, 0u);
+    EXPECT_EQ(bd.aged_out,            0u);
+    EXPECT_EQ(bd.total,               0u);
+}
+
 } // namespace
 } // namespace llmquant

@@ -1114,5 +1114,70 @@ TEST(ConfigTest, test_config_to_summary_string_contains_risk_overrides) {
         << "magnitude gate should be 'on' with default config";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 24: Config::diff_from_defaults()
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_diff_from_defaults_empty_on_fresh_config) {
+    Config cfg;
+    cfg.set_defaults();
+    auto diffs = cfg.diff_from_defaults();
+    EXPECT_TRUE(diffs.empty())
+        << "A freshly-defaulted config must produce no diffs; got: "
+        << (diffs.empty() ? "" : diffs[0]);
+}
+
+TEST(ConfigTest, test_diff_from_defaults_detects_trading_change) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "trading:\n  bias_sensitivity: 3.5\n");
+    auto diffs = cfg.diff_from_defaults();
+    bool found = false;
+    for (const auto& d : diffs) {
+        if (d.find("trading.bias_sensitivity") != std::string::npos) { found = true; break; }
+    }
+    EXPECT_TRUE(found) << "bias_sensitivity diff must appear; diffs count=" << diffs.size();
+}
+
+TEST(ConfigTest, test_diff_from_defaults_detects_risk_threshold_change) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "risk_thresholds:\n  max_drawdown: 99.0\n");
+    auto diffs = cfg.diff_from_defaults();
+    bool found = false;
+    for (const auto& d : diffs) {
+        if (d.find("risk_thresholds.max_drawdown") != std::string::npos) { found = true; break; }
+    }
+    EXPECT_TRUE(found) << "max_drawdown diff must appear; diffs count=" << diffs.size();
+}
+
+TEST(ConfigTest, test_diff_from_defaults_multiple_changes) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "trading:\n  bias_sensitivity: 2.0\n  signal_decay_rate: 0.8\n"
+        "latency:\n  target_latency_us: 50\n");
+    auto diffs = cfg.diff_from_defaults();
+    EXPECT_GE(diffs.size(), size_t{3})
+        << "Three changed fields must produce at least three diff entries";
+}
+
+TEST(ConfigTest, test_diff_from_defaults_contains_current_and_default_value) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "trading:\n  bias_sensitivity: 7.0\n");
+    auto diffs = cfg.diff_from_defaults();
+    bool has_current  = false;
+    bool has_default  = false;
+    for (const auto& d : diffs) {
+        if (d.find("trading.bias_sensitivity") != std::string::npos) {
+            has_current = (d.find("7") != std::string::npos);
+            has_default = (d.find("default") != std::string::npos);
+            break;
+        }
+    }
+    EXPECT_TRUE(has_current) << "diff entry must contain the current value (7)";
+    EXPECT_TRUE(has_default) << "diff entry must contain the word 'default'";
+}
+
 } // namespace
 } // namespace llmquant

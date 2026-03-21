@@ -9,6 +9,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 26 — 2026-03-21)
+- `RiskManager::format_gate_blocks()`: returns a compact per-gate block-count
+  string (`"mag=N conf=N rate=N dd=N pos=N pnl=N"`) for console/log output.
+  Implemented in `RiskManager.cpp`; declared in `RiskManager.h`.
+- `Config::set_token_interval_ms(int ms)`: inline thread-safe setter; used by
+  the `--token-interval` CLI override path.
+- `Config::diff_from_defaults()`: returns a list of field-name strings whose
+  values differ from compiled-in defaults, useful for `--dump-config` diffing
+  and test assertions.
+- **Bug fix**: TPS display and ingestion-pressure normalisation corrected for
+  non-default `--stats-interval` values. Previously `token_count_window.exchange(0)`
+  was passed directly as "tokens/s", but it actually counted tokens per
+  `stats_interval_ms`. The count is now divided by `stats_interval_ms/1000.0`
+  before use, so pressure and the `TPS:` column are always in tokens/second.
+- **Feature flag** `--no-prometheus`: Skip starting the Prometheus exporter.
+  Useful when port 9100 is already in use or when the scrape endpoint is
+  unwanted (e.g. CI pipelines, integration tests, embedded deployments).
+- **Feature flag** `--no-dedup`: Disable the token deduplicator; every token is
+  treated as novel. Useful for stress-testing the signal pipeline or when the
+  upstream guarantees uniqueness and the hashing overhead is undesirable.
+- **Feature flag** `--no-hot-reload`: Skip starting `Config::start_watching()`.
+  Useful for deployments where inotify/ReadDirectoryChangesW is unavailable or
+  where deterministic config is required.
+
 ### Added (Cycle 25 — 2026-03-21)
 - `InProcessDeduplicator::to_stats_json()`: inline method in `Deduplicator.h`
   serialising total_novel, total_duplicates, current_size, and dup_rate_pct

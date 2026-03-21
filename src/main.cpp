@@ -90,11 +90,13 @@ static double get_process_cpu_fraction() {
     std::istringstream iss(stat_line.substr(rp + 2));
     uint64_t utime = 0, stime = 0;
     std::string tok;
-    for (int i = 3; i <= 15; ++i) {
-        iss >> tok;
-        if (i == 14) utime = std::stoull(tok);
-        if (i == 15) stime = std::stoull(tok);
-    }
+    try {
+        for (int i = 3; i <= 15; ++i) {
+            if (!(iss >> tok)) break;
+            if (i == 14) utime = std::stoull(tok);
+            if (i == 15) stime = std::stoull(tok);
+        }
+    } catch (...) { return 0.0; }
     uint64_t cpu_jiffies = utime + stime;
     auto now = std::chrono::steady_clock::now();
     double elapsed_s = std::chrono::duration<double>(now - prev_tp).count();
@@ -146,6 +148,9 @@ int main(int argc, char* argv[]) {
     int         token_interval_override = 0;    // 0 = use config value
     std::string log_level_str  = "info";        // spdlog level name
     int         stats_interval_ms  = 1000;      // monitoring loop tick period
+    bool        no_prometheus  = false;         // skip Prometheus exporter
+    bool        no_dedup       = false;         // disable deduplication
+    bool        no_hot_reload  = false;         // skip config file watcher
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -282,6 +287,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Using default configuration" << std::endl;
         // No config file: fall back to in-memory token stream so no file I/O required.
         config.set_use_memory_stream(true);
+    }
+    // Apply CLI overrides before capturing sys_config so all subsystems see the
+    // effective values (token_sim is constructed later but reads from sys_config).
+    if (token_interval_override > 0) {
+        config.set_token_interval_ms(token_interval_override);
+        spdlog::info("--token-interval: overriding token_interval_ms to {}ms", token_interval_override);
     }
 
     const auto& sys_config = config.get_config();
@@ -817,11 +828,6 @@ int main(int argc, char* argv[]) {
     uint16_t eff_stats_port = (stats_port_override != 0)
                                   ? stats_port_override
                                   : sys_config.metrics.stats_port;
-    if (token_interval_override > 0) {
-        config.set_token_interval_ms(token_interval_override);
-        sys_config = config.get_config();
-        spdlog::info("--token-interval: overriding token_interval_ms to {}ms", token_interval_override);
-    }
     llmquant::PrometheusExporter prom_exporter({.port = eff_stats_port,
                                                 .bind_address = sys_config.metrics.bind_address});
     prom_exporter.set_metrics_callback([&]() -> std::string {
@@ -841,11 +847,19 @@ int main(int argc, char* argv[]) {
         auto pressure = latency_ctrl.get_pressure();
 
         // Update ingestion pressure.
-        uint64_t tps = token_count_window.exchange(0);
+        // Normalise the per-tick token count to tokens/second regardless of
+        // the configured stats_interval_ms (fixes pressure and TPS display
+        // when --stats-interval differs from the default 1000ms).
+        uint64_t raw_count = token_count_window.exchange(0);
+        double   tps_d     = (stats_interval_ms > 0)
+                                 ? (static_cast<double>(raw_count) * 1000.0
+                                    / static_cast<double>(stats_interval_ms))
+                                 : static_cast<double>(raw_count);
+        uint64_t tps = static_cast<uint64_t>(tps_d + 0.5);  // rounded for display
         double   max_tps = stream_mode
                                ? sys_config.pressure.max_ingestion_rate_tps   // gpt-4o emits ~10-30 tokens/s
                                : static_cast<double>(1000000 / std::max(1, sys_config.token_stream.token_interval_ms));
-        latency_ctrl.update_ingestion_pressure(static_cast<double>(tps), max_tps);
+        latency_ctrl.update_ingestion_pressure(tps_d, max_tps);
 
         // Queue pressure via suppressed-signal count.
         auto eng_stats = trade_engine.get_stats();  // snapshot, not reference

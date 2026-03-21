@@ -499,6 +499,18 @@ uint64_t RiskManager::get_total_signals_evaluated() const noexcept {
          + s.signals_blocked_position.load(std::memory_order_relaxed);
 }
 
+std::string RiskManager::format_blocked_by_gate() const noexcept {
+    auto bg = get_blocked_by_gate();
+    std::ostringstream oss;
+    oss << "mag="  << bg.magnitude
+        << " conf=" << bg.confidence
+        << " rate=" << bg.rate
+        << " dd="   << bg.drawdown
+        << " pos="  << bg.position
+        << " pnl="  << bg.pnl;
+    return oss.str();
+}
+
 std::string RiskManager::format_stats() const {
     const auto& s = stats_;
     uint64_t passed  = s.signals_passed.load(std::memory_order_relaxed);

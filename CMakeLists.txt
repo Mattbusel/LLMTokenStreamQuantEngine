@@ -17,6 +17,13 @@ option(LLMQUANT_ENABLE_CLANG_TIDY  "Run clang-tidy on library sources"          
 option(LLMQUANT_ENABLE_FUZZING  "Build libFuzzer targets (requires clang + -fsanitize=fuzzer)" OFF)
 option(LLMQUANT_ENABLE_COVERAGE "Build with gcov/lcov coverage instrumentation"   OFF)
 
+# Feature flags — enable/disable optional subsystems for minimal or embedded builds.
+option(LLMQUANT_ENABLE_PROMETHEUS  "Build the Prometheus /metrics HTTP scrape endpoint" ON)
+option(LLMQUANT_ENABLE_FIX_OMS    "Build the FIX 4.2 OMS adapter (FixOmsAdapter)"      ON)
+option(LLMQUANT_ENABLE_REST_OMS   "Build the REST OMS polling adapter (RestOmsAdapter)" ON)
+option(LLMQUANT_ENABLE_PROFILING  "Compile latency profiling / percentile tracking"     ON)
+option(LLMQUANT_ENABLE_DEDUP      "Build the token deduplication subsystem"             ON)
+
 # ---------------------------------------------------------------------------
 # Compiler flags
 # ---------------------------------------------------------------------------
@@ -176,6 +183,38 @@ if(hiredis_FOUND OR HIREDIS_FOUND)
     else()
         target_link_libraries(llmquant PUBLIC hiredis)
     endif()
+endif()
+
+# Wire feature flags as compile-time preprocessor symbols.
+if(LLMQUANT_ENABLE_PROMETHEUS)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PROMETHEUS_ENABLED)
+    message(STATUS "Feature: Prometheus scrape endpoint ENABLED")
+else()
+    message(STATUS "Feature: Prometheus scrape endpoint DISABLED (LLMQUANT_ENABLE_PROMETHEUS=OFF)")
+endif()
+if(LLMQUANT_ENABLE_FIX_OMS)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FIX_OMS_ENABLED)
+    message(STATUS "Feature: FIX 4.2 OMS adapter ENABLED")
+else()
+    message(STATUS "Feature: FIX 4.2 OMS adapter DISABLED (LLMQUANT_ENABLE_FIX_OMS=OFF)")
+endif()
+if(LLMQUANT_ENABLE_REST_OMS)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REST_OMS_ENABLED)
+    message(STATUS "Feature: REST OMS adapter ENABLED")
+else()
+    message(STATUS "Feature: REST OMS adapter DISABLED (LLMQUANT_ENABLE_REST_OMS=OFF)")
+endif()
+if(LLMQUANT_ENABLE_PROFILING)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PROFILING_ENABLED)
+    message(STATUS "Feature: Latency profiling ENABLED")
+else()
+    message(STATUS "Feature: Latency profiling DISABLED (LLMQUANT_ENABLE_PROFILING=OFF)")
+endif()
+if(LLMQUANT_ENABLE_DEDUP)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DEDUP_ENABLED)
+    message(STATUS "Feature: Token deduplication ENABLED")
+else()
+    message(STATUS "Feature: Token deduplication DISABLED (LLMQUANT_ENABLE_DEDUP=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

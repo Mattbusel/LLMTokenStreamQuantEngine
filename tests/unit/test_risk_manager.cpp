@@ -1791,3 +1791,42 @@ TEST(RiskManagerTest, test_reset_stats_rearms_trip_callback) {
     (void)rm.evaluate(bad);  // trip 2 (re-armed)
     EXPECT_EQ(trip_count, 2) << "Trip callback must re-arm after reset_stats()";
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 24: RiskManager::format_blocked_by_gate()
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_format_blocked_by_gate_contains_all_gate_labels) {
+    RiskManager::Config cfg;
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+    std::string s = rm.format_blocked_by_gate();
+    EXPECT_NE(s.find("mag="),  std::string::npos) << "must contain mag=";
+    EXPECT_NE(s.find("conf="), std::string::npos) << "must contain conf=";
+    EXPECT_NE(s.find("rate="), std::string::npos) << "must contain rate=";
+    EXPECT_NE(s.find("dd="),   std::string::npos) << "must contain dd=";
+    EXPECT_NE(s.find("pos="),  std::string::npos) << "must contain pos=";
+    EXPECT_NE(s.find("pnl="),  std::string::npos) << "must contain pnl=";
+}
+
+TEST(RiskManagerTest, test_format_blocked_by_gate_reflects_magnitude_block) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.9)); // blocked by magnitude
+    std::string s = rm.format_blocked_by_gate();
+    EXPECT_NE(s.find("mag=1"), std::string::npos)
+        << "mag count must be 1 after one magnitude block; got: " << s;
+}
+
+TEST(RiskManagerTest, test_format_blocked_by_gate_all_zero_initially) {
+    RiskManager::Config cfg;
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+    std::string s = rm.format_blocked_by_gate();
+    // All counts must be zero before any evaluations.
+    EXPECT_NE(s.find("mag=0"),  std::string::npos) << "mag must be 0; got: " << s;
+    EXPECT_NE(s.find("conf=0"), std::string::npos) << "conf must be 0; got: " << s;
+    EXPECT_NE(s.find("dd=0"),   std::string::npos) << "dd must be 0; got: " << s;
+}

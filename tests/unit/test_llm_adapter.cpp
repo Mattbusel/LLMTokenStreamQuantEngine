@@ -1603,6 +1603,8 @@ TEST(LLMAdapterTest, test_export_hot_tokens_n_greater_than_dict_returns_all) {
 
 TEST(LLMAdapterTest, test_clear_dictionary_removes_all_tokens) {
     LLMAdapter adapter;
+    // Clear the default dictionary first so we have a known starting state.
+    adapter.clear_dictionary();
     adapter.add_token_mapping("bullish", {0.9, 0.8, 0.3, 0.7});
     adapter.add_token_mapping("bearish", {-0.9, 0.8, 0.3, -0.7});
     ASSERT_EQ(adapter.get_dictionary_size(), 2u);
@@ -1629,11 +1631,11 @@ TEST(LLMAdapterTest, test_clear_dictionary_then_lookup_returns_unknown) {
     adapter.clear_dictionary();
 
     // After clearing, the token should no longer be found.
+    // Unknown tokens return the neutral defaults: {0.0, 0.5, 0.1, 0.0}.
     auto weight = adapter.map_token_to_weight("tok");
-    // Unknown tokens return default (zero) weights.
     EXPECT_DOUBLE_EQ(weight.sentiment_score,  0.0);
-    EXPECT_DOUBLE_EQ(weight.confidence_score, 0.0);
-    EXPECT_DOUBLE_EQ(weight.volatility_score, 0.0);
+    EXPECT_DOUBLE_EQ(weight.confidence_score, 0.5);
+    EXPECT_DOUBLE_EQ(weight.volatility_score, 0.1);
     EXPECT_DOUBLE_EQ(weight.directional_bias, 0.0);
 }
 

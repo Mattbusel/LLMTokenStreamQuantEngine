@@ -358,6 +358,18 @@ public:
     std::string format_stats() const;
 
     /**
+     * @brief Return a single-line per-gate block count breakdown.
+     *
+     * Format: "mag=<n> conf=<n> rate=<n> dd=<n> pos=<n> pnl=<n>"
+     *
+     * Complements format_stats() for callers that need per-gate detail without
+     * the full aggregate summary.  Thread-safe (reads atomic counters).
+     *
+     * @return Formatted per-gate block count string.
+     */
+    std::string format_blocked_by_gate() const noexcept;
+
+    /**
      * @brief Return true if all risk gates are nominally healthy.
      *
      * Checks:
