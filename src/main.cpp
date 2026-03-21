@@ -1047,6 +1047,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_process_rss_bytes Process resident set size in bytes\n"
                  << "# TYPE llmquant_process_rss_bytes gauge\n"
                  << "llmquant_process_rss_bytes " << get_process_rss_bytes() << "\n"
+                 << "# HELP llmquant_process_cpu_fraction Process CPU usage fraction since last scrape (0=idle, 1=one full core)\n"
+                 << "# TYPE llmquant_process_cpu_fraction gauge\n"
+                 << "llmquant_process_cpu_fraction " << std::setprecision(4) << cpu_fraction << "\n"
                  << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)
