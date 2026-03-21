@@ -143,6 +143,7 @@ int main(int argc, char* argv[]) {
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
     uint16_t    stats_port_override = 0;        // 0 = use config value
+    int         token_interval_override = 0;    // 0 = use config value
     std::string log_level_str  = "info";        // spdlog level name
     int         stats_interval_ms  = 1000;      // monitoring loop tick period
     for (int i = 1; i < argc; ++i) {
@@ -208,6 +209,8 @@ int main(int argc, char* argv[]) {
             config_file = argv[++i];
         } else if (arg == "--stats-port" && i + 1 < argc) {
             stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i]));
+        } else if (arg == "--token-interval" && i + 1 < argc) {
+            token_interval_override = std::max(1, std::stoi(argv[++i]));
         } else if (arg == "--log-level" && i + 1 < argc) {
             log_level_str = argv[++i];
         } else if (arg == "--stats-interval" && i + 1 < argc) {
@@ -1174,7 +1177,7 @@ int main(int argc, char* argv[]) {
             {
                 snap << "# HELP llmquant_top_influence_token Composite influence score (freq+bias blend) [0,1]\n"
                      << "# TYPE llmquant_top_influence_token gauge\n";
-                for (const auto& [tok, score] : llm_adapter.top_tokens_by_influence(5)) {
+                for (const auto& [tok, score] : llm_adapter.export_hot_tokens(5)) {
                     std::string safe_tok;
                     for (char c : tok) safe_tok += (c == '"') ? '\'' : c;
                     snap << "llmquant_top_influence_token{token=\"" << safe_tok << "\"} "
@@ -1203,8 +1206,10 @@ int main(int argc, char* argv[]) {
                              latency_ctrl.get_slo_breach_rate() * 100.0);
             }
         }
-        // Log system resource usage once per second (memory RSS; CPU unavailable cross-platform).
-        logger.log_system_stats(get_process_rss_bytes(), cpu_fraction);
+        // Log system resource usage once per second (memory RSS + CPU).
+        // MetricsLogger::log_system_stats expects cpu_usage as percentage (0-100);
+        // get_process_cpu_fraction() returns a fraction [0, N_cores], so multiply by 100.
+        logger.log_system_stats(get_process_rss_bytes(), cpu_fraction * 100.0);
 
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
@@ -1366,7 +1371,7 @@ int main(int argc, char* argv[]) {
         }
     }
     {
-        auto top_inf = llm_adapter.top_tokens_by_influence(5);
+        auto top_inf = llm_adapter.export_hot_tokens(5);
         if (!top_inf.empty()) {
             std::cout << "  Top influence    : ";
             for (size_t i = 0; i < top_inf.size(); ++i) {
@@ -1392,12 +1397,13 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "  ---------------------------------------------------------\n\n";
 
-    // Emit structured JSON summaries for risk, engine, adapter, and latency stats.
+    // Emit structured JSON summaries for all subsystems.
     if (!quiet) {
         std::cout << "  [json:risk]    " << risk_mgr.to_stats_json() << "\n";
         std::cout << "  [json:engine]  " << trade_engine.to_stats_json() << "\n";
         std::cout << "  [json:adapter] " << llm_adapter.to_stats_json() << "\n";
         std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
+        std::cout << "  [json:dedup]   " << dedup_backend->to_stats_json() << "\n";
     }
 
     trade_engine.flush_sinks();

@@ -343,3 +343,37 @@ TEST(DeduplicatorTest, test_total_checked_equals_novel_plus_duplicates) {
     dedup.check_and_register(key, ms{5000});
     EXPECT_EQ(dedup.total_checked(), dedup.total_novel() + dedup.total_duplicates());
 }
+
+// ---------------------------------------------------------------------------
+// InProcessDeduplicator::to_stats_json() tests
+// ---------------------------------------------------------------------------
+
+TEST(DeduplicatorTest, test_to_stats_json_returns_valid_json_with_fields) {
+    using ms = std::chrono::milliseconds;
+    InProcessDeduplicator dedup;
+    auto k1 = DedupKey::from_token("tok_a");
+    auto k2 = DedupKey::from_token("tok_b");
+    dedup.check_and_register(k1, ms{5000});
+    dedup.check_and_register(k1, ms{5000}); // duplicate
+    dedup.check_and_register(k2, ms{5000});
+
+    std::string json = dedup.to_stats_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{');
+    EXPECT_EQ(json.back(),  '}');
+    EXPECT_NE(json.find("total_novel"),      std::string::npos);
+    EXPECT_NE(json.find("total_duplicates"), std::string::npos);
+    EXPECT_NE(json.find("current_size"),     std::string::npos);
+    EXPECT_NE(json.find("dup_rate_pct"),     std::string::npos);
+    // 2 novel (k1 first + k2), 1 duplicate (k1 second)
+    EXPECT_NE(json.find("\"total_novel\":2"),      std::string::npos);
+    EXPECT_NE(json.find("\"total_duplicates\":1"), std::string::npos);
+}
+
+TEST(DeduplicatorTest, test_to_stats_json_empty_dedup_shows_zero_rate) {
+    InProcessDeduplicator dedup;
+    std::string json = dedup.to_stats_json();
+    EXPECT_NE(json.find("\"total_novel\":0"),      std::string::npos);
+    EXPECT_NE(json.find("\"total_duplicates\":0"), std::string::npos);
+    EXPECT_NE(json.find("\"dup_rate_pct\":0.00"),  std::string::npos);
+}

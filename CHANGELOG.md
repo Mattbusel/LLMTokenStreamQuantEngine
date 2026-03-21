@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 25 — 2026-03-21)
+- `InProcessDeduplicator::to_stats_json()`: inline method in `Deduplicator.h`
+  serialising total_novel, total_duplicates, current_size, and dup_rate_pct
+  to a JSON object string. Adds `<cinttypes>` and `<cstdio>` to `Deduplicator.h`.
+- Session exit summary: `[json:dedup]` line added to the structured JSON block
+  alongside risk/engine/adapter/latency (printed unless `--quiet`).
+- Tests (`test_deduplicator.cpp`): 2 new tests for `to_stats_json()` — field
+  presence / counter accuracy with known novel/duplicate counts, and
+  zero-state dup_rate_pct.
+
 ### Added (Cycle 24 — 2026-03-21)
 - `LatencyController::to_stats_json()`: inline method serialising all
   `LatencyStats` fields (avg, min, max, p5/p25/p50/p75/p95/p99, jitter_ms,

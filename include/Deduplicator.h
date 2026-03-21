@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
+#include <cstdio>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -271,6 +273,32 @@ public:
      * Safe to call even if start_background_purge() was never called.
      */
     void stop_background_purge();
+
+    /**
+     * @brief Serialise the current deduplicator statistics to a JSON string.
+     *
+     * Returns a JSON object with total_novel, total_duplicates, current_size,
+     * and dup_rate_pct (duplicate percentage [0,100]).
+     * Thread-safe (reads atomic counters with relaxed ordering; current_size
+     * acquires the internal mutex briefly via size()).
+     *
+     * @return JSON object as std::string.
+     */
+    std::string to_stats_json() const noexcept {
+        uint64_t nov  = total_novel_.load(std::memory_order_relaxed);
+        uint64_t dup  = total_duplicates_.load(std::memory_order_relaxed);
+        uint64_t tot  = nov + dup;
+        double   pct  = (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
+        size_t   cur  = size();
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+            "{\"total_novel\":%" PRIu64
+            ",\"total_duplicates\":%" PRIu64
+            ",\"current_size\":%zu"
+            ",\"dup_rate_pct\":%.2f}",
+            nov, dup, cur, pct);
+        return buf;
+    }
 
 private:
     struct Entry {
