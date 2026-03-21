@@ -341,6 +341,22 @@ public:
     std::vector<HistogramBucket> histogram_buckets() const;
 
     /**
+     * @brief Return the cumulative sum of all recorded latency values in microseconds.
+     *
+     * Reads the raw atomic accumulator directly — no lock, no percentile
+     * computation. Useful for building an accurate Prometheus histogram
+     * `_sum` line; using avg×count loses precision once avg is rounded to
+     * integer microseconds.
+     *
+     * Thread-safe (atomic load with relaxed ordering).
+     *
+     * @return Cumulative latency sum in microseconds.
+     */
+    uint64_t get_total_latency_us() const noexcept {
+        return total_latency_us_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Convenience accessor: return the P99 latency in microseconds.
      *
      * Delegates to get_stats() and extracts the p99 field.

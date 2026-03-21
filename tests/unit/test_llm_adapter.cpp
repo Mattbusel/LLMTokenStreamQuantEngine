@@ -1375,5 +1375,66 @@ TEST(LLMAdapterTest, test_format_stats_after_lookups_contains_expected_fields) {
     EXPECT_NE(s.find("dict_size="), std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Token hit-frequency tracking
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_frequency_initial_zero) {
+    LLMAdapter adapter;
+    EXPECT_EQ(adapter.get_token_hit_count("crash"), 0u)
+        << "Hit count must be zero before any lookup";
+    EXPECT_EQ(adapter.get_token_hit_count("bullish"), 0u);
+}
+
+TEST(LLMAdapterTest, test_frequency_increments_on_hit) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("crash");
+    adapter.map_token_to_weight("crash");
+    EXPECT_EQ(adapter.get_token_hit_count("crash"), 2u)
+        << "Hit count should equal the number of successful lookups";
+}
+
+TEST(LLMAdapterTest, test_frequency_miss_does_not_increment) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("nonexistent_xyz_token");
+    EXPECT_EQ(adapter.get_token_hit_count("nonexistent_xyz_token"), 0u)
+        << "Cache miss must not increment the hit counter";
+}
+
+TEST(LLMAdapterTest, test_frequency_top_tokens_by_frequency_order) {
+    LLMAdapter adapter;
+    // "bullish" 3 hits, "crash" 1 hit
+    adapter.map_token_to_weight("bullish");
+    adapter.map_token_to_weight("bullish");
+    adapter.map_token_to_weight("bullish");
+    adapter.map_token_to_weight("crash");
+
+    auto top = adapter.top_tokens_by_frequency(2);
+    ASSERT_EQ(top.size(), 2u);
+    EXPECT_EQ(top[0].first, "bullish") << "Most-hit token must be first";
+    EXPECT_EQ(top[0].second, 3u);
+    EXPECT_EQ(top[1].first, "crash");
+    EXPECT_EQ(top[1].second, 1u);
+}
+
+TEST(LLMAdapterTest, test_frequency_reset_zeroes_counts) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("bullish");
+    adapter.map_token_to_weight("crash");
+    EXPECT_GT(adapter.get_token_hit_count("bullish"), 0u);
+
+    adapter.reset_frequency_counts();
+    EXPECT_EQ(adapter.get_token_hit_count("bullish"), 0u)
+        << "reset_frequency_counts must zero all hit counters";
+    EXPECT_EQ(adapter.get_token_hit_count("crash"), 0u);
+}
+
+TEST(LLMAdapterTest, test_frequency_normalisation_case_insensitive) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("Bullish");   // normalised to "bullish"
+    EXPECT_EQ(adapter.get_token_hit_count("bullish"), 1u)
+        << "Hit count must be accessible via normalised (lowercase) key";
+}
+
 } // namespace
 } // namespace llmquant

@@ -509,6 +509,8 @@ int main(int argc, char* argv[]) {
     std::cout << "  LATENCY : target p99 < " << sys_config.latency.target_latency_us << "us\n";
     if (dry_run)
         std::cout << "  DRY-RUN : signals suppressed — dictionary coverage mode\n";
+    if (backtest_mode)
+        std::cout << "  BACKTEST: cooldown disabled — signal emitted on every token\n";
     std::cout << DIV1 << "\n";
     std::cout << config.to_summary_string() << "\n";
     std::cout << "  TIME(ms)     BIAS      VOL       LATENCY   GATE\n";
@@ -801,7 +803,40 @@ int main(int argc, char* argv[]) {
                  << "llmquant_p25_latency_us " << stats.p25_latency.count() << "\n"
                  << "# HELP llmquant_peak_bias Peak absolute value of the accumulated bias since last reset\n"
                  << "# TYPE llmquant_peak_bias gauge\n"
-                 << "llmquant_peak_bias " << std::fixed << std::setprecision(6) << trade_engine.get_stats().peak_bias.load() << "\n";
+                 << "llmquant_peak_bias " << std::fixed << std::setprecision(6) << trade_engine.get_stats().peak_bias.load() << "\n"
+                 << "# HELP llmquant_signal_efficiency Ratio of signals emitted to tokens processed [0,1]\n"
+                 << "# TYPE llmquant_signal_efficiency gauge\n"
+                 << "llmquant_signal_efficiency " << std::setprecision(6) << trade_engine.get_signal_efficiency() << "\n"
+                 << "# HELP llmquant_tokens_per_second Token throughput (tokens processed per second)\n"
+                 << "# TYPE llmquant_tokens_per_second gauge\n"
+                 << "llmquant_tokens_per_second " << std::setprecision(2) << trade_engine.get_tokens_per_second() << "\n"
+                 << "# HELP llmquant_avg_signal_quality Welford running mean of signal_quality [0,1]\n"
+                 << "# TYPE llmquant_avg_signal_quality gauge\n"
+                 << "llmquant_avg_signal_quality " << std::setprecision(6) << eng_stats.avg_signal_quality.load() << "\n"
+                 << "# HELP llmquant_dedup_duplicate_rate Fraction of checked tokens that were duplicates [0,1]\n"
+                 << "# TYPE llmquant_dedup_duplicate_rate gauge\n"
+                 << "llmquant_dedup_duplicate_rate " << [&]() -> double {
+                        uint64_t dupes = dedup_backend->total_duplicates();
+                        uint64_t novel = dedup_backend->total_novel();
+                        uint64_t total = novel + dupes;
+                        return (total > 0) ? (static_cast<double>(dupes) / static_cast<double>(total)) : 0.0;
+                    }() << "\n";
+            // Signal quality histogram — per-bucket counts emitted as a Prometheus histogram.
+            {
+                auto qhb = trade_engine.get_quality_histogram();
+                snap << "# HELP llmquant_signal_quality_histogram Distribution of emitted signal quality scores\n"
+                     << "# TYPE llmquant_signal_quality_histogram histogram\n";
+                uint64_t cumulative = 0;
+                for (const auto& b : qhb) {
+                    cumulative += b.count;
+                    snap << "llmquant_signal_quality_histogram_bucket{le=\"" << b.upper_bound << "\"} " << cumulative << "\n";
+                }
+                snap << "llmquant_signal_quality_histogram_bucket{le=\"+Inf\"} " << cumulative << "\n";
+                snap << "llmquant_signal_quality_histogram_count " << cumulative << "\n";
+                double avg_q = eng_stats.avg_signal_quality.load();
+                snap << "llmquant_signal_quality_histogram_sum " << std::setprecision(6)
+                     << (std::isfinite(avg_q) ? avg_q * static_cast<double>(cumulative) : 0.0) << "\n";
+            }
             // Prometheus native histogram — cumulative latency buckets.
             {
                 auto hb = latency_ctrl.histogram_buckets();
@@ -817,24 +852,29 @@ int main(int argc, char* argv[]) {
                     last_count = b.count;
                 }
                 snap << "llmquant_token_latency_us_count " << last_count << "\n"
-                     << "llmquant_token_latency_us_sum "   << stats.avg_latency.count() * static_cast<long long>(stats.measurements) << "\n";
+                     << "llmquant_token_latency_us_sum "   << latency_ctrl.get_total_latency_us() << "\n";
             }
             snap << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
                  << "# TYPE llmquant_drawdown_cumulative_bias gauge\n"
                  << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n"
                  << "# HELP llmquant_risk_pass_rate_pct Percentage of signals that passed all risk gates (0-100)\n"
                  << "# TYPE llmquant_risk_pass_rate_pct gauge\n"
-                 << "llmquant_risk_pass_rate_pct " << [&]() -> double {
-                        uint64_t passed  = rs.signals_passed.load();
-                        uint64_t blocked_total = rs.signals_blocked_magnitude.load()
-                                               + rs.signals_blocked_confidence.load()
-                                               + rs.signals_blocked_rate.load()
-                                               + rs.signals_blocked_drawdown.load()
-                                               + rs.signals_blocked_position.load()
-                                               + rs.signals_blocked_pnl.load();
-                        uint64_t total = (passed > UINT64_MAX - blocked_total) ? UINT64_MAX : passed + blocked_total;
-                        return (total > 0) ? (static_cast<double>(passed) * 100.0 / static_cast<double>(total)) : 100.0;
-                    }() << "\n";
+                 << "llmquant_risk_pass_rate_pct " << std::setprecision(4) << ((1.0 - risk_mgr.get_blocked_rate()) * 100.0) << "\n"
+                 << "# HELP llmquant_slo_breach_rate Fraction of latency samples that exceeded the p99 target [0,1]\n"
+                 << "# TYPE llmquant_slo_breach_rate gauge\n"
+                 << "llmquant_slo_breach_rate " << std::setprecision(6) << latency_ctrl.get_slo_breach_rate() << "\n"
+                 << "# HELP llmquant_drawdown_utilization Fraction of drawdown budget consumed in current window [0,1]\n"
+                 << "# TYPE llmquant_drawdown_utilization gauge\n"
+                 << "llmquant_drawdown_utilization " << std::setprecision(4) << risk_mgr.get_drawdown_utilization() << "\n"
+                 << "# HELP llmquant_rate_limit_utilization Fraction of per-second rate cap consumed in current window [0,1]\n"
+                 << "# TYPE llmquant_rate_limit_utilization gauge\n"
+                 << "llmquant_rate_limit_utilization " << std::setprecision(4) << risk_mgr.get_rate_limit_utilization() << "\n"
+                 << "# HELP llmquant_noise_filtered_total Tokens suppressed by the min-bias noise gate\n"
+                 << "# TYPE llmquant_noise_filtered_total counter\n"
+                 << "llmquant_noise_filtered_total " << eng_stats.noise_filtered.load() << "\n"
+                 << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
+                 << "# TYPE llmquant_risk_healthy gauge\n"
+                 << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -943,6 +983,23 @@ int main(int argc, char* argv[]) {
         std::cout << "  Dedup novel      : " << ds.total_novel << "\n";
         std::cout << "  Dedup duplicates : " << ds.total_duplicates
                   << "  (" << std::fixed << std::setprecision(1) << dup_rate << "% dup rate)\n";
+    }
+    {
+        auto uptime_s = std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::steady_clock::now() - engine_start_time).count();
+        std::cout << "  Uptime           : " << uptime_s << "s\n";
+    }
+    std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
+    {
+        auto top = llm_adapter.top_tokens_by_frequency(5);
+        if (!top.empty()) {
+            std::cout << "  Top tokens (hits): ";
+            for (size_t i = 0; i < top.size(); ++i) {
+                if (i > 0) std::cout << ", ";
+                std::cout << top[i].first << "(" << top[i].second << ")";
+            }
+            std::cout << "\n";
+        }
     }
     std::cout << "  ---------------------------------------------------------\n\n";
 

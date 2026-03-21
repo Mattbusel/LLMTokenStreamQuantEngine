@@ -123,6 +123,30 @@ public:
     };
 
     /**
+     * @brief One bucket of the signal quality histogram.
+     *
+     * Each bucket holds a per-bucket (not cumulative) count of signals whose
+     * signal_quality falls within (prev_upper_bound, upper_bound].
+     * The first bucket covers [0.0, 0.2).
+     */
+    struct QualityHistogramBucket {
+        double   upper_bound{0.0}; ///< Inclusive upper bound of this bucket.
+        uint64_t count{0};         ///< Number of signals in this bucket.
+    };
+
+    /**
+     * @brief Return the distribution of emitted signal qualities in 5 fixed buckets.
+     *
+     * Bucket ranges: [0.0, 0.2), [0.2, 0.4), [0.4, 0.6), [0.6, 0.8), [0.8, 1.0].
+     * Counts are per-bucket (not cumulative).
+     *
+     * Thread-safe (atomic loads).
+     *
+     * @return Vector of 5 QualityHistogramBucket entries in ascending bound order.
+     */
+    std::vector<QualityHistogramBucket> get_quality_histogram() const;
+
+    /**
      * @brief Live statistics updated atomically by the engine.
      */
     struct Stats {
@@ -139,6 +163,12 @@ public:
         std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
         /// Welford running mean of signal_quality across emitted signals.
         std::atomic<double>   avg_signal_quality{0.0};
+        /// Per-bucket signal quality histogram counters (5 fixed buckets).
+        std::atomic<uint64_t> quality_bucket_0_20{0};   ///< [0.0, 0.2)
+        std::atomic<uint64_t> quality_bucket_20_40{0};  ///< [0.2, 0.4)
+        std::atomic<uint64_t> quality_bucket_40_60{0};  ///< [0.4, 0.6)
+        std::atomic<uint64_t> quality_bucket_60_80{0};  ///< [0.6, 0.8)
+        std::atomic<uint64_t> quality_bucket_80_100{0}; ///< [0.8, 1.0]
 
         Stats() = default;
 
@@ -152,7 +182,12 @@ public:
             , noise_filtered{other.noise_filtered.load()}
             , avg_signal_strength{other.avg_signal_strength.load()}
             , peak_bias{other.peak_bias.load()}
-            , avg_signal_quality{other.avg_signal_quality.load()} {}
+            , avg_signal_quality{other.avg_signal_quality.load()}
+            , quality_bucket_0_20{other.quality_bucket_0_20.load()}
+            , quality_bucket_20_40{other.quality_bucket_20_40.load()}
+            , quality_bucket_40_60{other.quality_bucket_40_60.load()}
+            , quality_bucket_60_80{other.quality_bucket_60_80.load()}
+            , quality_bucket_80_100{other.quality_bucket_80_100.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
         Stats& operator=(const Stats& other) {
@@ -166,6 +201,11 @@ public:
                 avg_signal_strength.store(other.avg_signal_strength.load());
                 peak_bias.store(other.peak_bias.load());
                 avg_signal_quality.store(other.avg_signal_quality.load());
+                quality_bucket_0_20.store(other.quality_bucket_0_20.load());
+                quality_bucket_20_40.store(other.quality_bucket_20_40.load());
+                quality_bucket_40_60.store(other.quality_bucket_40_60.load());
+                quality_bucket_60_80.store(other.quality_bucket_60_80.load());
+                quality_bucket_80_100.store(other.quality_bucket_80_100.load());
             }
             return *this;
         }

@@ -9,6 +9,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 7 — 2026-03-21)
+- `LatencyController::get_total_latency_us()` — inline accessor returning the
+  raw `total_latency_us_` atomic without triggering percentile computation.
+  Used to emit an accurate Prometheus histogram `_sum` line; the previous
+  `avg × count` approximation lost precision because the integer-microsecond
+  average was already rounded.
+- Prometheus: six new metrics exposed that were previously computed but not
+  exported: `llmquant_slo_breach_rate`, `llmquant_drawdown_utilization`,
+  `llmquant_rate_limit_utilization`, `llmquant_noise_filtered_total`,
+  `llmquant_risk_healthy`.
+- Prometheus: `llmquant_risk_pass_rate_pct` simplified to use
+  `RiskManager::get_blocked_rate()` directly, eliminating inline duplication
+  of the blocked-total aggregation.
+- Prometheus: `llmquant_token_latency_us_sum` now uses
+  `latency_ctrl.get_total_latency_us()` for an exact sum value.
+
 ### Added (Cycle 6 — 2026-03-21)
 - Session exit summary now prints `peak_bias`, `SLO breach rate`, `P5 latency`, and `P25 latency`
   — all were tracked and Prometheus-exported but absent from the human-readable exit report.

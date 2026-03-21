@@ -212,6 +212,16 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     last_signal_quality_.store(signal.signal_quality, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(signal.timestamp_ns, std::memory_order_relaxed);
 
+    // Update signal quality histogram.
+    {
+        double q = signal.signal_quality;
+        if      (q < 0.2) stats_.quality_bucket_0_20.fetch_add(1, std::memory_order_relaxed);
+        else if (q < 0.4) stats_.quality_bucket_20_40.fetch_add(1, std::memory_order_relaxed);
+        else if (q < 0.6) stats_.quality_bucket_40_60.fetch_add(1, std::memory_order_relaxed);
+        else if (q < 0.8) stats_.quality_bucket_60_80.fetch_add(1, std::memory_order_relaxed);
+        else              stats_.quality_bucket_80_100.fetch_add(1, std::memory_order_relaxed);
+    }
+
     if (callback_) {
         try { callback_(signal); } catch (...) {}
     } else if (output_sinks_.empty()) {
@@ -400,6 +410,17 @@ std::string TradeSignalEngine::format_stats() const {
         << " peak_bias=" << peak
         << " avg_quality=" << avg_qual;
     return oss.str();
+}
+
+std::vector<TradeSignalEngine::QualityHistogramBucket>
+TradeSignalEngine::get_quality_histogram() const {
+    return {
+        {0.2, stats_.quality_bucket_0_20.load(std::memory_order_relaxed)},
+        {0.4, stats_.quality_bucket_20_40.load(std::memory_order_relaxed)},
+        {0.6, stats_.quality_bucket_40_60.load(std::memory_order_relaxed)},
+        {0.8, stats_.quality_bucket_60_80.load(std::memory_order_relaxed)},
+        {1.0, stats_.quality_bucket_80_100.load(std::memory_order_relaxed)},
+    };
 }
 
 } // namespace llmquant

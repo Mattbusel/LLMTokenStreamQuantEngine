@@ -1423,5 +1423,64 @@ TEST(TradeSignalEngineTest, test_format_stats_contains_avg_quality_field) {
         << "format_stats must include avg_quality field";
 }
 
+// ---------------------------------------------------------------------------
+// Signal quality histogram
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_quality_histogram_initial_all_zero) {
+    TradeSignalEngine engine(make_config());
+    auto hist = engine.get_quality_histogram();
+    ASSERT_EQ(hist.size(), 5u);
+    for (const auto& b : hist) {
+        EXPECT_EQ(b.count, 0u) << "All histogram buckets must be zero at construction";
+    }
+}
+
+TEST(TradeSignalEngineTest, test_quality_histogram_five_buckets_correct_bounds) {
+    TradeSignalEngine engine(make_config());
+    auto hist = engine.get_quality_histogram();
+    ASSERT_EQ(hist.size(), 5u);
+    EXPECT_DOUBLE_EQ(hist[0].upper_bound, 0.2);
+    EXPECT_DOUBLE_EQ(hist[1].upper_bound, 0.4);
+    EXPECT_DOUBLE_EQ(hist[2].upper_bound, 0.6);
+    EXPECT_DOUBLE_EQ(hist[3].upper_bound, 0.8);
+    EXPECT_DOUBLE_EQ(hist[4].upper_bound, 1.0);
+}
+
+TEST(TradeSignalEngineTest, test_quality_histogram_low_quality_lands_in_first_bucket) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    // Low confidence + small bias → quality well below 0.2
+    engine.process_semantic_weight({0.05, 0.1, 0.0, 0.05});
+    auto hist = engine.get_quality_histogram();
+    EXPECT_GT(hist[0].count, 0u) << "Low-quality signal must land in bucket [0, 0.2)";
+}
+
+TEST(TradeSignalEngineTest, test_quality_histogram_high_quality_lands_in_last_bucket) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    // High confidence + large bias → quality above 0.8
+    engine.process_semantic_weight({0.95, 0.99, 0.9, 0.95});
+    auto hist = engine.get_quality_histogram();
+    EXPECT_GT(hist[4].count, 0u) << "High-quality signal must land in bucket [0.8, 1.0]";
+}
+
+TEST(TradeSignalEngineTest, test_quality_histogram_total_matches_signals_generated) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    const int N = 5;
+    for (int i = 0; i < N; ++i) {
+        engine.process_semantic_weight({0.5, 0.8, 0.3, 0.5});
+    }
+    auto hist = engine.get_quality_histogram();
+    uint64_t total = 0;
+    for (const auto& b : hist) total += b.count;
+    EXPECT_EQ(total, static_cast<uint64_t>(engine.get_signals_generated()))
+        << "Sum of histogram bucket counts must equal signals_generated";
+}
+
 } // namespace
 } // namespace llmquant
