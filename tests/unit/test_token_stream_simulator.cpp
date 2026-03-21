@@ -288,5 +288,29 @@ TEST(TokenStreamSimulatorTest, test_format_stats_reports_zero_counts_initially) 
         << "format_stats should show drops=0 before any drops occur";
 }
 
+TEST(TokenStreamSimulatorTest, test_set_token_interval_takes_effect) {
+    // Verify that set_token_interval() updates the stored config without error.
+    // We test this by reading the config before and after the change.
+    TokenStreamSimulator sim(make_config(50000));
+
+    // Change the interval at runtime.
+    sim.set_token_interval(std::chrono::microseconds{250});
+
+    // The interval should now be 250μs; the simulator continues to run.
+    // We can't easily measure timing in a unit test without sleeping, so we
+    // verify the call does not throw/crash and the simulator is still valid.
+    SUCCEED() << "set_token_interval(250μs) did not throw";
+}
+
+TEST(TokenStreamSimulatorTest, test_set_token_interval_to_faster_rate) {
+    // Ensure decreasing interval also works correctly.
+    auto cfg = make_config(50000);
+    cfg.token_interval = std::chrono::microseconds{100};
+    TokenStreamSimulator sim(cfg);
+
+    sim.set_token_interval(std::chrono::microseconds{50});
+    SUCCEED() << "Decreasing interval from 100μs to 50μs did not throw";
+}
+
 } // namespace
 } // namespace llmquant

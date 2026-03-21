@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 23 — 2026-03-21)
+- Tests (`test_llm_adapter.cpp`): 3 new tests for `LLMAdapter::clear_dictionary()`
+  covering: all tokens removed, stats reset to zero, and post-clear lookup
+  returning default zero weights for a previously known token.
+- Tests (`test_token_stream_simulator.cpp`): 2 new tests for
+  `TokenStreamSimulator::set_token_interval()` — verifying the hot-reload call
+  does not throw for both interval-increase and interval-decrease cases.
+
 ### Added (Cycle 22 — 2026-03-21)
 - `TradeSignalEngine::to_stats_json()`: inline method in `TradeSignalEngine.h`
   that serialises all engine stats (signals generated/suppressed/aged-out/
@@ -38,6 +46,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `TokenStreamSimulator` at runtime via `set_token_interval()`. Previously the
   interval was only read at startup; operators can now tune token pacing without
   a process restart.
+- `LLMAdapter::export_hot_tokens(n)`: returns the top N tokens by a composite
+  influence score (0.5 × normalised hit-frequency + 0.5 × |directional_bias|),
+  surfacing tokens that are both frequently seen and strongly directional.
+  Useful for debugging runaway bias or prioritising dictionary tuning.
+- `RiskManager::reset_stats()`: now also re-arms all per-gate trip-wire callbacks
+  (resets the `gate_*_last_blocked_` booleans) so that the next block after a
+  stats reset fires the trip callback again regardless of prior gate state.
+- Tests (`test_llm_adapter.cpp`): 4 new tests for `export_hot_tokens()` covering
+  empty dict, composite ranking, score bounds [0,1], and n > dict size.
+- Tests (`test_risk_manager.cpp`): 2 new tests for `reset_stats()` verifying
+  counter zeroing and trip-wire callback re-arming.
 
 ### Added (Cycle 21 — 2026-03-21)
 - Fixed: `Config::load_from_yaml_string()` now validates `semantic_weights`
