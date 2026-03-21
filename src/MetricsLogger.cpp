@@ -257,9 +257,16 @@ void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
 
 void MetricsLogger::log_performance_summary() {
     if (console_logger_) {
+        double uptime_ms  = get_uptime_ms();
+        double uptime_s   = uptime_ms / 1000.0;
+        double entry_rate = get_log_rate();
+        uint64_t entries  = log_entries_.load(std::memory_order_relaxed);
         console_logger_->info("=== Performance Summary ===");
-        console_logger_->info("Total log entries: {}", log_entries_.load());
-        console_logger_->info("Log file: {}", config_.log_file_path);
+        console_logger_->info("  Log entries  : {}", entries);
+        console_logger_->info("  Uptime       : {:.1f} s", uptime_s);
+        console_logger_->info("  Log rate     : {:.1f} entries/s", entry_rate);
+        console_logger_->info("  Log file     : {}", config_.log_file_path.empty() ? "(none)" : config_.log_file_path);
+        console_logger_->info("  Log format   : {}", config_.format == OutputFormat::CSV ? "CSV" : "JSON");
     }
 }
 

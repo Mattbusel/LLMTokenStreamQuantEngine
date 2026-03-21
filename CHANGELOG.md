@@ -9,6 +9,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 6 — 2026-03-21)
+- Session exit summary now prints `peak_bias`, `SLO breach rate`, `P5 latency`, and `P25 latency`
+  — all were tracked and Prometheus-exported but absent from the human-readable exit report.
+- `llmquant_backtest_mode` Prometheus gauge added alongside the existing `llmquant_dry_run` gauge,
+  allowing scrape consumers to distinguish backtest from normal operation.
+- `MetricsLogger::log_performance_summary()` enhanced: now reports uptime (seconds), log entry
+  rate (entries/s), log format, and file path, replacing the two-line placeholder output.
+
+### Added (Cycle 5 — 2026-03-21)
+- `--list-tokens` CLI flag: prints all semantic dictionary entries as a TSV table
+  (`token`, `sentiment`, `confidence`, `volatility`, `bias`) and exits immediately.
+  Useful for inspecting loaded dictionary entries and verifying custom token mappings.
+- Simulator in-memory token set expanded from 16 to 44 tokens, covering all
+  dictionary categories: fear/panic (`selloff`, `rout`), bullish (`rebound`,
+  `accumulate`), bearish (`downtrend`, `distribution`), volatility (`whipsaw`,
+  `choppy`, `gamma`, `vega`), certainty, corporate/earnings, macro/regime, analyst,
+  options (`calls`, `puts`, `squeeze`), crypto/retail (`pump`, `fud`, `hodl`), and
+  neutral filler. Improves demonstration coverage of all semantic signal paths.
+
+### Added (Cycle 4 — 2026-03-21)
+- `SemanticWeightsConfig` struct in `Config.h` with four per-category multiplier
+  fields (`sentiment_multiplier`, `confidence_multiplier`, `volatility_multiplier`,
+  `bias_multiplier`), each defaulting to `1.0`.  Added to `SystemConfig` and parsed
+  in `Config.cpp` under the `semantic_weights:` YAML key.  Applied in `main.cpp`'s
+  `process_token` lambda between `map_token_to_weight` and `process_semantic_weight`,
+  completing the TODO that had been noted in `config.yaml` since initial release.
+- `config.yaml`: active `semantic_weights:` section added with all four multipliers
+  defaulting to `1.0` (no-op), replacing the old TODO comment.
+- CI workflow (`.github/workflows/ci.yml`) expanded from 21 lines to a full four-job
+  matrix: `check` (gcc/clang × Release/Debug, with `actions/cache@v4`), `asan`
+  (clang Debug + ASan/UBSan), `format` (clang-format gate), and `docs` (Doxygen).
+
+### Changed (Cycle 4 — 2026-03-21)
+- Project version bumped `1.1.0` → `1.2.0` in `CMakeLists.txt`, syncing with the
+  README badge that already reflected `1.2.0`.
+
 ### Added (Cycle 3 — 2026-03-21)
 - `TradeSignal::to_string()` now includes `spread_modifier` and `strategy_weight`
   in its one-liner debug format:

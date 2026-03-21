@@ -771,6 +771,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
                  << "# TYPE llmquant_dry_run gauge\n"
                  << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n"
+                 << "# HELP llmquant_backtest_mode Whether the engine is running in backtest mode (1=yes)\n"
+                 << "# TYPE llmquant_backtest_mode gauge\n"
+                 << "llmquant_backtest_mode " << (backtest_mode ? 1 : 0) << "\n"
                  << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)
@@ -911,8 +914,14 @@ int main(int argc, char* argv[]) {
     std::cout << "  P95 latency      : " << final_stats.p95_latency.count() << "us\n";
     std::cout << "  P99 latency      : " << final_stats.p99_latency.count() << "us\n";
     std::cout << "  Max latency      : " << final_stats.max_latency.count() << "us\n";
+    std::cout << "  P5  latency      : " << final_stats.p5_latency.count()  << "us\n";
+    std::cout << "  P25 latency      : " << final_stats.p25_latency.count() << "us\n";
     std::cout << "  Avg sig strength : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().avg_signal_strength.load() << "\n";
+    std::cout << "  Peak bias        : " << std::fixed << std::setprecision(4)
+              << trade_engine.get_stats().peak_bias.load() << "\n";
+    std::cout << "  SLO breach rate  : " << std::fixed << std::setprecision(2)
+              << (latency_ctrl.get_slo_breach_rate() * 100.0) << "%\n";
     std::cout << "  Jitter           : " << std::fixed << std::setprecision(3)
               << final_stats.jitter_ms << "ms\n";
     {

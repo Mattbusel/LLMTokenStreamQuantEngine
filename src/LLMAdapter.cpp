@@ -137,7 +137,10 @@ void LLMAdapter::load_sentiment_dictionary(const std::string& filepath) {
 
 void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeight& weight) {
     // Normalise key via shared helper to match map_token_to_weight() lookup behaviour.
-    token_weights_[normalize_token(token)] = weight;
+    std::string norm = normalize_token(token);
+    token_weights_[norm] = weight;
+    if (token_hit_counts_.find(norm) == token_hit_counts_.end())
+        token_hit_counts_.emplace(norm, std::make_unique<std::atomic<uint64_t>>(0));
 }
 
 // SSE2-only horizontal add: returns [a[0]+a[1], b[0]+b[1]]
@@ -327,6 +330,7 @@ void LLMAdapter::clear_custom_mappings() {
     // Clears ALL mappings (both built-in and custom) since there is no distinction
     // between them in the map. Call initialize_default_mappings() after if needed.
     token_weights_.clear();
+    token_hit_counts_.clear();
 }
 
 bool LLMAdapter::contains_token(const std::string& token) const {
@@ -341,7 +345,9 @@ bool LLMAdapter::contains_any_of(const std::vector<std::string>& tokens) const {
 }
 
 bool LLMAdapter::remove_token_mapping(const std::string& token) {
-    return token_weights_.erase(normalize_token(token)) > 0;
+    std::string norm = normalize_token(token);
+    token_hit_counts_.erase(norm);
+    return token_weights_.erase(norm) > 0;
 }
 
 bool LLMAdapter::get_token_mapping(const std::string& token, SemanticWeight& weight) const {
@@ -779,6 +785,33 @@ std::string LLMAdapter::format_stats() const {
         << " hit_rate=" << hit_rate
         << " dict_size=" << token_weights_.size();
     return oss.str();
+}
+
+uint64_t LLMAdapter::get_token_hit_count(const std::string& token) const {
+    auto norm = normalize_token(token);
+    auto it = token_hit_counts_.find(norm);
+    return (it != token_hit_counts_.end()) ? it->second->load(std::memory_order_relaxed) : 0;
+}
+
+std::vector<std::pair<std::string, uint64_t>> LLMAdapter::top_tokens_by_frequency(size_t n) const {
+    std::vector<std::pair<std::string, uint64_t>> freq;
+    freq.reserve(token_hit_counts_.size());
+    for (const auto& kv : token_hit_counts_) {
+        freq.emplace_back(kv.first, kv.second->load(std::memory_order_relaxed));
+    }
+    size_t result_size = std::min(n, freq.size());
+    std::partial_sort(freq.begin(), freq.begin() + static_cast<std::ptrdiff_t>(result_size), freq.end(),
+        [](const std::pair<std::string, uint64_t>& a, const std::pair<std::string, uint64_t>& b) {
+            return a.second > b.second;
+        });
+    freq.resize(result_size);
+    return freq;
+}
+
+void LLMAdapter::reset_frequency_counts() {
+    for (auto& kv : token_hit_counts_) {
+        kv.second->store(0, std::memory_order_relaxed);
+    }
 }
 
 } // namespace llmquant
