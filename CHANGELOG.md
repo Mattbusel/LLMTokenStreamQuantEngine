@@ -10,6 +10,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 12 — 2026-03-21)
+- `TradeSignal::to_json()` — inline JSON serializer on `TradeSignal`; complements
+  `to_string()` for callers feeding signals into JSON pipelines.
+- `RiskManager::get_most_blocked_gate()` — inline method returning the name of
+  the gate with the highest block count (`"magnitude"`, `"confidence"`, `"rate"`,
+  `"drawdown"`, `"position"`, or `"none"`).
+- Prometheus: `llmquant_adapter_cache_hit_rate` gauge exposes
+  `LLMAdapter::get_cache_hit_rate()` directly for dashboard use without PromQL division.
+
+### Fixed (Cycle 12 — 2026-03-21)
+- `LatencyController.h`: removed duplicate `get_total_latency_us()` definition
+  inadvertently added when the method was added a second time.
+
+### Fixed (Cycle 13 — 2026-03-21)
+- `FixOmsAdapter`: `get_update_count()` and `get_error_count()` now return real values.
+  Previously both atomics were declared but never incremented, so all Prometheus
+  `llmquant_oms_update_count_total` and `llmquant_oms_error_count_total` readings for
+  FIX sessions were always 0.  Now `update_count_` increments on each successful
+  callback invocation (`emit_position()`) and `error_count_` increments on recv
+  failure and heartbeat send failure.
+
+### Added (Cycle 12 — 2026-03-21)
 - `MetricsLogger::log_pipeline_health()` now called once per second from the monitoring loop,
   persisting SLO health, breach rate, and backoff multiplier to the structured log file on
   every tick — previously implemented but never invoked.

@@ -385,7 +385,10 @@ void FixOmsAdapter::emit_position() {
     state.position_limit = config_.position_limit;
     state.pnl_limit      = config_.pnl_limit;
 
-    if (callback_) callback_(state);
+    if (callback_) {
+        callback_(state);
+        update_count_.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -513,6 +516,7 @@ void FixOmsAdapter::reader_thread() {
                 break;
             }
 #endif
+            error_count_.fetch_add(1, std::memory_order_relaxed);
             spdlog::warn("[FixOmsAdapter] recv failed, reconnecting");
             if (reconnect_with_backoff()) {
                 last_heartbeat = std::chrono::steady_clock::now();
@@ -558,6 +562,7 @@ void FixOmsAdapter::reader_thread() {
             ssize_t hb_sent = ::send(sockfd_, hb.c_str(),
                                      static_cast<int>(hb.size()), 0);
             if (hb_sent < 0 || static_cast<size_t>(hb_sent) != hb.size()) {
+                error_count_.fetch_add(1, std::memory_order_relaxed);
                 spdlog::warn("[FixOmsAdapter] heartbeat send failed, reconnecting");
                 if (reconnect_with_backoff()) {
                     last_heartbeat = std::chrono::steady_clock::now();

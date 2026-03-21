@@ -83,6 +83,32 @@ public:
     uint64_t messages_parsed() const { return messages_parsed_.load(); }
 
     /**
+     * @brief Return the number of position updates successfully delivered to the
+     *        registered callback since start().
+     *
+     * Each ExecutionReport and PositionReport that results in a callback invocation
+     * increments this counter.  Equivalent to the number of `emit_position()` calls.
+     * Thread-safe (atomic load).
+     *
+     * @return Successful position update count.
+     */
+    uint64_t update_count() const noexcept {
+        return update_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Return the number of socket-level or protocol errors encountered since start().
+     *
+     * Incremented on recv() failures and heartbeat send failures.
+     * Thread-safe (atomic load).
+     *
+     * @return Error count.
+     */
+    uint64_t error_count() const noexcept {
+        return error_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Return the number of times the FIX session has reconnected since start().
      *
      * Incremented each time reconnect_with_backoff() is called.
@@ -165,6 +191,8 @@ private:
 
     std::atomic<uint64_t> messages_parsed_{0};
     std::atomic<uint64_t> reconnect_count_{0};
+    std::atomic<uint64_t> update_count_{0};   ///< Position updates delivered to callback.
+    std::atomic<uint64_t> error_count_{0};    ///< Socket/protocol errors encountered.
     int  reconnect_attempts_{0};
     bool wsa_initialized_{false}; ///< True iff WSAStartup succeeded (Windows only).
     static constexpr int kMaxReconnectBackoffSeconds = 60;
