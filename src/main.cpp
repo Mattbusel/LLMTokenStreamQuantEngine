@@ -22,6 +22,7 @@
 #include <csignal>
 #include <atomic>
 #include <cstdlib>
+#include <fstream>
 #include <mutex>
 #include <sstream>
 

@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 14 — 2026-03-21)
+- `--export-dict FILE` CLI flag: exports the full semantic dictionary to a TSV
+  file (one entry per line: `token\tsentiment\tconfidence\tvolatility\tbias`)
+  and exits. Complements `--list-tokens` (stdout) with a file-based export path
+  suitable for piping into data-analysis tools or importing back via
+  `LLMAdapter::load_dictionary_from_tsv()`.
+- `--dump-config` now includes the `pressure.*` and `semantic_weights.*` sections
+  that were previously missing from the output, ensuring all hot-reloadable fields
+  are visible.
+
 ### Added (Cycle 13 — 2026-03-21)
 - Session exit summary now prints `Avg sig quality` (`avg_signal_quality`) and `Noise filtered`
   (`noise_filtered` count) — both tracked in `TradeSignalEngine::Stats` and Prometheus-exported
