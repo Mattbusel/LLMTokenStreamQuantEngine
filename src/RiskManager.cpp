@@ -234,6 +234,14 @@ void RiskManager::reset_stats() noexcept {
     stats_.signals_blocked_drawdown.store(0, std::memory_order_relaxed);
     stats_.signals_blocked_position.store(0, std::memory_order_relaxed);
     stats_.signals_blocked_pnl.store(0, std::memory_order_relaxed);
+    // Re-arm trip-wire callbacks: after a stats reset, the next block on any
+    // gate should trigger the callback again regardless of prior state.
+    std::lock_guard<std::mutex> lock(mutex_);
+    gate_magnitude_last_blocked_  = false;
+    gate_confidence_last_blocked_ = false;
+    gate_rate_last_blocked_       = false;
+    gate_drawdown_last_blocked_   = false;
+    gate_position_last_blocked_   = false;
 }
 
 void RiskManager::disable_all_gates() {
