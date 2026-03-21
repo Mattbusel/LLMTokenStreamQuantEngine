@@ -406,6 +406,16 @@ int main(int argc, char* argv[]) {
     risk_cfg.disable_position_gate    = sys_config.risk_overrides.disable_position_gate;
     llmquant::RiskManager risk_mgr(risk_cfg);
     risk_mgr.set_metrics_logger(&logger);
+    // Register gate trip-wire callbacks for real-time alerting on first block.
+    // Each callback fires once per pass→block edge; subsequent consecutive blocks
+    // on the same gate are silent until the gate passes and trips again.
+    for (const char* gate : {"magnitude", "confidence", "rate", "drawdown", "position"}) {
+        risk_mgr.set_gate_trip_callback(gate, [gate](const std::string& /*g*/,
+                                                      const llmquant::TradeSignal& sig) {
+            spdlog::warn("[risk] Gate '{}' tripped: bias={:+.3f} vol={:.3f} conf={:.3f}",
+                         gate, sig.delta_bias_shift, sig.volatility_adjustment, sig.confidence);
+        });
+    }
 
     // Hot-reload watcher is started after token_sim is constructed (below) so
     // the callback can also reload the token file when data_file_path changes.
@@ -499,6 +509,12 @@ int main(int argc, char* argv[]) {
         if (!updated.token_stream.use_memory_stream) {
             token_sim.load_tokens_from_file(updated.token_stream.data_file_path);
             spdlog::info("[config] Token file reloaded: {}", updated.token_stream.data_file_path);
+        }
+        // Apply token pacing changes immediately so interval tuning takes
+        // effect without a restart.
+        if (updated.token_stream.token_interval_ms > 0) {
+            token_sim.set_token_interval(
+                std::chrono::microseconds(updated.token_stream.token_interval_ms * 1000));
         }
         logger.log_config_reload(config_file, true);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
@@ -1014,6 +1030,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_avg_signal_quality Welford running mean of signal_quality [0,1]\n"
                  << "# TYPE llmquant_avg_signal_quality gauge\n"
                  << "llmquant_avg_signal_quality " << std::setprecision(6) << eng_stats.avg_signal_quality.load() << "\n"
+                 << "# HELP llmquant_signal_quality_ema EMA(alpha=0.1) of signal_quality; -1 = no signals yet\n"
+                 << "# TYPE llmquant_signal_quality_ema gauge\n"
+                 << "llmquant_signal_quality_ema " << std::setprecision(6) << trade_engine.get_signal_quality_ema() << "\n"
                  << "# HELP llmquant_dedup_duplicate_rate Fraction of checked tokens that were duplicates [0,1]\n"
                  << "# TYPE llmquant_dedup_duplicate_rate gauge\n"
                  << "llmquant_dedup_duplicate_rate " << [&]() -> double {
@@ -1084,6 +1103,14 @@ int main(int argc, char* argv[]) {
                         uint64_t tot = nov + dup;
                         return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
                     }() << "\n";
+            {
+                double q_ema = trade_engine.get_signal_quality_ema();
+                if (q_ema >= 0.0) {
+                    snap << "# HELP llmquant_signal_quality_ema Exponential moving average of signal quality (alpha=0.1) in [0,1]\n"
+                         << "# TYPE llmquant_signal_quality_ema gauge\n"
+                         << "llmquant_signal_quality_ema " << std::setprecision(4) << q_ema << "\n";
+                }
+            }
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -1132,6 +1159,13 @@ int main(int argc, char* argv[]) {
                             return (total > 0) ? (passed * 100 / total) : 100;
                          }()
                       << (!stream_mode ? (std::string("  DROPS:") + std::to_string(token_sim.get_stats().ring_buffer_drops.load())) : "")
+                      << [&]() -> std::string {
+                            double q_ema = trade_engine.get_signal_quality_ema();
+                            if (q_ema < 0.0) return "";
+                            std::ostringstream o;
+                            o << "  Q-EMA:" << std::fixed << std::setprecision(2) << q_ema;
+                            return o.str();
+                         }()
                       << std::flush;
 
             // Alert if P99 exceeds budget.
@@ -1185,6 +1219,12 @@ int main(int argc, char* argv[]) {
               << trade_engine.get_stats().avg_signal_strength.load() << "\n";
     std::cout << "  Avg sig quality  : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().avg_signal_quality.load() << "\n";
+    {
+        double ema = trade_engine.get_signal_quality_ema();
+        if (ema >= 0.0) {
+            std::cout << "  Quality EMA(0.1) : " << std::fixed << std::setprecision(4) << ema << "\n";
+        }
+    }
     std::cout << "  Noise filtered   : " << trade_engine.get_stats().noise_filtered.load() << "\n";
     std::cout << "  Peak bias        : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().peak_bias.load() << "\n";
@@ -1256,6 +1296,13 @@ int main(int argc, char* argv[]) {
         }
     }
     std::cout << "  ---------------------------------------------------------\n\n";
+
+    // Emit structured JSON summaries for risk, engine, and adapter stats.
+    if (!quiet) {
+        std::cout << "  [json:risk]    " << risk_mgr.to_stats_json() << "\n";
+        std::cout << "  [json:engine]  " << trade_engine.to_stats_json() << "\n";
+        std::cout << "  [json:adapter] " << llm_adapter.to_stats_json() << "\n";
+    }
 
     trade_engine.flush_sinks();
     logger.log_performance_summary();

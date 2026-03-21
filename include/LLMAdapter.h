@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cinttypes>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -128,6 +130,19 @@ public:
      * @return Total number of entries in the token dictionary (built-in + custom).
      */
     size_t get_dictionary_size() const;
+
+    /**
+     * @brief Remove all entries from the token dictionary.
+     *
+     * After calling this method, all token lookups will return the neutral
+     * fallback weight until new mappings are added via add_token_mapping() or
+     * load_sentiment_dictionary().  Primarily useful in unit tests that need
+     * a clean-slate adapter.
+     *
+     * Not safe to call concurrently with map_token_to_weight() or any other
+     * method that reads token_weights_.
+     */
+    void clear_dictionary();
 
     /**
      * @brief Return all token keys currently in the dictionary.
@@ -528,6 +543,32 @@ public:
      * @return Single-line stats summary string.
      */
     std::string format_stats() const;
+
+    /**
+     * @brief Serialise the current adapter statistics to a JSON string.
+     *
+     * Produces a JSON object with tokens_processed, cache_hits, cache_misses,
+     * hit_rate_pct (0–100), and dictionary_size.
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return JSON object as std::string.
+     */
+    std::string to_stats_json() const noexcept {
+        uint64_t processed = stats_.tokens_processed.load(std::memory_order_relaxed);
+        uint64_t hits      = stats_.cache_hits.load(std::memory_order_relaxed);
+        uint64_t misses    = processed - hits;
+        double   hit_pct   = (processed > 0) ? (static_cast<double>(hits) * 100.0 / static_cast<double>(processed)) : 0.0;
+        size_t   dict_size = get_dictionary_size();
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+            "{\"tokens_processed\":%" PRIu64
+            ",\"cache_hits\":%" PRIu64
+            ",\"cache_misses\":%" PRIu64
+            ",\"hit_rate_pct\":%.2f"
+            ",\"dictionary_size\":%zu}",
+            processed, hits, misses, hit_pct, dict_size);
+        return buf;
+    }
 
     /**
      * @brief Export the entire token dictionary as a tab-separated string.

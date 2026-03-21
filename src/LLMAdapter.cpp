@@ -242,6 +242,14 @@ size_t LLMAdapter::get_dictionary_size() const {
     return token_weights_.size();
 }
 
+void LLMAdapter::clear_dictionary() {
+    token_weights_.clear();
+    token_hit_counts_.clear();
+    stats_.tokens_processed.store(0, std::memory_order_relaxed);
+    stats_.cache_hits.store(0, std::memory_order_relaxed);
+    stats_.cache_misses.store(0, std::memory_order_relaxed);
+}
+
 size_t LLMAdapter::count_bullish_tokens() const {
     size_t count = 0;
     for (const auto& [tok, wt] : token_weights_) { (void)tok; if (wt.sentiment_score > 0.0) ++count; }

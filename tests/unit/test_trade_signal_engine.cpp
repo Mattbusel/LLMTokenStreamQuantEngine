@@ -1610,5 +1610,39 @@ TEST(TradeSignalEngineTest, test_signal_quality_ema_reset_to_sentinel) {
         << "EMA must reset to -1.0 sentinel after reset()";
 }
 
+// ---------------------------------------------------------------------------
+// TradeSignalEngine::to_stats_json() tests
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_to_stats_json_returns_valid_json_with_required_fields) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
+
+    std::string json = engine.to_stats_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{');
+    EXPECT_EQ(json.back(),  '}');
+    EXPECT_NE(json.find("signals_generated"),  std::string::npos);
+    EXPECT_NE(json.find("tokens_processed"),   std::string::npos);
+    EXPECT_NE(json.find("avg_signal_quality"), std::string::npos);
+    EXPECT_NE(json.find("peak_bias"),          std::string::npos);
+    EXPECT_NE(json.find("quality_hist"),       std::string::npos);
+    EXPECT_NE(json.find("signal_quality_ema"), std::string::npos);
+}
+
+TEST(TradeSignalEngineTest, test_to_stats_json_tokens_processed_matches_call_count) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.5, 0.5, 0.5, 0.5});
+    engine.process_semantic_weight({0.6, 0.6, 0.6, 0.6});
+    engine.process_semantic_weight({0.7, 0.7, 0.7, 0.7});
+
+    std::string json = engine.to_stats_json();
+    EXPECT_NE(json.find("\"tokens_processed\":3"), std::string::npos);
+}
+
 } // namespace
 } // namespace llmquant

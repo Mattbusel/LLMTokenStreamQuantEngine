@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 22 — 2026-03-21)
+- Prometheus: `llmquant_signal_quality_ema` gauge — EMA (alpha=0.1) of
+  `signal_quality`, value -1.0 when no signals have been emitted. Complements
+  the Welford mean with a recency-weighted view of signal quality.
+- Session exit summary: `Quality EMA(0.1)` row — shows the final EMA value of
+  signal quality; skipped (not printed) when no signals were emitted (-1.0).
+- Gate trip-wire callbacks registered at startup: `"magnitude"`, `"confidence"`,
+  `"rate"`, `"drawdown"`, and `"position"` gates each emit a `spdlog::warn`
+  on the first pass→block edge per gate. Provides real-time blocking alerts in
+  the log without polling `RiskManager::get_stats()`.
+- Hot-reload: `token_stream.token_interval_ms` changes are now applied to the
+  `TokenStreamSimulator` at runtime via `set_token_interval()`. Previously the
+  interval was only read at startup; operators can now tune token pacing without
+  a process restart.
+
 ### Added (Cycle 21 — 2026-03-21)
 - Fixed: `Config::load_from_yaml_string()` now validates `semantic_weights`
   multipliers for NaN/Inf — previously only `validate()` checked them, allowing

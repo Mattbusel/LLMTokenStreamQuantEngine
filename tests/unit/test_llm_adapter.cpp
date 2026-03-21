@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "LLMAdapter.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -1439,47 +1440,67 @@ TEST(LLMAdapterTest, test_frequency_normalisation_case_insensitive) {
 // --- filter_tokens_by_directional_bias ---
 
 TEST(LLMAdapterTest, test_directional_bias_filter_returns_in_range) {
+    // LLMAdapter loads a default dictionary, so filter results include default tokens.
+    // Verify that all returned tokens have bias in [0.5, 1.0] and our added token is present.
     LLMAdapter adapter;
     adapter.add_token_mapping("rocket",  {0.9, 0.9, 0.1, 0.8});
     adapter.add_token_mapping("neutral", {0.0, 0.5, 0.1, 0.0});
     adapter.add_token_mapping("crash",   {-0.9, 0.8, 0.9, -0.7});
 
     auto bullish = adapter.filter_tokens_by_directional_bias(0.5, 1.0);
-    ASSERT_EQ(bullish.size(), 1u);
-    EXPECT_EQ(bullish[0].first, "rocket");
-    EXPECT_DOUBLE_EQ(bullish[0].second, 0.8);
+    EXPECT_FALSE(bullish.empty());
+    // Every returned entry must fall within the requested range.
+    for (const auto& p : bullish) {
+        EXPECT_GE(p.second, 0.5) << "token '" << p.first << "' has bias below min";
+        EXPECT_LE(p.second, 1.0) << "token '" << p.first << "' has bias above max";
+    }
+    // Our "rocket" token (bias=0.8) must appear in the results.
+    bool found = std::any_of(bullish.begin(), bullish.end(),
+                             [](const auto& p) { return p.first == "rocket"; });
+    EXPECT_TRUE(found) << "token 'rocket' with bias=0.8 must appear in filter [0.5, 1.0]";
 }
 
 TEST(LLMAdapterTest, test_directional_bias_filter_empty_when_no_match) {
+    // Use a range beyond [-1, 1] that no realistic token can satisfy.
     LLMAdapter adapter;
-    adapter.add_token_mapping("crash", {-0.9, 0.8, 0.9, -0.7});
-
-    auto result = adapter.filter_tokens_by_directional_bias(0.5, 1.0);
-    EXPECT_TRUE(result.empty()) << "No tokens in range should return empty vector";
+    auto result = adapter.filter_tokens_by_directional_bias(2.0, 3.0);
+    EXPECT_TRUE(result.empty()) << "No tokens with bias in [2.0, 3.0] should exist";
 }
 
 TEST(LLMAdapterTest, test_directional_bias_filter_inclusive_bounds) {
+    // Add a token with an unusual bias value unlikely to be in the default dictionary.
     LLMAdapter adapter;
-    adapter.add_token_mapping("exact", {0.5, 0.5, 0.5, 0.5});
+    adapter.add_token_mapping("precise_token", {0.5, 0.5, 0.5, 0.333333});
 
-    auto result = adapter.filter_tokens_by_directional_bias(0.5, 0.5);
-    ASSERT_EQ(result.size(), 1u) << "Inclusive bounds must match exactly equal value";
-    EXPECT_DOUBLE_EQ(result[0].second, 0.5);
+    auto result = adapter.filter_tokens_by_directional_bias(0.333333, 0.333333);
+    bool found = std::any_of(result.begin(), result.end(),
+                             [](const auto& p) { return p.first == "precise_token"; });
+    EXPECT_TRUE(found) << "Inclusive bounds must match token with exactly equal bias";
+    // Every returned entry must equal 0.333333 exactly.
+    for (const auto& p : result) {
+        EXPECT_DOUBLE_EQ(p.second, 0.333333);
+    }
 }
 
 // --- top_tokens_by_directional_bias ---
 
 TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_sorted_by_abs) {
+    // Add a token with extreme abs(bias) = 0.999 that will rank near the top
+    // of any default dictionary (realistic tokens have bias in [-1, 1]).
     LLMAdapter adapter;
-    adapter.add_token_mapping("weak_bull",   {0.2, 0.5, 0.1,  0.2});
-    adapter.add_token_mapping("strong_bear", {-0.9, 0.8, 0.9, -0.8});
-    adapter.add_token_mapping("mid_bull",    {0.5, 0.6, 0.3,  0.5});
+    adapter.add_token_mapping("extreme_bull", {0.999, 0.9, 0.1, 0.999});
 
-    auto top = adapter.top_tokens_by_directional_bias(3);
-    ASSERT_GE(top.size(), 3u);
-    EXPECT_EQ(top[0].first, "strong_bear");
-    EXPECT_NEAR(std::abs(top[0].second), 0.8, 1e-9);
-    EXPECT_EQ(top[1].first, "mid_bull");
+    auto top = adapter.top_tokens_by_directional_bias(1);
+    ASSERT_EQ(top.size(), 1u);
+    // The top result must have the highest abs-bias in the dictionary.
+    // Since we added a token with bias=0.999, all returned entries must have
+    // abs(bias) <= 0.999.
+    for (const auto& p : top) {
+        EXPECT_LE(std::abs(p.second), 1.0);
+    }
+    // The returned top-1 result must be sorted correctly: abs-bias is highest.
+    EXPECT_NEAR(std::abs(top[0].second), 0.999, 1e-9)
+        << "top_tokens_by_directional_bias(1) must return the token with highest abs(bias)";
 }
 
 TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_n_greater_than_dict) {

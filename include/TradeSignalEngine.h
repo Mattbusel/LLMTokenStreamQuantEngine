@@ -754,6 +754,49 @@ public:
     std::string format_stats() const;
 
     /**
+     * @brief Serialise the current engine statistics to a JSON string.
+     *
+     * Produces a JSON object with counters for signals generated/suppressed/
+     * aged-out/noise-filtered, quality metrics (avg, peak_bias, EMA), and the
+     * five signal-quality histogram buckets.
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return JSON object as std::string.
+     */
+    std::string to_stats_json() const noexcept {
+        const Stats s = get_stats();
+        char buf[768];
+        std::snprintf(buf, sizeof(buf),
+            "{\"signals_generated\":%" PRIu64
+            ",\"signals_suppressed\":%" PRIu64
+            ",\"signals_aged_out\":%" PRIu64
+            ",\"noise_filtered\":%" PRIu64
+            ",\"tokens_processed\":%" PRIu64
+            ",\"accumulator_clamped\":%" PRIu64
+            ",\"avg_signal_strength\":%.6f"
+            ",\"avg_signal_quality\":%.6f"
+            ",\"peak_bias\":%.6f"
+            ",\"signal_quality_ema\":%.6f"
+            ",\"quality_hist\":[%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "]}",
+            s.signals_generated.load(std::memory_order_relaxed),
+            s.signals_suppressed.load(std::memory_order_relaxed),
+            s.signals_aged_out.load(std::memory_order_relaxed),
+            s.noise_filtered.load(std::memory_order_relaxed),
+            s.tokens_processed.load(std::memory_order_relaxed),
+            s.accumulator_clamped.load(std::memory_order_relaxed),
+            s.avg_signal_strength.load(std::memory_order_relaxed),
+            s.avg_signal_quality.load(std::memory_order_relaxed),
+            s.peak_bias.load(std::memory_order_relaxed),
+            s.signal_quality_ema.load(std::memory_order_relaxed),
+            s.quality_bucket_0_20.load(std::memory_order_relaxed),
+            s.quality_bucket_20_40.load(std::memory_order_relaxed),
+            s.quality_bucket_40_60.load(std::memory_order_relaxed),
+            s.quality_bucket_60_80.load(std::memory_order_relaxed),
+            s.quality_bucket_80_100.load(std::memory_order_relaxed));
+        return buf;
+    }
+
+    /**
      * @brief Immutable state snapshot for dashboards and health checks.
      */
     struct Snapshot {
