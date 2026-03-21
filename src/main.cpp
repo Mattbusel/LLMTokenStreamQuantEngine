@@ -945,10 +945,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_start_time_seconds Unix timestamp (seconds) when the engine process started\n"
                  << "# TYPE llmquant_start_time_seconds gauge\n"
                  << "llmquant_start_time_seconds " << engine_start_unix_s << "\n"
-                 << "# HELP llmquant_uptime_seconds Number of seconds the engine has been running\n"
-                 << "# TYPE llmquant_uptime_seconds gauge\n"
-                 << "llmquant_uptime_seconds " << std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
+                 << "# HELP llmquant_process_rss_bytes Process resident set size in bytes\n"
+                 << "# TYPE llmquant_process_rss_bytes gauge\n"
+                 << "llmquant_process_rss_bytes " << get_process_rss_bytes() << "\n"
                  << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)
@@ -1055,10 +1054,7 @@ int main(int argc, char* argv[]) {
                         uint64_t dup = dedup_backend->total_duplicates();
                         uint64_t tot = nov + dup;
                         return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
-                    }() << "\n"
-                 << "# HELP llmquant_latency_window_fill_ratio Fraction of the latency sample window that is filled [0,1]\n"
-                 << "# TYPE llmquant_latency_window_fill_ratio gauge\n"
-                 << "llmquant_latency_window_fill_ratio " << std::setprecision(4) << latency_ctrl.get_window_fill_ratio() << "\n";
+                    }() << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
