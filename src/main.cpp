@@ -433,8 +433,12 @@ int main(int argc, char* argv[]) {
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
         // Skip duplicate tokens within the dedup window.
-        if (deduplicator.check(text) == llmquant::DedupResult::Duplicate) {
-            return;
+        {
+            auto dedup_result = deduplicator.check(text);
+            logger.log_dedup_event(text, dedup_result == llmquant::DedupResult::Duplicate);
+            if (dedup_result == llmquant::DedupResult::Duplicate) {
+                return;
+            }
         }
 
         latency_ctrl.start_measurement();
@@ -769,6 +773,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_blocked_pnl_total Signals blocked: PnL limit breached\n"
                  << "# TYPE llmquant_signals_blocked_pnl_total counter\n"
                  << "llmquant_signals_blocked_pnl_total " << rs.signals_blocked_pnl.load() << "\n"
+                 << "# HELP llmquant_risk_most_blocked_gate_info Name of the risk gate with the highest block count\n"
+                 << "# TYPE llmquant_risk_most_blocked_gate_info gauge\n"
+                 << "llmquant_risk_most_blocked_gate_info{gate=\"" << risk_mgr.get_most_blocked_gate() << "\"} 1\n"
                  << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_p99_us gauge\n"
                  << "llmquant_latency_p99_us " << p99 << "\n"
@@ -984,7 +991,8 @@ int main(int argc, char* argv[]) {
         uint64_t hit_pct = (adapter_stats.tokens_processed > 0)
             ? (adapter_stats.cache_hits * 100 / adapter_stats.tokens_processed) : 0;
 
-        // Log pipeline health to structured log file every tick (independent of --quiet).
+        // Log periodic latency snapshot and pipeline health (independent of --quiet).
+        logger.log_latency_measurement(static_cast<uint64_t>(p99));
         {
             bool slo_healthy = (p99 <= sys_config.latency.target_latency_us);
             logger.log_pipeline_health(slo_healthy,
@@ -1059,6 +1067,7 @@ int main(int argc, char* argv[]) {
         fblocked = fsat(fblocked, frs.signals_blocked_pnl.load());
         std::cout << "  Signals blocked  : " << fblocked << "\n";
     }
+    std::cout << "  Most blocked gate: " << risk_mgr.get_most_blocked_gate() << "\n";
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
     std::cout << "  Avg latency      : " << final_stats.avg_latency.count() << "us\n";
     std::cout << "  Min latency      : " << final_stats.min_latency.count() << "us\n";

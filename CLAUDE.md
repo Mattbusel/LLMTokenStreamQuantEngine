@@ -60,8 +60,8 @@ clang-format --dry-run src/*.cpp include/*.h
 
 - CMake 3.20+ required
 - Dependencies: spdlog (logging), yaml-cpp (config), GoogleTest (testing), Threads
-- Release: -O3 -march=native -ffast-math
-- Debug: -g -O0 -fsanitize=address,undefined
+- Release: -O3 -march=native (no -ffast-math — removed; permits unsafe FP reordering/NaN mishandling in atomics)
+- Debug: -g -O0 -fsanitize=address,undefined (via LLMQUANT_ENABLE_ASAN=ON)
 - Tests live in tests/unit/ and tests/integration/; tests/CMakeLists.txt is
   included via add_subdirectory(tests) from the root CMakeLists.txt
 
@@ -86,7 +86,10 @@ clang-format --dry-run src/*.cpp include/*.h
 | PrometheusExporter | ✓ | ✓ HTTP /metrics scrape | ✓ | ✓ |
 
 ## What Still Needs Building
-- Nothing critical — all modules complete. Possible future work: FIX surrogate-pair Unicode in SequenceReset, async alert dispatch to avoid callback re-entrancy deadlock.
+- Nothing critical — all modules complete.
+- `evaluate_with_reason` callback re-entrancy deadlock: fixed in cycle 9 with `ewr_mutex_`.
+- FIX surrogate-pair Unicode in SequenceReset: still deferred (low priority).
+- Async alert dispatch: no longer needed after the re-entrancy fix.
 
 ## Non-Obvious Design Decisions
 
