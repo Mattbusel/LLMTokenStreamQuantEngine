@@ -1482,5 +1482,54 @@ TEST(TradeSignalEngineTest, test_quality_histogram_total_matches_signals_generat
         << "Sum of histogram bucket counts must equal signals_generated";
 }
 
+// ---------------------------------------------------------------------------
+// TradeSignal::to_json()
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_trade_signal_to_json_contains_all_fields) {
+    TradeSignal sig{};
+    sig.timestamp_ns          = 1700000000000000000ULL;
+    sig.delta_bias_shift      = 0.5;
+    sig.volatility_adjustment = 0.3;
+    sig.spread_modifier       = -0.1;
+    sig.confidence            = 0.85;
+    sig.latency_us            = 7.25;
+    sig.strategy_toggle       = 1;
+    sig.strategy_weight       = 0.9;
+    sig.signal_quality        = 0.75;
+
+    std::string json = sig.to_json();
+    EXPECT_FALSE(json.empty());
+    EXPECT_NE(json.find("\"timestamp_ns\""),          std::string::npos);
+    EXPECT_NE(json.find("\"delta_bias_shift\""),      std::string::npos);
+    EXPECT_NE(json.find("\"volatility_adjustment\""), std::string::npos);
+    EXPECT_NE(json.find("\"spread_modifier\""),       std::string::npos);
+    EXPECT_NE(json.find("\"confidence\""),            std::string::npos);
+    EXPECT_NE(json.find("\"latency_us\""),            std::string::npos);
+    EXPECT_NE(json.find("\"strategy_toggle\""),       std::string::npos);
+    EXPECT_NE(json.find("\"strategy_weight\""),       std::string::npos);
+    EXPECT_NE(json.find("\"signal_quality\""),        std::string::npos);
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_to_json_is_valid_object) {
+    TradeSignal sig{};
+    std::string json = sig.to_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{') << "JSON must start with {";
+    EXPECT_EQ(json.back(),  '}') << "JSON must end with }";
+}
+
+TEST(TradeSignalEngineTest, test_trade_signal_to_json_values_reflect_fields) {
+    TradeSignal sig{};
+    sig.delta_bias_shift = 1.5;
+    sig.confidence       = 0.75;
+    sig.strategy_toggle  = -1;
+
+    std::string json = sig.to_json();
+    EXPECT_NE(json.find("1.500000"), std::string::npos) << "delta_bias_shift not serialised";
+    EXPECT_NE(json.find("0.750000"), std::string::npos) << "confidence not serialised";
+    EXPECT_NE(json.find("-1"),       std::string::npos) << "strategy_toggle=-1 not serialised";
+}
+
 } // namespace
 } // namespace llmquant

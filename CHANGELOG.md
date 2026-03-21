@@ -10,6 +10,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 15 — 2026-03-21)
+- Tests for `TradeSignal::to_json()`: verify all 9 fields are present, output
+  starts and ends with braces, and numeric values match struct fields.
+- Tests for `RiskManager::get_most_blocked_gate()`: returns `"none"` with no
+  blocks; correctly identifies `"magnitude"` as the dominant gate.
+
+### Added (Cycle 15 — 2026-03-21)
 - Signal callback now calls `logger.log_trade_signal()` for passed signals (replacing the
   less-detailed `log_signal_generated()`) — now logs confidence and signal_quality alongside
   bias, volatility, and latency.

@@ -1588,3 +1588,41 @@ TEST(RiskManagerTest, test_concurrent_evaluate_with_reason_no_crash) {
     // If ewr_mutex_ is working, no crash / sanitizer report occurs.
     SUCCEED();
 }
+
+TEST(RiskManagerTest, test_get_most_blocked_gate_returns_none_when_no_blocks) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 10.0;
+    RiskManager rm(cfg);
+    EXPECT_EQ(rm.get_most_blocked_gate(), "none");
+}
+
+TEST(RiskManagerTest, test_get_most_blocked_gate_identifies_magnitude) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 0.1;
+    RiskManager rm(cfg);
+
+    TradeSignal sig{};
+    sig.delta_bias_shift = 5.0;
+    sig.confidence       = 1.0;
+    rm.evaluate(sig);
+    rm.evaluate(sig);
+
+    EXPECT_EQ(rm.get_most_blocked_gate(), "magnitude");
+}
+
+TEST(RiskManagerTest, test_get_most_blocked_gate_identifies_dominant_gate) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude     = 0.01;  // blocks on magnitude
+    cfg.min_confidence         = 0.99;  // would block on confidence too
+    cfg.disable_confidence_gate = true; // but disable confidence so magnitude dominates
+    RiskManager rm(cfg);
+
+    TradeSignal sig{};
+    sig.delta_bias_shift = 5.0;
+    sig.confidence       = 0.5;
+    rm.evaluate(sig);
+    rm.evaluate(sig);
+    rm.evaluate(sig);
+
+    EXPECT_EQ(rm.get_most_blocked_gate(), "magnitude");
+}
