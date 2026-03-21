@@ -24,6 +24,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Tests: 2 new `RiskManagerTest` cases verifying `to_stats_json()` produces
   valid JSON with correct counter values and correct "none" / "magnitude" gate
   identification.
+- CMake: build metadata baked in at configure time — `git rev-parse --short HEAD`
+  captures the short commit hash; `string(TIMESTAMP)` captures the configure
+  timestamp (ISO-8601 UTC). Both are exposed as `LLMQUANT_GIT_COMMIT` and
+  `LLMQUANT_BUILD_TIMESTAMP` macros in `llmquant_version.h.in`.
+- `--version` output now includes the git hash and build timestamp:
+  `LLMTokenStreamQuantEngine 1.x.y (abc1234, 2026-03-21T...)`.
+- `RiskManager::register_gate_trip_callback(gate_name, cb)`: edge-trigger
+  callback fired once per pass→block transition per named gate (`"magnitude"`,
+  `"confidence"`, `"rate"`, `"drawdown"`, `"position"`). Enables async alerting
+  without polling `get_stats()` in tight loops.
+- `TradeSignalEngine::Stats::signal_quality_ema`: exponential moving average of
+  `signal_quality` (alpha = 0.1) updated atomically on every signal emission;
+  seeded at -1.0 so callers can detect "no signals yet". Exposed via
+  `get_signal_quality_ema()`.
+- Config hot-reload watcher: moved after `token_sim` construction and added
+  `token_sim` to the lambda capture so token-stream config changes (e.g.
+  `token_interval_ms`) can be applied to the simulator at runtime.
+- Fix: `FixOmsAdapter.cpp` `NOMINMAX` guard changed from unconditional
+  `#define NOMINMAX` to `#ifndef NOMINMAX / #define / #endif` to prevent
+  redefinition warnings when the macro is already defined by the build system.
+- Tests: 2 new `ConfigTest` cases verifying env var `LLMQUANT_MAX_ACCUMULATED_BIAS`
+  overrides `trading.max_accumulated_bias` correctly.
 
 ### Added (Cycle 20 — 2026-03-21)
 - Prometheus: `llmquant_start_time_seconds` gauge — Unix epoch when the engine

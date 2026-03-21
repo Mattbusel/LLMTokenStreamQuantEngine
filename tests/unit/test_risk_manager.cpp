@@ -1665,3 +1665,87 @@ TEST(RiskManagerTest, test_to_stats_json_no_signals_shows_none_gate_and_healthy)
     EXPECT_NE(json.find("\"most_blocked_gate\":\"none\""),  std::string::npos);
     EXPECT_NE(json.find("\"is_healthy\":true"),             std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Per-gate trip-wire callback tests
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_gate_trip_callback_fires_on_first_block) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    int trip_count = 0;
+    rm.set_gate_trip_callback("magnitude",
+        [&](const std::string& gate, const TradeSignal&) {
+            EXPECT_EQ(gate, "magnitude");
+            ++trip_count;
+        });
+
+    TradeSignal bad = make_signal(5.0, 0.1, 0.05, 0.9);
+    (void)rm.evaluate(bad);
+    EXPECT_EQ(trip_count, 1) << "Trip callback must fire on first block";
+}
+
+TEST(RiskManagerTest, test_gate_trip_callback_not_refired_on_consecutive_blocks) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    int trip_count = 0;
+    rm.set_gate_trip_callback("magnitude",
+        [&](const std::string&, const TradeSignal&) { ++trip_count; });
+
+    TradeSignal bad = make_signal(5.0, 0.1, 0.05, 0.9);
+    (void)rm.evaluate(bad);
+    (void)rm.evaluate(bad);
+    (void)rm.evaluate(bad);
+    EXPECT_EQ(trip_count, 1) << "Trip callback must not fire on subsequent consecutive blocks";
+}
+
+TEST(RiskManagerTest, test_gate_trip_callback_rearmed_after_pass) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 10.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    int trip_count = 0;
+    rm.set_gate_trip_callback("magnitude",
+        [&](const std::string&, const TradeSignal&) { ++trip_count; });
+
+    TradeSignal bad  = make_signal(15.0, 0.1, 0.05, 0.9);
+    TradeSignal good = make_signal(0.5,  0.1, 0.05, 0.9);
+
+    (void)rm.evaluate(bad);   // trip 1
+    (void)rm.evaluate(good);  // pass — re-arms callback
+    (void)rm.evaluate(bad);   // trip 2
+    EXPECT_EQ(trip_count, 2) << "Trip callback must re-arm after the gate allows a signal";
+}
+
+TEST(RiskManagerTest, test_gate_trip_callback_unknown_name_ignored) {
+    RiskManager::Config cfg;
+    RiskManager rm(cfg);
+    // Should not throw or crash for unknown gate names.
+    EXPECT_NO_THROW(rm.set_gate_trip_callback("nonsense",
+        [](const std::string&, const TradeSignal&) {}));
+}
+
+TEST(RiskManagerTest, test_gate_trip_callback_confidence_gate) {
+    RiskManager::Config cfg;
+    cfg.min_confidence    = 0.8;
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    int trip_count = 0;
+    rm.set_gate_trip_callback("confidence",
+        [&](const std::string& gate, const TradeSignal&) {
+            EXPECT_EQ(gate, "confidence");
+            ++trip_count;
+        });
+
+    TradeSignal low_conf = make_signal(0.5, 0.1, 0.05, 0.1);
+    (void)rm.evaluate(low_conf);
+    EXPECT_EQ(trip_count, 1);
+}

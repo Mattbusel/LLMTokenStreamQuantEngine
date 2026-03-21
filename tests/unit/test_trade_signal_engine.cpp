@@ -1566,5 +1566,49 @@ TEST(TradeSignalEngineTest, test_format_stats_no_data_returns_early) {
         << "format_stats must return early message when no tokens processed";
 }
 
+// --- signal quality EMA ---
+
+TEST(TradeSignalEngineTest, test_signal_quality_ema_initial_is_minus_one) {
+    TradeSignalEngine engine(make_config());
+    EXPECT_DOUBLE_EQ(engine.get_signal_quality_ema(), -1.0)
+        << "EMA must be -1.0 (sentinel) before any signal is emitted";
+}
+
+TEST(TradeSignalEngineTest, test_signal_quality_ema_seeds_on_first_signal) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
+    double ema = engine.get_signal_quality_ema();
+    EXPECT_GE(ema, 0.0) << "EMA must be seeded with first signal quality";
+    EXPECT_LE(ema, 1.0);
+}
+
+TEST(TradeSignalEngineTest, test_signal_quality_ema_moves_toward_new_values) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    // Emit a high-quality signal first
+    engine.process_semantic_weight({0.9, 0.95, 0.1, 0.9});
+    double ema_after_first = engine.get_signal_quality_ema();
+    // Emit a low-quality signal; EMA should move toward lower value
+    engine.process_semantic_weight({0.01, 0.5, 0.5, 0.01});
+    double ema_after_second = engine.get_signal_quality_ema();
+    EXPECT_LT(ema_after_second, ema_after_first)
+        << "EMA must decrease when a lower-quality signal is emitted";
+}
+
+TEST(TradeSignalEngineTest, test_signal_quality_ema_reset_to_sentinel) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
+    EXPECT_GE(engine.get_signal_quality_ema(), 0.0);
+
+    engine.reset();
+    EXPECT_DOUBLE_EQ(engine.get_signal_quality_ema(), -1.0)
+        << "EMA must reset to -1.0 sentinel after reset()";
+}
+
 } // namespace
 } // namespace llmquant
