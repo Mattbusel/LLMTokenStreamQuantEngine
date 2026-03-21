@@ -160,7 +160,7 @@ public:
      * @return true on success; false if the file cannot be opened or parsed
      *         (defaults are applied on failure).
      */
-    bool load_from_file(const std::string& filepath);
+    [[nodiscard]] bool load_from_file(const std::string& filepath);
 
     /**
      * @brief Parse configuration from a YAML string already held in memory.
@@ -171,7 +171,7 @@ public:
      * @param yaml_content A valid YAML document as a std::string.
      * @return true on success; false if parsing or validation fails (defaults applied).
      */
-    bool load_from_yaml_string(const std::string& yaml_content);
+    [[nodiscard]] bool load_from_yaml_string(const std::string& yaml_content);
 
     /**
      * @brief Save current config to a YAML file.
@@ -179,7 +179,7 @@ public:
      * @param filepath Destination path; the file is created or overwritten.
      * @return true on success; false if the file could not be opened or a write error occurred.
      */
-    bool save_to_file(const std::string& filepath) const;
+    [[nodiscard]] bool save_to_file(const std::string& filepath) const;
 
     /**
      * @brief Reset all fields to their compiled-in defaults.

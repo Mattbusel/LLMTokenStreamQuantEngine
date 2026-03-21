@@ -66,7 +66,7 @@ public:
      *
      * @return true on success; false if the socket could not be bound.
      */
-    bool start();
+    [[nodiscard]] bool start();
 
     /**
      * @brief Signal the server thread to stop and block until it exits.

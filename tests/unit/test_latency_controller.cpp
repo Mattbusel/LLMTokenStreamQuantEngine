@@ -1063,5 +1063,53 @@ TEST(LatencyControllerTest, test_is_under_target_false_when_avg_exceeds_target) 
     EXPECT_FALSE(lc.is_under_target());
 }
 
+TEST(LatencyControllerTest, test_histogram_buckets_are_cumulative) {
+    LatencyController lc(make_config());
+    // Record one sample in each of several distinct buckets.
+    lc.record_latency(std::chrono::microseconds{1});   // <= 1 µs bucket
+    lc.record_latency(std::chrono::microseconds{8});   // <= 10 µs bucket
+    lc.record_latency(std::chrono::microseconds{60});  // <= 100 µs bucket
+
+    auto buckets = lc.histogram_buckets();
+    ASSERT_FALSE(buckets.empty());
+
+    // Buckets must be monotonically non-decreasing (cumulative histogram invariant).
+    for (size_t i = 1; i < buckets.size(); ++i) {
+        EXPECT_GE(buckets[i].count, buckets[i - 1].count)
+            << "Bucket[" << i << "] count must be >= bucket[" << i - 1 << "] count";
+    }
+
+    // The last (+Inf) bucket must equal the total measurement count.
+    auto stats = lc.get_stats();
+    EXPECT_EQ(buckets.back().count, stats.measurements)
+        << "+Inf bucket must contain all samples";
+}
+
+TEST(LatencyControllerTest, test_record_batch_matches_individual_record_latency) {
+    // Two controllers with identical samples recorded differently must yield
+    // the same stats (total count, avg, min, max).
+    std::vector<std::chrono::microseconds> samples = {
+        std::chrono::microseconds{2},
+        std::chrono::microseconds{5},
+        std::chrono::microseconds{15},
+        std::chrono::microseconds{50},
+    };
+
+    LatencyController lc_individual(make_config());
+    for (const auto& s : samples)
+        lc_individual.record_latency(s);
+
+    LatencyController lc_batch(make_config());
+    lc_batch.record_batch(samples);
+
+    auto si = lc_individual.get_stats();
+    auto sb = lc_batch.get_stats();
+
+    EXPECT_EQ(si.measurements, sb.measurements);
+    EXPECT_EQ(si.avg_latency,  sb.avg_latency);
+    EXPECT_EQ(si.min_latency,  sb.min_latency);
+    EXPECT_EQ(si.max_latency,  sb.max_latency);
+}
+
 } // namespace
 } // namespace llmquant

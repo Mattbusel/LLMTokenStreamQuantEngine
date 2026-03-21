@@ -204,8 +204,38 @@ void LatencyController::update_config(const Config& config) {
 }
 
 void LatencyController::record_batch(const std::vector<std::chrono::microseconds>& latencies) {
+    if (latencies.empty()) return;
+
+    // Update all lock-free atomics first (no mutex needed).
     for (const auto& lat : latencies) {
-        record_latency(lat);
+        uint64_t latency_us = static_cast<uint64_t>(lat.count());
+
+        if (total_measurements_.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
+            total_measurements_.fetch_add(1, std::memory_order_relaxed);
+        if (total_latency_us_.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - latency_us)
+            total_latency_us_.fetch_add(latency_us, std::memory_order_relaxed);
+        if (latency_us > static_cast<uint64_t>(config_.target_latency.count()))
+            target_breaches_.fetch_add(1, std::memory_order_relaxed);
+
+        uint64_t cur_min = min_latency_us_.load(std::memory_order_relaxed);
+        while (latency_us < cur_min &&
+               !min_latency_us_.compare_exchange_weak(cur_min, latency_us,
+                   std::memory_order_release, std::memory_order_relaxed)) {}
+
+        uint64_t cur_max = max_latency_us_.load(std::memory_order_relaxed);
+        while (latency_us > cur_max &&
+               !max_latency_us_.compare_exchange_weak(cur_max, latency_us,
+                   std::memory_order_release, std::memory_order_relaxed)) {}
+    }
+
+    // Write all samples to the ring buffer under a single lock acquisition.
+    if (config_.enable_profiling) {
+        std::lock_guard<std::mutex> lock(samples_mutex_);
+        for (const auto& lat : latencies) {
+            latency_samples_[sample_head_] = lat;
+            sample_head_ = (sample_head_ + 1) % config_.sample_window;
+            if (sample_count_ < config_.sample_window) ++sample_count_;
+        }
     }
 }
 
