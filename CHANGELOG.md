@@ -9,6 +9,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 11 — 2026-03-21)
+- `--dump-config` CLI flag: loads the config file (or defaults), prints all
+  effective settings as `key: value` pairs, and exits with code 0. Useful for
+  verifying that hot-reload-eligible fields have the expected values before
+  starting the full engine.
+- `--quiet` CLI flag: suppresses the per-signal console row and the rolling
+  stats bar. All data still flows to `MetricsLogger` and the Prometheus
+  endpoint, making `--quiet` safe for daemon / log-only deployments.
+
+### Fixed (Cycle 11 — 2026-03-21)
+- `main.cpp`: "Tokens processed" in both the rolling stats bar and the session
+  exit summary was sourced from `variance_n`, which is reset every 60 seconds
+  as part of the Welford catastrophic-cancellation guard. Sessions longer than
+  one minute would therefore undercount processed tokens. Fixed by reading
+  `llm_adapter.get_stats().tokens_processed` instead, which is a monotonically
+  increasing counter that is never reset.
+
 ### Added (Cycle 10 — 2026-03-21)
 - `Config::validate()` now checks all four `SemanticWeightsConfig` multipliers for
   finiteness (rejects NaN / ±Inf).  Previously a corrupted YAML could inject NaN

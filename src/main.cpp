@@ -794,6 +794,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_cache_misses_total Tokens not found in the dictionary (neutral fallback)\n"
                  << "# TYPE llmquant_cache_misses_total counter\n"
                  << "llmquant_cache_misses_total " << llm_adapter.get_stats().cache_misses << "\n"
+                 << "# HELP llmquant_adapter_cache_hit_rate Fraction of token lookups served from dictionary [0,1]\n"
+                 << "# TYPE llmquant_adapter_cache_hit_rate gauge\n"
+                 << "llmquant_adapter_cache_hit_rate " << std::fixed << std::setprecision(6) << llm_adapter.get_cache_hit_rate() << "\n"
                  << "# HELP llmquant_dictionary_size Number of entries in the LLMAdapter token dictionary\n"
                  << "# TYPE llmquant_dictionary_size gauge\n"
                  << "llmquant_dictionary_size " << llm_adapter.get_dictionary_size() << "\n"
@@ -942,6 +945,19 @@ int main(int argc, char* argv[]) {
         uint64_t hit_pct = (adapter_stats.tokens_processed > 0)
             ? (adapter_stats.cache_hits * 100 / adapter_stats.tokens_processed) : 0;
 
+        // Log pipeline health to structured log file every tick (independent of --quiet).
+        {
+            bool slo_healthy = (p99 <= sys_config.latency.target_latency_us);
+            logger.log_pipeline_health(slo_healthy,
+                                       latency_ctrl.get_slo_breach_rate(),
+                                       backoff);
+            if (!slo_healthy && last_tick != stats.measurements) {
+                spdlog::warn("P99 latency {}us exceeds target {}us (breach rate {:.1f}%)",
+                             p99, sys_config.latency.target_latency_us,
+                             latency_ctrl.get_slo_breach_rate() * 100.0);
+            }
+        }
+
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
             std::cout << "\n  -- STATS "
@@ -1045,6 +1061,7 @@ int main(int argc, char* argv[]) {
                             std::chrono::steady_clock::now() - engine_start_time).count();
         std::cout << "  Uptime           : " << uptime_s << "s\n";
     }
+    std::cout << "  Log entries      : " << logger.get_log_entry_count() << "\n";
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
