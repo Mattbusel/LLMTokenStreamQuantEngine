@@ -10,6 +10,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 22 — 2026-03-21)
+- `TradeSignalEngine::to_stats_json()`: inline method in `TradeSignalEngine.h`
+  that serialises all engine stats (signals generated/suppressed/aged-out/
+  noise-filtered, tokens processed, accumulator clamped, avg/peak quality,
+  quality EMA, and 5-bucket quality histogram) to a JSON object string.
+- `LLMAdapter::to_stats_json()`: inline method in `LLMAdapter.h` that
+  serialises adapter stats (tokens_processed, cache_hits, cache_misses,
+  hit_rate_pct, dictionary_size) to a JSON object string. Adds `<cinttypes>`
+  and `<cstdio>` includes to `LLMAdapter.h`.
+- Session exit summary: structured JSON lines `[json:risk]`, `[json:engine]`,
+  and `[json:adapter]` are now printed at shutdown (unless `--quiet`) using
+  the new `to_stats_json()` methods on all three subsystems.
+- Tests (`test_trade_signal_engine.cpp`): 2 new tests for `to_stats_json()`
+  field presence and `tokens_processed` counter accuracy.
+- Tests (`test_llm_adapter.cpp`): 2 new tests for `LLMAdapter::to_stats_json()`
+  field presence and zero-state output.
 - Prometheus: `llmquant_signal_quality_ema` gauge — EMA (alpha=0.1) of
   `signal_quality`, value -1.0 when no signals have been emitted. Complements
   the Welford mean with a recency-weighted view of signal quality.
