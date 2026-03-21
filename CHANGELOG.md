@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 16 — 2026-03-21)
+- `MetricsLogger::log_dedup_event()` now called in `process_token` for every dedup check
+  (novel and duplicate alike) — previously implemented but never invoked, so no dedup
+  events appeared in the structured log file.
+- `MetricsLogger::log_latency_measurement()` now called once per second in the monitoring
+  loop with the current P99 latency — previously implemented but never invoked; provides
+  a periodic latency sample series in the structured log file without hot-path overhead.
+
 ### Added (Cycle 15 — 2026-03-21)
 - Tests for `TradeSignal::to_json()`: verify all 9 fields are present, output
   starts and ends with braces, and numeric values match struct fields.
