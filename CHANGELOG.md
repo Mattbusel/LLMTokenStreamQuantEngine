@@ -9,6 +9,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 11 — 2026-03-21)
+- Prometheus: `llmquant_oms_update_count_total` and `llmquant_oms_error_count_total` now also
+  cover `FixOmsAdapter` sessions — previously the `dynamic_cast` only checked `RestOmsAdapter`
+  and silently returned 0 for FIX connections.
+- Prometheus: new `llmquant_oms_reconnect_count_total` counter exposes `FixOmsAdapter`'s
+  reconnect attempt count to Prometheus consumers.
+- Startup banner now shows `OMS: <adapter description>` line so the active OMS connection is
+  visible at a glance without reading the config file.
+- Session exit summary now prints OMS adapter description, update count, error count, and
+  (for FIX sessions) reconnect count.
+
+### Fixed (Cycle 10 — 2026-03-21)
+- `MetricsLogger` CSV: `log_trade_signal` now emits a correctly aligned 9-column
+  row matching the file header.  Previously the row had only 8 columns and placed
+  `bias` in the `sequence_id` position.  `confidence` and `signal_quality` are
+  omitted from the CSV row (they were not in the header) but remain in the JSON
+  format unchanged.
+- `MetricsLogger` CSV: `log_pipeline_health` now emits 9 columns; previously it
+  emitted 8 (one trailing column was missing).
+
 ### Fixed (Cycle 9 — 2026-03-21)
 - `RiskManager::evaluate_with_reason`: fixed a data-race / use-after-free when
   called concurrently from multiple threads.  The method temporarily swaps

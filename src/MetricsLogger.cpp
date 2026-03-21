@@ -178,10 +178,12 @@ void MetricsLogger::log_trade_signal(double bias, double volatility,
 
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",TRADE_SIGNAL,,"
+        // Columns: timestamp,TRADE_SIGNAL,,<empty>,bias,volatility,latency_us,<empty>,<empty>
+        // confidence and quality are written to JSON only; they have no column in
+        // the 9-column CSV header and were previously causing a column-count mismatch.
+        oss << timestamp << ",TRADE_SIGNAL,,,"
             << std::fixed << std::setprecision(3)
-            << bias << "," << volatility << "," << confidence << ","
-            << latency_us << "," << quality;
+            << bias << "," << volatility << "," << latency_us << ",,";
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
             console_logger_->info("Signal bias={:+.3f} vol={:.3f} conf={:.3f} lat={:.1f}μs q={:.3f}",
@@ -228,7 +230,7 @@ void MetricsLogger::log_pipeline_health(bool healthy, double slo_breach_rate,
         std::ostringstream oss;
         oss << ts << ",PIPELINE_HEALTH," << status << ",,"
             << std::fixed << std::setprecision(4)
-            << slo_breach_rate << "," << backoff_multiplier << ",,";
+            << slo_breach_rate << "," << backoff_multiplier << ",,,";
         if (file_logger_) file_logger_->info(oss.str());
     } else if (config_.format == OutputFormat::JSON) {
         if (file_logger_)
