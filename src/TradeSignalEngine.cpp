@@ -212,7 +212,7 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
     last_signal_quality_.store(signal.signal_quality, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(signal.timestamp_ns, std::memory_order_relaxed);
 
-    // Update signal quality histogram.
+    // Update signal quality histogram and EMA.
     {
         double q = signal.signal_quality;
         if      (q < 0.2) stats_.quality_bucket_0_20.fetch_add(1, std::memory_order_relaxed);
@@ -220,6 +220,13 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
         else if (q < 0.6) stats_.quality_bucket_40_60.fetch_add(1, std::memory_order_relaxed);
         else if (q < 0.8) stats_.quality_bucket_60_80.fetch_add(1, std::memory_order_relaxed);
         else              stats_.quality_bucket_80_100.fetch_add(1, std::memory_order_relaxed);
+
+        // EMA: seed with first sample (-1.0 sentinel), then rolling average.
+        double prev = stats_.signal_quality_ema.load(std::memory_order_relaxed);
+        double next = (prev < 0.0) ? q
+                                   : (SIGNAL_QUALITY_EMA_ALPHA * q
+                                      + (1.0 - SIGNAL_QUALITY_EMA_ALPHA) * prev);
+        stats_.signal_quality_ema.store(next, std::memory_order_relaxed);
     }
 
     if (callback_) {
@@ -300,6 +307,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
     stats_.avg_signal_quality.store(0.0, std::memory_order_relaxed);
+    stats_.signal_quality_ema.store(-1.0, std::memory_order_relaxed);
     last_signal_quality_.store(0.0, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(0, std::memory_order_relaxed);
     reset_time_ = std::chrono::high_resolution_clock::now();
@@ -414,7 +422,8 @@ std::string TradeSignalEngine::format_stats() const {
         << stats_.quality_bucket_20_40.load(std::memory_order_relaxed) << ","
         << stats_.quality_bucket_40_60.load(std::memory_order_relaxed) << ","
         << stats_.quality_bucket_60_80.load(std::memory_order_relaxed) << ","
-        << stats_.quality_bucket_80_100.load(std::memory_order_relaxed) << "]";
+        << stats_.quality_bucket_80_100.load(std::memory_order_relaxed) << "]"
+        << " quality_ema=" << stats_.signal_quality_ema.load(std::memory_order_relaxed);
     return oss.str();
 }
 

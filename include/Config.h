@@ -297,6 +297,7 @@ public:
      *   LLMQUANT_SIGNAL_COOLDOWN_US     → trading.signal_cooldown_us
      *   LLMQUANT_MAX_SIGNAL_AGE_US      → trading.max_signal_age_us
      *   LLMQUANT_MIN_BIAS_THRESHOLD     → trading.min_bias_threshold
+     *   LLMQUANT_MAX_ACCUMULATED_BIAS   → trading.max_accumulated_bias
      *   LLMQUANT_MAX_DRAWDOWN           → risk_thresholds.max_drawdown
      *   LLMQUANT_MAX_SIGNALS_PER_SECOND → risk_thresholds.max_signals_per_second
      *   LLMQUANT_STATS_PORT             → metrics.stats_port

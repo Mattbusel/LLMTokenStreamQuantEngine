@@ -227,6 +227,20 @@ public:
     void set_oms_callback(OmsCallback cb);
 
     /**
+     * @brief Register a per-gate trip-wire callback.
+     *
+     * The callback fires the first time the named gate transitions from passing
+     * to blocking within a call to evaluate().  Subsequent evaluations that
+     * also block on the same gate will NOT re-fire until the gate passes once
+     * and trips again.
+     *
+     * @param gate_name One of "magnitude", "confidence", "rate", "drawdown", "position".
+     *                  Unknown names are silently ignored.
+     * @param cb        Callable matching GateTripCallback; stored by value.
+     */
+    void set_gate_trip_callback(const std::string& gate_name, GateTripCallback cb);
+
+    /**
      * @brief Return the most recently reported position state.
      *
      * Thread-safe (acquires mutex_).

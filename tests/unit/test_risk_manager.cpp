@@ -1639,9 +1639,9 @@ TEST(RiskManagerTest, test_to_stats_json_returns_valid_json_with_correct_counts)
 
     TradeSignal good = make_signal(0.5, 0.1, 0.05, 0.9);
     TradeSignal bad  = make_signal(5.0, 0.1, 0.05, 0.9);
-    rm.evaluate(good);
-    rm.evaluate(bad);
-    rm.evaluate(bad);
+    (void)rm.evaluate(good);
+    (void)rm.evaluate(bad);
+    (void)rm.evaluate(bad);
 
     std::string json = rm.to_stats_json();
     ASSERT_FALSE(json.empty());

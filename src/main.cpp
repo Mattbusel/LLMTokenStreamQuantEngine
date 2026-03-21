@@ -123,7 +123,9 @@ int main(int argc, char* argv[]) {
                 "  pressure, risk_thresholds, risk (override flags).\n";
             return 0;
         } else if (arg == "--version" || arg == "-v") {
-            std::cout << "LLMTokenStreamQuantEngine " << LLMQUANT_VERSION << "\n";
+            std::cout << "LLMTokenStreamQuantEngine " << LLMQUANT_VERSION
+                      << " (" << LLMQUANT_GIT_COMMIT
+                      << ", " << LLMQUANT_BUILD_TIMESTAMP << ")\n";
             return 0;
         } else if (arg == "--stream") {
             stream_mode = true;
@@ -405,54 +407,8 @@ int main(int argc, char* argv[]) {
     llmquant::RiskManager risk_mgr(risk_cfg);
     risk_mgr.set_metrics_logger(&logger);
 
-    // Start config hot-reload watcher now that risk_mgr exists so the callback
-    // can update risk thresholds live without requiring a restart.
-    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &logger, &config_file,
-                                              &sem_mult_sentiment, &sem_mult_confidence,
-                                              &sem_mult_volatility, &sem_mult_bias](const llmquant::SystemConfig& updated) {
-        const auto& u = updated.risk_thresholds;
-        llmquant::RiskManager::Config new_risk_cfg;
-        new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;
-        new_risk_cfg.max_volatility_magnitude = u.max_volatility_magnitude;
-        new_risk_cfg.max_spread_magnitude     = u.max_spread_magnitude;
-        new_risk_cfg.min_confidence           = u.min_confidence;
-        new_risk_cfg.max_signals_per_second   = u.max_signals_per_second;
-        new_risk_cfg.max_drawdown             = u.max_drawdown;
-        new_risk_cfg.drawdown_window          = std::chrono::seconds(u.drawdown_window_s);
-        new_risk_cfg.position_warn_fraction   = u.position_warn_fraction;
-        new_risk_cfg.disable_magnitude_gate   = updated.risk_overrides.disable_magnitude_gate;
-        new_risk_cfg.disable_confidence_gate  = updated.risk_overrides.disable_confidence_gate;
-        new_risk_cfg.disable_rate_gate        = updated.risk_overrides.disable_rate_gate;
-        new_risk_cfg.disable_drawdown_gate    = updated.risk_overrides.disable_drawdown_gate;
-        new_risk_cfg.disable_position_gate    = updated.risk_overrides.disable_position_gate;
-        risk_mgr.update_config(new_risk_cfg);
-        llmquant::TradeSignalEngine::Config new_eng_cfg;
-        new_eng_cfg.bias_sensitivity       = updated.trading.bias_sensitivity;
-        new_eng_cfg.volatility_sensitivity = updated.trading.volatility_sensitivity;
-        new_eng_cfg.signal_decay_rate      = updated.trading.signal_decay_rate;
-        new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
-        new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
-        new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
-        new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
-        trade_engine.update_config(new_eng_cfg);
-        // Update semantic weight multipliers atomically — visible to process_token
-        // on the very next token without requiring a process restart.
-        const auto& sw = updated.semantic_weights;
-        sem_mult_sentiment.store(sw.sentiment_multiplier,  std::memory_order_relaxed);
-        sem_mult_confidence.store(sw.confidence_multiplier, std::memory_order_relaxed);
-        sem_mult_volatility.store(sw.volatility_multiplier, std::memory_order_relaxed);
-        sem_mult_bias.store(sw.bias_multiplier,            std::memory_order_relaxed);
-        logger.log_config_reload(config_file, true);
-        std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
-                  << updated.trading.bias_sensitivity
-                  << "  max_bias=" << u.max_bias_magnitude
-                  << "  max_signals/s=" << u.max_signals_per_second
-                  << "  sem_wts=[" << sw.sentiment_multiplier << ","
-                  << sw.confidence_multiplier << "," << sw.volatility_multiplier
-                  << "," << sw.bias_multiplier << "]" << std::endl;
-    })) {
-        spdlog::warn("Config hot-reload watcher failed to start");
-    }
+    // Hot-reload watcher is started after token_sim is constructed (below) so
+    // the callback can also reload the token file when data_file_path changes.
 
     // OMS adapter: MockOmsAdapter by default; REST via --oms, FIX 4.2 via --fix.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
@@ -499,6 +455,62 @@ int main(int argc, char* argv[]) {
         .use_memory_stream = sys_config.token_stream.use_memory_stream,
         .data_file_path = sys_config.token_stream.data_file_path
     });
+
+    // Start config hot-reload watcher now that all pipeline objects exist.
+    // The callback can update every subsystem live, including reloading the
+    // token file when token_stream.data_file_path changes at runtime.
+    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &token_sim,
+                                              &logger, &config_file,
+                                              &sem_mult_sentiment, &sem_mult_confidence,
+                                              &sem_mult_volatility, &sem_mult_bias](const llmquant::SystemConfig& updated) {
+        const auto& u = updated.risk_thresholds;
+        llmquant::RiskManager::Config new_risk_cfg;
+        new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;
+        new_risk_cfg.max_volatility_magnitude = u.max_volatility_magnitude;
+        new_risk_cfg.max_spread_magnitude     = u.max_spread_magnitude;
+        new_risk_cfg.min_confidence           = u.min_confidence;
+        new_risk_cfg.max_signals_per_second   = u.max_signals_per_second;
+        new_risk_cfg.max_drawdown             = u.max_drawdown;
+        new_risk_cfg.drawdown_window          = std::chrono::seconds(u.drawdown_window_s);
+        new_risk_cfg.position_warn_fraction   = u.position_warn_fraction;
+        new_risk_cfg.disable_magnitude_gate   = updated.risk_overrides.disable_magnitude_gate;
+        new_risk_cfg.disable_confidence_gate  = updated.risk_overrides.disable_confidence_gate;
+        new_risk_cfg.disable_rate_gate        = updated.risk_overrides.disable_rate_gate;
+        new_risk_cfg.disable_drawdown_gate    = updated.risk_overrides.disable_drawdown_gate;
+        new_risk_cfg.disable_position_gate    = updated.risk_overrides.disable_position_gate;
+        risk_mgr.update_config(new_risk_cfg);
+        llmquant::TradeSignalEngine::Config new_eng_cfg;
+        new_eng_cfg.bias_sensitivity       = updated.trading.bias_sensitivity;
+        new_eng_cfg.volatility_sensitivity = updated.trading.volatility_sensitivity;
+        new_eng_cfg.signal_decay_rate      = updated.trading.signal_decay_rate;
+        new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
+        new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
+        new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
+        new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
+        trade_engine.update_config(new_eng_cfg);
+        // Update semantic weight multipliers atomically — visible to process_token
+        // on the very next token without requiring a process restart.
+        const auto& sw = updated.semantic_weights;
+        sem_mult_sentiment.store(sw.sentiment_multiplier,  std::memory_order_relaxed);
+        sem_mult_confidence.store(sw.confidence_multiplier, std::memory_order_relaxed);
+        sem_mult_volatility.store(sw.volatility_multiplier, std::memory_order_relaxed);
+        sem_mult_bias.store(sw.bias_multiplier,            std::memory_order_relaxed);
+        // Reload token file when data_file_path changes and not in memory-stream mode.
+        if (!updated.token_stream.use_memory_stream) {
+            token_sim.load_tokens_from_file(updated.token_stream.data_file_path);
+            spdlog::info("[config] Token file reloaded: {}", updated.token_stream.data_file_path);
+        }
+        logger.log_config_reload(config_file, true);
+        std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
+                  << updated.trading.bias_sensitivity
+                  << "  max_bias=" << u.max_bias_magnitude
+                  << "  max_signals/s=" << u.max_signals_per_second
+                  << "  sem_wts=[" << sw.sentiment_multiplier << ","
+                  << sw.confidence_multiplier << "," << sw.volatility_multiplier
+                  << "," << sw.bias_multiplier << "]" << std::endl;
+    })) {
+        spdlog::warn("Config hot-reload watcher failed to start");
+    }
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and

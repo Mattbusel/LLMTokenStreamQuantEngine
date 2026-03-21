@@ -175,6 +175,30 @@ public:
     std::vector<QualityHistogramBucket> get_quality_histogram() const;
 
     /**
+     * @brief Smoothing factor for the signal quality EMA.
+     *
+     * 0.1 gives slow-reacting average: recent signals weighted 10%.
+     * Increase for faster response to recent quality changes.
+     */
+    static constexpr double SIGNAL_QUALITY_EMA_ALPHA = 0.1;
+
+    /**
+     * @brief Return the exponential moving average of signal_quality.
+     *
+     * Updated after each emitted signal:
+     *   EMA = alpha * quality + (1 - alpha) * prev_EMA
+     * where alpha = SIGNAL_QUALITY_EMA_ALPHA (0.1).
+     *
+     * Returns -1.0 when no signals have been emitted yet.
+     * Thread-safe (atomic load).
+     *
+     * @return EMA in [0.0, 1.0], or -1.0 if no signals emitted.
+     */
+    double get_signal_quality_ema() const noexcept {
+        return stats_.signal_quality_ema.load(std::memory_order_relaxed);
+    }
+
+    /**
      * @brief Live statistics updated atomically by the engine.
      */
     struct Stats {
@@ -197,6 +221,9 @@ public:
         std::atomic<uint64_t> quality_bucket_40_60{0};  ///< [0.4, 0.6)
         std::atomic<uint64_t> quality_bucket_60_80{0};  ///< [0.6, 0.8)
         std::atomic<uint64_t> quality_bucket_80_100{0}; ///< [0.8, 1.0]
+        /// Exponential moving average of signal_quality (alpha = SIGNAL_QUALITY_EMA_ALPHA).
+        /// Initialised to -1.0 so callers can detect "no signals yet".
+        std::atomic<double>   signal_quality_ema{-1.0};
 
         Stats() = default;
 
@@ -215,7 +242,8 @@ public:
             , quality_bucket_20_40{other.quality_bucket_20_40.load()}
             , quality_bucket_40_60{other.quality_bucket_40_60.load()}
             , quality_bucket_60_80{other.quality_bucket_60_80.load()}
-            , quality_bucket_80_100{other.quality_bucket_80_100.load()} {}
+            , quality_bucket_80_100{other.quality_bucket_80_100.load()}
+            , signal_quality_ema{other.signal_quality_ema.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
         Stats& operator=(const Stats& other) {
@@ -234,6 +262,7 @@ public:
                 quality_bucket_40_60.store(other.quality_bucket_40_60.load());
                 quality_bucket_60_80.store(other.quality_bucket_60_80.load());
                 quality_bucket_80_100.store(other.quality_bucket_80_100.load());
+                signal_quality_ema.store(other.signal_quality_ema.load());
             }
             return *this;
         }

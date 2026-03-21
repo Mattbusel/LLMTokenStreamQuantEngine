@@ -636,6 +636,7 @@ TEST(ConfigTest, test_config_load_from_env_zero_count_when_no_vars_set) {
     _putenv_s("LLMQUANT_SIGNAL_COOLDOWN_US", "");
     _putenv_s("LLMQUANT_MAX_SIGNAL_AGE_US", "");
     _putenv_s("LLMQUANT_MIN_BIAS_THRESHOLD", "");
+    _putenv_s("LLMQUANT_MAX_ACCUMULATED_BIAS", "");
     _putenv_s("LLMQUANT_MAX_DRAWDOWN", "");
     _putenv_s("LLMQUANT_MAX_SIGNALS_PER_SECOND", "");
     _putenv_s("LLMQUANT_STATS_PORT", "");
@@ -643,6 +644,7 @@ TEST(ConfigTest, test_config_load_from_env_zero_count_when_no_vars_set) {
     for (const char* v : {"LLMQUANT_BIAS_SENSITIVITY","LLMQUANT_VOL_SENSITIVITY",
                           "LLMQUANT_SIGNAL_DECAY","LLMQUANT_SIGNAL_COOLDOWN_US",
                           "LLMQUANT_MAX_SIGNAL_AGE_US","LLMQUANT_MIN_BIAS_THRESHOLD",
+                          "LLMQUANT_MAX_ACCUMULATED_BIAS",
                           "LLMQUANT_MAX_DRAWDOWN","LLMQUANT_MAX_SIGNALS_PER_SECOND",
                           "LLMQUANT_STATS_PORT"})
         unsetenv(v);
@@ -703,6 +705,47 @@ TEST(ConfigTest, test_config_load_from_env_nan_value_is_ignored) {
     _putenv_s("LLMQUANT_BIAS_SENSITIVITY", "");
 #else
     unsetenv("LLMQUANT_BIAS_SENSITIVITY");
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// LLMQUANT_MAX_ACCUMULATED_BIAS env var
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_load_from_env_max_accumulated_bias_applies) {
+    Config cfg;
+    cfg.set_defaults();
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_MAX_ACCUMULATED_BIAS", "5.0");
+#else
+    setenv("LLMQUANT_MAX_ACCUMULATED_BIAS", "5.0", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0);
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.max_accumulated_bias, 5.0);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_MAX_ACCUMULATED_BIAS", "");
+#else
+    unsetenv("LLMQUANT_MAX_ACCUMULATED_BIAS");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_max_accumulated_bias_zero_valid) {
+    // 0.0 = disabled (no clamp); must be accepted.
+    Config cfg;
+    cfg.set_defaults();
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_MAX_ACCUMULATED_BIAS", "0.0");
+#else
+    setenv("LLMQUANT_MAX_ACCUMULATED_BIAS", "0.0", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0);
+    EXPECT_DOUBLE_EQ(cfg.get_config().trading.max_accumulated_bias, 0.0);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_MAX_ACCUMULATED_BIAS", "");
+#else
+    unsetenv("LLMQUANT_MAX_ACCUMULATED_BIAS");
 #endif
 }
 

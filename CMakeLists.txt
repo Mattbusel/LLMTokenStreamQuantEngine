@@ -65,6 +65,23 @@ if(LLMQUANT_ENABLE_CLANG_TIDY)
 endif()
 
 # ---------------------------------------------------------------------------
+# Build metadata: git commit hash and configure-time timestamp
+# ---------------------------------------------------------------------------
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE LLMQUANT_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE _git_result
+)
+if(NOT _git_result EQUAL 0 OR NOT LLMQUANT_GIT_COMMIT)
+    set(LLMQUANT_GIT_COMMIT "unknown")
+endif()
+string(TIMESTAMP LLMQUANT_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ" UTC)
+message(STATUS "Build metadata: git=${LLMQUANT_GIT_COMMIT}  ts=${LLMQUANT_BUILD_TIMESTAMP}")
+
+# ---------------------------------------------------------------------------
 # Generated version header
 # ---------------------------------------------------------------------------
 configure_file(
@@ -129,6 +146,8 @@ if(MSVC)
         $<$<CONFIG:Release>:/O2 /DNDEBUG>
         $<$<CONFIG:Debug>:/Od /Zi /RTC1>
     )
+    # Prevent windows.h from defining min/max macros that conflict with std::max/std::min.
+    target_compile_definitions(llmquant PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
 target_link_libraries(llmquant

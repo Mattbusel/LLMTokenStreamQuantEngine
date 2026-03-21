@@ -29,4 +29,12 @@
 #define LLMQUANT_VERSION_NUMBER \
     (@PROJECT_VERSION_MAJOR@ * 10000 + @PROJECT_VERSION_MINOR@ * 100 + @PROJECT_VERSION_PATCH@)
 
+/// @brief Short git commit hash captured at configure time (e.g. "abc1234"),
+///        or "unknown" if the build directory is not inside a git repository.
+#define LLMQUANT_GIT_COMMIT "@LLMQUANT_GIT_COMMIT@"
+
+/// @brief ISO-8601 UTC timestamp of when CMake configure was last run
+///        (e.g. "2026-03-21T14:30:00Z").  Baked in at configure time.
+#define LLMQUANT_BUILD_TIMESTAMP "@LLMQUANT_BUILD_TIMESTAMP@"
+
 /// @}
