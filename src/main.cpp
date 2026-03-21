@@ -53,6 +53,7 @@ int main(int argc, char* argv[]) {
     bool        list_tokens    = false;
     bool        dump_config    = false;
     bool        quiet          = false;
+    std::string export_dict_path;   // non-empty = write TSV to file and exit
     std::string oms_address;
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
@@ -76,6 +77,7 @@ int main(int argc, char* argv[]) {
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
                 "  --list-tokens     Print the full semantic dictionary and exit\n"
+                "  --export-dict FILE  Export semantic dictionary to a TSV file and exit\n"
                 "  --dump-config     Print effective configuration and exit\n"
                 "  --quiet           Suppress console signal/stats output (log-file only)\n"
                 "  --version         Print version and exit\n"
@@ -100,6 +102,8 @@ int main(int argc, char* argv[]) {
             debug_raw = true;
         } else if (arg == "--list-tokens") {
             list_tokens = true;
+        } else if (arg == "--export-dict" && i + 1 < argc) {
+            export_dict_path = argv[++i];
         } else if (arg == "--dump-config") {
             dump_config = true;
         } else if (arg == "--quiet") {
@@ -285,6 +289,20 @@ int main(int argc, char* argv[]) {
                       << "\n";
         }
         std::cout << "-- " << keys.size() << " entries --\n";
+        return 0;
+    }
+
+    // --export-dict FILE: write the semantic dictionary to a TSV file and exit.
+    if (!export_dict_path.empty()) {
+        std::string tsv = llm_adapter.export_dictionary();
+        std::ofstream out(export_dict_path);
+        if (!out) {
+            spdlog::error("--export-dict: cannot open '{}' for writing", export_dict_path);
+            return 1;
+        }
+        out << tsv;
+        std::cout << "Exported " << llm_adapter.get_dictionary_size()
+                  << " entries to " << export_dict_path << "\n";
         return 0;
     }
 
@@ -980,6 +998,7 @@ int main(int argc, char* argv[]) {
                       << "  BKOF:" << std::setprecision(1) << backoff << "x"
                       << "  HIT%:" << hit_pct
                       << "  DEDUP:" << dedup_backend->total_duplicates()
+                      << "  NOISE:" << trade_engine.get_stats().noise_filtered.load()
                       << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
                       << "  BLOCK:" << blocked
                       << "  RATE%:" << [&]() -> uint64_t {
@@ -1038,6 +1057,9 @@ int main(int argc, char* argv[]) {
     std::cout << "  P25 latency      : " << final_stats.p25_latency.count() << "us\n";
     std::cout << "  Avg sig strength : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().avg_signal_strength.load() << "\n";
+    std::cout << "  Avg sig quality  : " << std::fixed << std::setprecision(4)
+              << trade_engine.get_stats().avg_signal_quality.load() << "\n";
+    std::cout << "  Noise filtered   : " << trade_engine.get_stats().noise_filtered.load() << "\n";
     std::cout << "  Peak bias        : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().peak_bias.load() << "\n";
     std::cout << "  SLO breach rate  : " << std::fixed << std::setprecision(2)

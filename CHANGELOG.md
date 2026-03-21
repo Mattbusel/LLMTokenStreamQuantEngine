@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 13 — 2026-03-21)
+- Session exit summary now prints `Avg sig quality` (`avg_signal_quality`) and `Noise filtered`
+  (`noise_filtered` count) — both tracked in `TradeSignalEngine::Stats` and Prometheus-exported
+  but absent from the human-readable exit report.
+- Per-second monitoring stats bar now shows `NOISE:N` (noise-gate filtered token count) alongside
+  the existing `DEDUP:N` and `BLOCK:N` columns for a complete signal-loss picture.
+
 ### Added (Cycle 12 — 2026-03-21)
 - `TradeSignal::to_json()` — inline JSON serializer on `TradeSignal`; complements
   `to_string()` for callers feeding signals into JSON pipelines.
