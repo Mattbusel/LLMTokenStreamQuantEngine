@@ -1332,5 +1332,48 @@ TEST(LLMAdapterTest, test_count_tokens_above_volatility_filters_correctly) {
     EXPECT_EQ(adapter.count_tokens_above_volatility(0.0), size_t{2});
 }
 
+TEST(LLMAdapterTest, test_export_dictionary_roundtrip_via_tsv) {
+    LLMAdapter adapter;
+    adapter.clear_custom_mappings();
+    adapter.add_token_mapping("bullish", {0.8, 0.9, 0.1, 0.7});
+    adapter.add_token_mapping("crash",   {-0.9, 0.95, 0.8, -0.85});
+    adapter.add_token_mapping("steady",  {0.05, 0.6, 0.05, 0.02});
+
+    std::string tsv = adapter.export_dictionary();
+    EXPECT_FALSE(tsv.empty()) << "export_dictionary() must not return empty string";
+
+    LLMAdapter adapter2;
+    adapter2.clear_custom_mappings();
+    size_t imported = adapter2.load_dictionary_from_tsv(tsv);
+    EXPECT_EQ(imported, size_t{3}) << "All 3 tokens must import successfully";
+
+    SemanticWeight w;
+    ASSERT_TRUE(adapter2.get_token_mapping("bullish", w));
+    EXPECT_NEAR(w.sentiment_score,  0.8,  1e-5);
+    EXPECT_NEAR(w.directional_bias, 0.7,  1e-5);
+
+    ASSERT_TRUE(adapter2.get_token_mapping("crash", w));
+    EXPECT_NEAR(w.sentiment_score,  -0.9, 1e-5);
+    EXPECT_NEAR(w.volatility_score,  0.8, 1e-5);
+}
+
+TEST(LLMAdapterTest, test_format_stats_no_data_returns_sentinel) {
+    LLMAdapter adapter;
+    std::string s = adapter.format_stats();
+    EXPECT_EQ(s, "tokens=0 (no data)");
+}
+
+TEST(LLMAdapterTest, test_format_stats_after_lookups_contains_expected_fields) {
+    LLMAdapter adapter;
+    adapter.map_token_to_weight("bullish");      // hit
+    adapter.map_token_to_weight("unknown_xyz");  // miss
+    std::string s = adapter.format_stats();
+    EXPECT_NE(s.find("tokens=2"), std::string::npos);
+    EXPECT_NE(s.find("hits=1"),   std::string::npos);
+    EXPECT_NE(s.find("misses=1"), std::string::npos);
+    EXPECT_NE(s.find("hit_rate="), std::string::npos);
+    EXPECT_NE(s.find("dict_size="), std::string::npos);
+}
+
 } // namespace
 } // namespace llmquant

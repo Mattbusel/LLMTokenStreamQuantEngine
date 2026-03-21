@@ -459,6 +459,18 @@ public:
     }
 
     /**
+     * @brief Return a single-line human-readable summary of processing statistics.
+     *
+     * Format: "tokens=<n> hits=<n> misses=<n> hit_rate=<rate> dict_size=<n>"
+     * If no tokens have been processed, returns "tokens=0 (no data)".
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return Single-line stats summary string.
+     */
+    std::string format_stats() const;
+
+    /**
      * @brief Export the entire token dictionary as a tab-separated string.
      *
      * Each line represents one token in the format:

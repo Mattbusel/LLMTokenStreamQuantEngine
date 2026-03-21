@@ -147,7 +147,7 @@ public:
      * @return true if the signal passes all checks and should be emitted;
      *         false if the signal is blocked (stats updated, alert fired).
      */
-    bool evaluate(const TradeSignal& signal);
+    [[nodiscard]] bool evaluate(const TradeSignal& signal);
 
     /**
      * @brief Evaluate a signal and return the decision with a rejection reason.
@@ -160,7 +160,7 @@ public:
      *               cleared on pass.
      * @return true if the signal passes all checks; false if blocked.
      */
-    bool evaluate_with_reason(const TradeSignal& signal, std::string& reason);
+    [[nodiscard]] bool evaluate_with_reason(const TradeSignal& signal, std::string& reason);
 
     /**
      * @brief Evaluate a signal; return nullopt on pass or the rejection reason string on block.
@@ -177,7 +177,7 @@ public:
      * @param signal The TradeSignal to evaluate.
      * @return std::nullopt if the signal passes; a non-empty reason string if blocked.
      */
-    std::optional<std::string> try_evaluate(const TradeSignal& signal);
+    [[nodiscard]] std::optional<std::string> try_evaluate(const TradeSignal& signal);
 
     /**
      * @brief Register a callback to be invoked when a signal is blocked.
@@ -543,7 +543,7 @@ public:
      * @param signals Ordered sequence of signals to evaluate.
      * @return Vector of bool; true = passed, false = blocked.
      */
-    std::vector<bool> evaluate_batch(const std::vector<TradeSignal>& signals);
+    [[nodiscard]] std::vector<bool> evaluate_batch(const std::vector<TradeSignal>& signals);
 
     /**
      * @brief Return the fraction of the absolute position limit currently consumed.

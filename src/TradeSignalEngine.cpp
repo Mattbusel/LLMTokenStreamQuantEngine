@@ -211,10 +211,6 @@ void TradeSignalEngine::emit_signal(const TradeSignal& signal_in) {
                           * std::clamp(magnitude_avg, 0.0, 1.0);
     last_signal_quality_.store(signal.signal_quality, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(signal.timestamp_ns, std::memory_order_relaxed);
-    // Do NOT overwrite signal.confidence here — it must be set by the caller
-    // (process_semantic_weight) before calling emit_signal().  Overwriting it
-    // would silently discard any per-signal confidence already populated.
-    // signal.confidence = last_confidence_.load();  // removed (improvement #14)
 
     if (callback_) {
         try { callback_(signal); } catch (...) {}

@@ -755,4 +755,19 @@ size_t LLMAdapter::count_tokens_above_volatility(double threshold) const {
     return count;
 }
 
+std::string LLMAdapter::format_stats() const {
+    uint64_t processed = stats_.tokens_processed.load(std::memory_order_relaxed);
+    if (processed == 0) return "tokens=0 (no data)";
+    uint64_t hits   = stats_.cache_hits.load(std::memory_order_relaxed);
+    uint64_t misses = stats_.cache_misses.load(std::memory_order_relaxed);
+    double hit_rate = static_cast<double>(hits) / static_cast<double>(processed);
+    std::ostringstream oss;
+    oss << "tokens=" << processed
+        << " hits="  << hits
+        << " misses=" << misses
+        << " hit_rate=" << hit_rate
+        << " dict_size=" << token_weights_.size();
+    return oss.str();
+}
+
 } // namespace llmquant
