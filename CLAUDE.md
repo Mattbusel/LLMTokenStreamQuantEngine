@@ -123,7 +123,7 @@ clang-format --dry-run src/*.cpp include/*.h
 |-----------|-------|----------|
 | test_llm_adapter.cpp | 141 | Token lookup, sequences, SIMD, dictionary analytics, hit counts, top-N frequency, all analytics APIs |
 | test_risk_manager.cpp | 113 | Magnitude, confidence, rate, drawdown, OMS gates, evaluate_with_reason, get_most_blocked_gate, batch evaluate |
-| test_trade_signal_engine.cpp | 111 | Signals, fields, backtest, cooldown, reset, stats accessors, signal quality, to_json, flush_sinks |
+| test_trade_signal_engine.cpp | 113 | Signals, fields, backtest, cooldown, reset, stats accessors, signal quality, to_json, flush_sinks, format_stats quality_ema |
 | test_latency_controller.cpp | 88 | Stats, percentiles, p50, pressure, backoff, reset, concurrent, get_total_latency_us |
 | test_config.cpp | 45 | YAML parse, missing fields, hot-reload, risk_thresholds, pressure validation, SemanticWeightsConfig validation |
 | test_edge_cases.cpp | 33 | Empty/null inputs, overflow, NaN, invalid params across all major APIs |
@@ -144,4 +144,4 @@ clang-format --dry-run src/*.cpp include/*.h
 | test_pipeline.cpp (integration) | 8 | End-to-end, latency, accumulation |
 | test_chaos.cpp (integration) | 6 | Fear saturation, runaway bias, dedup flood, restart-under-load, mixed pipeline |
 | bench_hot_path.cpp (perf) | 5 | Latency budgets, throughput, SIMD vs scalar |
-| **Total** | **~823** | |
+| **Total** | **~825** | |
