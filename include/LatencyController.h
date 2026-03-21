@@ -343,8 +343,7 @@ public:
     /**
      * @brief Convenience accessor: return the P99 latency in microseconds.
      *
-     * Equivalent to get_stats().p99_latency.count() but avoids computing
-     * the full LatencyStats snapshot when only the P99 figure is needed.
+     * Delegates to get_stats() and extracts the p99 field.
      * Returns 0 if no measurements have been recorded yet.
      *
      * Thread-safe (delegates to get_stats()).
@@ -358,7 +357,9 @@ public:
     /**
      * @brief Convenience accessor: return the P95 latency in microseconds.
      *
+     * Delegates to get_stats() and extracts the p95 field.
      * Returns 0 if no measurements have been recorded yet.
+     *
      * Thread-safe (delegates to get_stats()).
      *
      * @return P95 latency in microseconds.
@@ -370,7 +371,9 @@ public:
     /**
      * @brief Convenience accessor: return the P50 (median) latency in microseconds.
      *
+     * Delegates to get_stats() and extracts the p50 field.
      * Returns 0 if no measurements have been recorded yet.
+     *
      * Thread-safe (delegates to get_stats()).
      *
      * @return P50 latency in microseconds.

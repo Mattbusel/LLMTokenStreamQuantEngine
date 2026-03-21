@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <atomic>
+#include <memory>
 #include <stdexcept>
 #include <immintrin.h>  // SSE2/AVX2 intrinsics
 
@@ -432,6 +433,38 @@ public:
     }
 
     /**
+     * @brief Return the number of times a specific dictionary token has been looked up
+     *        and found (cache hit) since construction or the last reset_frequency_counts().
+     *
+     * Applies the same normalisation as map_token_to_weight().
+     * Returns 0 if the token is not in the dictionary or has not yet been hit.
+     * Thread-safe (atomic load via the per-token counter).
+     *
+     * @param token Raw token string.
+     * @return Hit count for the token.
+     */
+    uint64_t get_token_hit_count(const std::string& token) const;
+
+    /**
+     * @brief Return the top N most frequently hit dictionary tokens, sorted descending.
+     *
+     * Only tokens that have been looked up and found at least once will have
+     * non-zero counts.  Tokens with zero hits are included in the returned
+     * vector only if n is large enough to encompass the full dictionary.
+     *
+     * @param n Maximum number of entries to return (default: 10).
+     * @return Vector of (token, hit_count) pairs sorted by hit_count descending.
+     */
+    std::vector<std::pair<std::string, uint64_t>> top_tokens_by_frequency(size_t n = 10) const;
+
+    /**
+     * @brief Reset all per-token hit counters to zero without affecting statistics.
+     *
+     * Thread-safe: each counter is reset atomically.
+     */
+    void reset_frequency_counts();
+
+    /**
      * @brief Reset all processing statistics (tokens_processed, cache_hits, cache_misses) to zero.
      *
      * Thread-safe: each counter is independently atomic.
@@ -609,6 +642,16 @@ private:
                                            size_t begin, size_t end);
 
     std::unordered_map<std::string, SemanticWeight> token_weights_;
+
+    /**
+     * @brief Per-token hit counters; populated in parallel with token_weights_.
+     *
+     * Each entry is a unique_ptr so the pointed-to atomic is stable (no
+     * rehash relocation) and can be incremented without a mutex in
+     * map_token_to_weight().  Entries are added whenever token_weights_ is
+     * updated and are never removed while the adapter is running.
+     */
+    mutable std::unordered_map<std::string, std::unique_ptr<std::atomic<uint64_t>>> token_hit_counts_;
 
     /** @brief Internal statistics; mutable so const query methods can update them. */
     mutable struct {

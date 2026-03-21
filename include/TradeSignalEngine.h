@@ -63,11 +63,13 @@ struct TradeSignal {
      * @return Single-line summary string.
      */
     std::string to_string() const {
-        char buf[256];
+        char buf[320];
         std::snprintf(buf, sizeof(buf),
-            "bias=%.4f vol=%.4f conf=%.4f quality=%.4f lat=%.2fus strategy=%+d",
-            delta_bias_shift, volatility_adjustment, confidence,
-            signal_quality, latency_us, strategy_toggle);
+            "bias=%.4f vol=%.4f spread=%.4f conf=%.4f quality=%.4f"
+            " lat=%.2fus strategy=%+d weight=%.4f",
+            delta_bias_shift, volatility_adjustment, spread_modifier,
+            confidence, signal_quality, latency_us,
+            strategy_toggle, strategy_weight);
         return buf;
     }
 };

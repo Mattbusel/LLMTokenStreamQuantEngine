@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 3 — 2026-03-21)
+- `TradeSignal::to_string()` now includes `spread_modifier` and `strategy_weight`
+  in its one-liner debug format:
+  `"bias=<v> vol=<v> spread=<v> conf=<v> quality=<v> lat=<v>us strategy=<±1> weight=<v>"`.
+  Previously these two fields were silently omitted.
+- `CsvOutputSink` and `JsonOutputSink` now serialize `signal_quality` alongside
+  all other `TradeSignal` fields.  Previously the composite quality score was
+  computed by the engine but never persisted to disk, making offline quality
+  analysis impossible.
+
 ### Added (Cycle 2 — 2026-03-21)
 - `--log-level LEVEL` CLI flag — set spdlog verbosity (`trace`/`debug`/`info`/`warn`/`error`/`critical`)
   at startup without recompiling. Falls back to `info` with a warning for unknown level names.

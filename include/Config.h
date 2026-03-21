@@ -114,6 +114,27 @@ struct MetricsConfig {
 };
 
 /**
+ * @brief Per-category multipliers applied to SemanticWeight fields after dictionary lookup.
+ *
+ * Each multiplier scales the corresponding field of every SemanticWeight returned by
+ * LLMAdapter::map_token_to_weight before it is forwarded to TradeSignalEngine.
+ * Values of 1.0 (default) leave the raw dictionary weight unchanged.
+ * Set a multiplier above 1.0 to amplify a category, below 1.0 to attenuate it.
+ *
+ * YAML key: semantic_weights
+ */
+struct SemanticWeightsConfig {
+    /** @brief Scale factor applied to sentiment_score (default: 1.0). */
+    double sentiment_multiplier{1.0};
+    /** @brief Scale factor applied to confidence_score (default: 1.0). */
+    double confidence_multiplier{1.0};
+    /** @brief Scale factor applied to volatility_score (default: 1.0). */
+    double volatility_multiplier{1.0};
+    /** @brief Scale factor applied to directional_bias (default: 1.0). */
+    double bias_multiplier{1.0};
+};
+
+/**
  * @brief Configuration for the pressure / back-pressure tuning subsystem.
  */
 struct PressureConfig {
@@ -135,6 +156,7 @@ struct SystemConfig {
     PressureConfig       pressure;
     RiskThresholdConfig  risk_thresholds;
     RiskOverrideConfig   risk_overrides;
+    SemanticWeightsConfig semantic_weights;
 };
 
 /**

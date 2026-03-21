@@ -216,6 +216,24 @@ int main(int argc, char* argv[]) {
 
     LLMAdapter llm_adapter;
 
+    // --list-tokens: dump the full semantic dictionary and exit immediately.
+    if (list_tokens) {
+        auto keys = llm_adapter.get_all_token_keys();
+        std::cout << "token\tsentiment\tconfidence\tvolatility\tbias\n";
+        for (const auto& k : keys) {
+            SemanticWeight w;
+            llm_adapter.get_token_mapping(k, w);
+            std::cout << k
+                      << "\t" << std::fixed << std::setprecision(3) << w.sentiment_score
+                      << "\t" << w.confidence_score
+                      << "\t" << w.volatility_score
+                      << "\t" << w.directional_bias
+                      << "\n";
+        }
+        std::cout << "-- " << keys.size() << " entries --\n";
+        return 0;
+    }
+
     TradeSignalEngine trade_engine({
         .bias_sensitivity     = sys_config.trading.bias_sensitivity,
         .volatility_sensitivity = sys_config.trading.volatility_sensitivity,
@@ -351,6 +369,14 @@ int main(int argc, char* argv[]) {
 
         auto weight = llm_adapter.map_token_to_weight(text);
 
+        // Apply per-category semantic weight multipliers from config.
+        // Multipliers of 1.0 (default) leave raw dictionary weights unchanged.
+        const auto& sw = sys_config.semantic_weights;
+        weight.sentiment_score  *= sw.sentiment_multiplier;
+        weight.confidence_score *= sw.confidence_multiplier;
+        weight.volatility_score *= sw.volatility_multiplier;
+        weight.directional_bias *= sw.bias_multiplier;
+
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
         if (!dry_run) {
@@ -441,9 +467,28 @@ int main(int argc, char* argv[]) {
     // Load test tokens for simulator path.
     if (sys_config.token_stream.use_memory_stream) {
         token_sim.load_tokens_from_memory({
-            "crash", "panic", "inevitable", "guarantee", "bullish", "collapse",
-            "volatile", "surge", "confident", "uncertain", "rally", "plunge",
-            "breakout", "support", "resistance", "momentum"
+            // Fear / panic
+            "crash", "panic", "collapse", "plunge", "selloff", "rout",
+            // Bullish directional
+            "bullish", "rally", "surge", "breakout", "rebound", "accumulate",
+            // Bearish directional
+            "bearish", "short", "downtrend", "distribution",
+            // Volatility
+            "volatile", "spike", "whipsaw", "choppy", "gamma", "vega",
+            // Certainty / confidence
+            "inevitable", "guarantee", "confident", "confirmed",
+            // Corporate / earnings
+            "earnings", "beats", "misses", "guidance", "dividend", "buyback",
+            // Macro / regime
+            "inflation", "fed", "pivot", "recession", "risk-on", "risk-off",
+            // Analyst
+            "upgrade", "downgrade", "overweight", "outperform",
+            // Options
+            "calls", "puts", "squeeze", "hedge",
+            // Crypto / retail
+            "pump", "fud", "hodl",
+            // Neutral filler (tests zero-weight path)
+            "the", "and", "is"
         });
     } else {
         token_sim.load_tokens_from_file(sys_config.token_stream.data_file_path);

@@ -51,7 +51,12 @@ risk_thresholds:
 #   disable_drawdown_gate: false
 #   disable_position_gate: false
 
-# semantic_weights: (not yet wired — when added, extend LLMAdapter to accept
-#   per-category multipliers at construction time and parse them in Config.cpp
-#   under the "semantic_weights:" YAML key; add a SemanticWeightsConfig struct
-#   to SystemConfig in Config.h)
+# --- Semantic weight multipliers (hot-reloadable via config watch) ---
+# Each multiplier scales the corresponding SemanticWeight field after dictionary
+# lookup and before the weight is forwarded to TradeSignalEngine.
+# Values of 1.0 leave the raw dictionary weights unchanged (default).
+semantic_weights:
+  sentiment_multiplier:  1.0   # scale sentiment_score  (e.g. 0.5 to halve, 2.0 to double)
+  confidence_multiplier: 1.0   # scale confidence_score
+  volatility_multiplier: 1.0   # scale volatility_score
+  bias_multiplier:       1.0   # scale directional_bias

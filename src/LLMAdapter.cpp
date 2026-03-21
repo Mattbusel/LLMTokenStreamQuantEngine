@@ -11,6 +11,11 @@ namespace llmquant {
 
 LLMAdapter::LLMAdapter() {
     initialize_default_mappings();
+    // Populate hit-count map in parallel with the token dictionary.
+    token_hit_counts_.reserve(token_weights_.size());
+    for (const auto& kv : token_weights_) {
+        token_hit_counts_.emplace(kv.first, std::make_unique<std::atomic<uint64_t>>(0));
+    }
 }
 
 std::string LLMAdapter::normalize_token(const std::string& token) {
@@ -47,6 +52,9 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
         if (it_fast != token_weights_.end()) {
             stats_.tokens_processed++;
             stats_.cache_hits++;
+            auto hc = token_hit_counts_.find(token);
+            if (hc != token_hit_counts_.end())
+                hc->second->fetch_add(1, std::memory_order_relaxed);
             return it_fast->second;
         }
         // Token is already normalized but not found — no need to normalize again.
@@ -63,6 +71,9 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     if (it != token_weights_.end()) {
         stats_.tokens_processed++;
         stats_.cache_hits++;
+        auto hc = token_hit_counts_.find(norm);
+        if (hc != token_hit_counts_.end())
+            hc->second->fetch_add(1, std::memory_order_relaxed);
         return it->second;
     }
 

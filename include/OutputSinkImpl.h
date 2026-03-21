@@ -43,7 +43,7 @@ public:
         }
         out_ << "timestamp_ns,delta_bias_shift,volatility_adjustment,"
                 "spread_modifier,confidence,latency_us,"
-                "strategy_toggle,strategy_weight\n";
+                "strategy_toggle,strategy_weight,signal_quality\n";
         out_.flush();
     }
 
@@ -66,7 +66,8 @@ public:
              << safe_d(sig.confidence) << ","
              << safe_d(sig.latency_us) << ","
              << sig.strategy_toggle << ","
-             << safe_d(sig.strategy_weight) << "\n";
+             << safe_d(sig.strategy_weight) << ","
+             << safe_d(sig.signal_quality) << "\n";
         ++emit_count_;
     }
 
@@ -126,7 +127,8 @@ public:
              << "\"confidence\":"             << safe_d(sig.confidence)                << ","
              << "\"latency_us\":"             << safe_d(sig.latency_us)                << ","
              << "\"strategy_toggle\":"        << sig.strategy_toggle                   << ","
-             << "\"strategy_weight\":"        << safe_d(sig.strategy_weight)
+             << "\"strategy_weight\":"        << safe_d(sig.strategy_weight)           << ","
+             << "\"signal_quality\":"         << safe_d(sig.signal_quality)
              << "}\n";
         ++emit_count_;
     }

@@ -110,12 +110,13 @@ void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_
 }
 
 void MetricsLogger::log_latency_measurement(uint64_t latency_us) {
+    log_entries_++;
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",LATENCY_MEASUREMENT,,,,,," << latency_us << ",,";
+        oss << timestamp << ",LATENCY_MEASUREMENT,,,,," << latency_us << ",,";
 
         if (file_logger_) file_logger_->info(oss.str());
     } else if (config_.format == OutputFormat::JSON) {
@@ -127,12 +128,13 @@ void MetricsLogger::log_latency_measurement(uint64_t latency_us) {
 }
 
 void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
+    log_entries_++;
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",SYSTEM_STATS,,,,,,," << std::fixed << std::setprecision(1)
+        oss << timestamp << ",SYSTEM_STATS,,,,,," << std::fixed << std::setprecision(1)
             << (memory_usage / 1024 / 1024) << "," << cpu_usage;
 
         if (file_logger_) file_logger_->info(oss.str());
@@ -202,7 +204,7 @@ void MetricsLogger::log_config_reload(const std::string& source_path, bool succe
     const char* status = success ? "ok" : "failed";
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",CONFIG_RELOAD," << status << "," << source_path << ",,,,";
+        oss << timestamp << ",CONFIG_RELOAD," << status << "," << source_path << ",,,,,";
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
             console_logger_->info("Config reload {}: {}", status, source_path);
@@ -224,9 +226,9 @@ void MetricsLogger::log_pipeline_health(bool healthy, double slo_breach_rate,
     const char* status = healthy ? "ok" : "degraded";
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << ts << ",PIPELINE_HEALTH," << status
-            << ",slo_breach_rate=" << slo_breach_rate
-            << ",backoff_multiplier=" << backoff_multiplier << ",,";
+        oss << ts << ",PIPELINE_HEALTH," << status << ",,"
+            << std::fixed << std::setprecision(4)
+            << slo_breach_rate << "," << backoff_multiplier << ",,";
         if (file_logger_) file_logger_->info(oss.str());
     } else if (config_.format == OutputFormat::JSON) {
         if (file_logger_)
@@ -243,7 +245,7 @@ void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
     const char* kind = is_duplicate ? "duplicate" : "novel";
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << ts << ",DEDUP," << kind << "," << key << ",,,,";
+        oss << ts << ",DEDUP," << kind << "," << key << ",,,,,";
         if (file_logger_) file_logger_->info(oss.str());
     } else if (config_.format == OutputFormat::JSON) {
         if (file_logger_)

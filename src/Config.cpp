@@ -95,6 +95,15 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (pr["backoff_scale_factor"])   tmp.pressure.backoff_scale_factor   = pr["backoff_scale_factor"].as<double>();
         }
 
+        // Semantic weight multipliers (optional — all default to 1.0).
+        if (yaml["semantic_weights"]) {
+            auto sw = yaml["semantic_weights"];
+            if (sw["sentiment_multiplier"])  tmp.semantic_weights.sentiment_multiplier  = sw["sentiment_multiplier"].as<double>();
+            if (sw["confidence_multiplier"]) tmp.semantic_weights.confidence_multiplier = sw["confidence_multiplier"].as<double>();
+            if (sw["volatility_multiplier"]) tmp.semantic_weights.volatility_multiplier = sw["volatility_multiplier"].as<double>();
+            if (sw["bias_multiplier"])       tmp.semantic_weights.bias_multiplier       = sw["bias_multiplier"].as<double>();
+        }
+
         // Logging settings
         if (yaml["logging"]) {
             auto log = yaml["logging"];
