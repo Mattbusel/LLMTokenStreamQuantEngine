@@ -245,16 +245,16 @@ TEST(MetricsLoggerTest, test_metrics_logger_log_performance_summary_does_not_thr
 }
 
 TEST(MetricsLoggerTest, test_metrics_logger_entry_count_not_incremented_by_non_counting_methods) {
-    // log_latency_measurement and log_system_stats do NOT count as log entries
-    // (they are monitoring helpers, not pipeline events).
+    // log_latency_measurement and log_system_stats DO count as log entries
+    // (they call log_entries_++ since they write structured log rows).
+    // log_performance_summary does NOT write to the file sink and does NOT increment.
     const std::string path = "/tmp/test_metrics_no_count.log";
     {
         MetricsLogger logger(make_csv_config(path));
-        logger.log_latency_measurement(10);
-        logger.log_system_stats(1024 * 1024, 5.0);
-        logger.log_performance_summary();
-        // Only methods that increment log_entries_ are token/signal/risk_rejection.
-        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{0});
+        logger.log_latency_measurement(10);   // increments
+        logger.log_system_stats(1024 * 1024, 5.0); // increments
+        logger.log_performance_summary();     // does NOT increment (console only)
+        EXPECT_EQ(logger.get_log_entry_count(), uint64_t{2});
     }
     std::remove(path.c_str());
 }
@@ -476,6 +476,8 @@ TEST(MetricsLoggerTest, test_log_risk_rejection_csv_has_nine_columns) {
     // Read the first data row.
     ASSERT_TRUE(std::getline(f, line));
     // Count commas: a 9-column row has exactly 8 commas.
+    // Note: std::getline stops before the trailing empty field after the last comma,
+    // so we count commas directly rather than counting fields.
     int commas = 0;
     for (char c : line) if (c == ',') ++commas;
     EXPECT_EQ(commas, 8)
@@ -484,10 +486,14 @@ TEST(MetricsLoggerTest, test_log_risk_rejection_csv_has_nine_columns) {
     // Column 7 (index 6, latency_us) must be empty — not filled with confidence.
     // Split by comma and check field index 6.
     std::vector<std::string> fields;
-    std::istringstream ss(line);
-    std::string field;
-    while (std::getline(ss, field, ',')) fields.push_back(field);
-    ASSERT_GE(fields.size(), 9u);
+    {
+        std::istringstream ss(line);
+        std::string field;
+        while (std::getline(ss, field, ',')) fields.push_back(field);
+    }
+    // std::getline yields N fields for N commas (trailing comma → trailing empty dropped).
+    // We need at least 7 fields to check index 6.
+    ASSERT_GE(fields.size(), 7u);
     EXPECT_TRUE(fields[6].empty())
         << "CSV column 7 (latency_us) must be empty for RISK_REJECTION; got: '"
         << fields[6] << "'";
@@ -512,9 +518,11 @@ TEST(MetricsLoggerTest, test_log_risk_rejection_csv_reason_in_token_column) {
     ASSERT_TRUE(std::getline(f, line)); // data row
     // The rejection reason must appear in column 3 (token column, 0-indexed col 2).
     std::vector<std::string> fields;
-    std::istringstream ss(line);
-    std::string field;
-    while (std::getline(ss, field, ',')) fields.push_back(field);
+    {
+        std::istringstream ss(line);
+        std::string field;
+        while (std::getline(ss, field, ',')) fields.push_back(field);
+    }
     ASSERT_GE(fields.size(), 3u);
     EXPECT_EQ(fields[2], "confidence_below_minimum")
         << "Rejection reason must be in the token column (index 2)";

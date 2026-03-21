@@ -25,8 +25,34 @@
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#ifdef _WIN32
+#  include <windows.h>
+#  include <psapi.h>
+#endif
 
 using namespace llmquant;
+
+/// @brief Returns the process RSS (resident set size) in bytes, or 0 if unavailable.
+static uint64_t get_process_rss_bytes() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS pmc{};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return static_cast<uint64_t>(pmc.WorkingSetSize);
+    return 0;
+#else
+    // Linux/macOS: parse VmRSS from /proc/self/status (kB units).
+    std::ifstream f("/proc/self/status");
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind("VmRSS:", 0) == 0) {
+            uint64_t kb = 0;
+            std::sscanf(line.c_str(), "VmRSS: %llu kB", &kb);
+            return kb * 1024ULL;
+        }
+    }
+    return 0;
+#endif
+}
 
 std::atomic<bool> g_running{true};
 
@@ -904,7 +930,7 @@ int main(int argc, char* argv[]) {
                  << "# TYPE llmquant_ring_buffer_drops_total counter\n"
                  << "llmquant_ring_buffer_drops_total " << (!stream_mode ? token_sim.get_stats().ring_buffer_drops.load() : 0) << "\n"
                  << "# HELP llmquant_uptime_seconds Engine uptime since startup\n"
-                 << "# TYPE llmquant_uptime_seconds counter\n"
+                 << "# TYPE llmquant_uptime_seconds gauge\n"
                  << "llmquant_uptime_seconds " << std::chrono::duration_cast<std::chrono::seconds>(
                         std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
@@ -1055,6 +1081,8 @@ int main(int argc, char* argv[]) {
                              latency_ctrl.get_slo_breach_rate() * 100.0);
             }
         }
+        // Log system resource usage once per second (memory RSS; CPU unavailable cross-platform).
+        logger.log_system_stats(get_process_rss_bytes(), 0.0);
 
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
