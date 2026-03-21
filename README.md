@@ -192,6 +192,23 @@ Connects to `api.openai.com:443` over TLS, streams a financial-sentiment complet
 
 Dumps every raw byte from the TLS socket to stderr for 3 seconds and exits. Useful for diagnosing chunked-encoding or auth failures.
 
+### Dump effective configuration and exit
+
+```bash
+./build/LLMTokenStreamQuantEngine --dump-config
+./build/LLMTokenStreamQuantEngine --dump-config --config /path/to/config.yaml
+```
+
+Prints all effective parameter values (YAML defaults + file overrides) as a structured summary and exits with code 0. Useful for verifying hot-reload-eligible fields before starting the engine.
+
+### Quiet (log-file only) mode
+
+```bash
+./build/LLMTokenStreamQuantEngine --quiet
+```
+
+Suppresses the per-signal console row and rolling stats bar. All data still flows to `MetricsLogger` and the Prometheus endpoint — suitable for daemon / CI deployments where only structured logs are consumed.
+
 ### Custom configuration
 
 ```bash
@@ -325,7 +342,8 @@ double get_time_since_last_signal_us() const noexcept;
 bool is_in_cooldown() const noexcept;
 
 // TradeSignal helpers (on the TradeSignal struct itself)
-std::string to_string() const;  // "bias=<v> vol=<v> conf=<v> quality=<v> lat=<v>us strategy=±1"
+std::string to_string() const;  // "bias=<v> vol=<v> spread=<v> conf=<v> quality=<v> lat=<v>us strategy=±1 weight=<v>"
+std::string to_json() const;    // compact single-line JSON object with all numeric fields
 
 // Output and introspection
 void add_output_sink(std::shared_ptr<OutputSink> sink);
