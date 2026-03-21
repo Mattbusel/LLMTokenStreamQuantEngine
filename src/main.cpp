@@ -534,10 +534,22 @@ int main(int argc, char* argv[]) {
         }
 
         if (passed) {
-            logger.log_signal_generated(
+            logger.log_trade_signal(
                 signal.delta_bias_shift,
                 signal.volatility_adjustment,
-                static_cast<uint64_t>(latency_us));
+                signal.confidence,
+                static_cast<double>(latency_us),
+                signal.signal_quality);
+        } else {
+            // Log the rejection to the structured log file.
+            std::string reject_reason;
+            {
+                std::lock_guard<std::mutex> lk(block_reason_mutex);
+                reject_reason = last_block_reason.empty() ? "risk" : last_block_reason;
+            }
+            logger.log_risk_rejection(reject_reason,
+                                      signal.delta_bias_shift,
+                                      signal.confidence);
         }
     });
 

@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 15 — 2026-03-21)
+- Signal callback now calls `logger.log_trade_signal()` for passed signals (replacing the
+  less-detailed `log_signal_generated()`) — now logs confidence and signal_quality alongside
+  bias, volatility, and latency.
+- Signal callback now calls `logger.log_risk_rejection()` for blocked signals — previously
+  risk rejections were only printed to the console; now they are also written to the structured
+  log file with reason, bias, and confidence fields.
+
 ### Added (Cycle 14 — 2026-03-21)
 - `--export-dict FILE` CLI flag: exports the full semantic dictionary to a TSV
   file (one entry per line: `token\tsentiment\tconfidence\tvolatility\tbias`)

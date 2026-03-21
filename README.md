@@ -297,6 +297,11 @@ size_t load_dictionary_from_tsv(const std::string& tsv_data);
 Stats get_stats() const noexcept;        // tokens_processed, cache_hits, cache_misses
 void reset_stats() noexcept;
 double get_cache_hit_rate() const noexcept;
+
+// Token hit-frequency tracking
+uint64_t get_token_hit_count(const std::string& token) const;  // lookups matched since construction / last reset
+std::vector<std::pair<std::string, uint64_t>> top_tokens_by_frequency(size_t n = 10) const;  // top-N by hit count
+void reset_frequency_counts();  // zero all per-token hit counters
 ```
 
 ### TradeSignalEngine
@@ -334,6 +339,7 @@ double get_avg_signal_quality() const noexcept;
 double get_avg_signal_strength() const noexcept;
 double get_avg_bias_per_token() const noexcept;
 double get_last_signal_quality() const noexcept;
+std::vector<QualityHistogramBucket> get_quality_histogram() const;  // 5 buckets: [0,.2),[.2,.4),[.4,.6),[.6,.8),[.8,1]
 
 // Timing
 double get_tokens_per_second() const noexcept;
