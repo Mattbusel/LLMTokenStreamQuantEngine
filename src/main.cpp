@@ -43,6 +43,10 @@ int main(int argc, char* argv[]) {
 
     // Record engine start time for uptime metrics.
     const auto engine_start_time = std::chrono::steady_clock::now();
+    // Also capture a system_clock snapshot so Prometheus can expose the absolute
+    // start timestamp (system_clock and steady_clock have different epochs).
+    const int64_t engine_start_unix_s = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
 
     // Parse flags before anything else.
     bool        stream_mode    = false;
