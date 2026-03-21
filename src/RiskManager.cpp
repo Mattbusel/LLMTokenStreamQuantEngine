@@ -128,6 +128,9 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
 
 bool RiskManager::evaluate_with_reason(const TradeSignal& signal, std::string& reason) {
     reason.clear();
+    // Serialise concurrent calls: the temporary callback swap below is not
+    // safe if two threads execute this function simultaneously.
+    std::lock_guard<std::mutex> ewr_lock(ewr_mutex_);
     // Temporarily wrap the alert callback to capture the rejection reason,
     // then restore the original after evaluate() returns.
     AlertCallback saved_cb;

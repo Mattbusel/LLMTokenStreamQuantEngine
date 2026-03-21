@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 9 — 2026-03-21)
+- `RiskManager::evaluate_with_reason`: fixed a data-race / use-after-free when
+  called concurrently from multiple threads.  The method temporarily swaps
+  `alert_cb_` for a wrapper that captures the rejection reason; two concurrent
+  callers would overwrite each other's saved callback and leave a dangling
+  wrapper — pointing at a destroyed stack variable — installed on `alert_cb_`
+  after both returned.  Fixed by adding `ewr_mutex_` (serialises callers of
+  `evaluate_with_reason` only; concurrent `evaluate()` calls are unaffected).
+
 ### Added (Cycle 8 — 2026-03-21)
 - Startup banner now shows `BACKTEST: cooldown disabled` when `--backtest` is active, matching
   the existing `DRY-RUN` display so operators can see mode at a glance.

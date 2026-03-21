@@ -155,6 +155,12 @@ public:
      * Identical logic to evaluate(), but also populates a human-readable
      * reason string on rejection.  The reason is empty on pass.
      *
+     * Thread safety: individual calls are thread-safe.  Concurrent calls from
+     * multiple threads are serialized internally so that the temporary callback
+     * swap used to capture the rejection reason is never visible to another
+     * caller.  Concurrent calls to evaluate() (the non-reason variant) proceed
+     * without being blocked by this serialization.
+     *
      * @param signal The TradeSignal to evaluate.
      * @param reason Output parameter: populated with the rejection reason on failure,
      *               cleared on pass.
@@ -644,6 +650,9 @@ private:
     MetricsLogger* logger_{nullptr};
     PositionState position_;
     mutable std::mutex mutex_;
+    /// Serialises concurrent calls to evaluate_with_reason() to prevent
+    /// the temporary callback-swap from racing between callers.
+    mutable std::mutex ewr_mutex_;
 
     // Rate limiting.
     std::chrono::high_resolution_clock::time_point rate_window_start_;
