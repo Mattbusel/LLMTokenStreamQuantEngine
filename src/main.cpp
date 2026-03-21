@@ -506,6 +506,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  MODE    : SIMULATOR  (in-memory token loop)\n";
         std::cout << "  INTERVAL: " << sys_config.token_stream.token_interval_ms << "ms/token\n";
     }
+    std::cout << "  OMS     : " << oms_adapter->description() << "\n";
     std::cout << "  LATENCY : target p99 < " << sys_config.latency.target_latency_us << "us\n";
     if (dry_run)
         std::cout << "  DRY-RUN : signals suppressed — dictionary coverage mode\n";
@@ -600,14 +601,10 @@ int main(int argc, char* argv[]) {
             (pressure.composite < 0.5) ? C("\033[32m") :
             (pressure.composite < 0.8) ? C("\033[33m") : C("\033[31m");
 
-        uint64_t tokens_total_local;
-        {
-            std::lock_guard<std::mutex> lk(variance_mutex);
-            tokens_total_local = variance_n;
-        }
-        uint64_t tokens_total = stream_mode
-                                    ? tokens_total_local
-                                    : token_sim.get_stats().tokens_emitted.load();
+        // Use the LLMAdapter's own token counter for the stats bar — variance_n
+        // is reset every 60 seconds (Welford reset) and would undercount after
+        // the first reset interval.
+        uint64_t tokens_total = llm_adapter.get_stats().tokens_processed;
 
         // Saturating addition for the BLOCK counter — prevent silent wrap-around.
         const auto& rs = risk_mgr.get_stats();
@@ -703,6 +700,8 @@ int main(int argc, char* argv[]) {
                  << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->update_count();
+                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
+                            return fix->update_count();
                         return 0;
                     }() << "\n"
                  << "# HELP llmquant_oms_error_count_total Total OMS connection errors\n"
@@ -710,6 +709,15 @@ int main(int argc, char* argv[]) {
                  << "llmquant_oms_error_count_total " << [&]() -> uint64_t {
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->error_count();
+                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
+                            return fix->error_count();
+                        return 0;
+                    }() << "\n"
+                 << "# HELP llmquant_oms_reconnect_count_total Total FIX session reconnect attempts\n"
+                 << "# TYPE llmquant_oms_reconnect_count_total counter\n"
+                 << "llmquant_oms_reconnect_count_total " << [&]() -> uint64_t {
+                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
+                            return fix->get_reconnect_count();
                         return 0;
                     }() << "\n"
                  << "# HELP llmquant_dedup_novel_total Tokens processed as novel (not seen in TTL window)\n"
@@ -927,12 +935,8 @@ int main(int argc, char* argv[]) {
     std::cout << "\n\n  =========================================================\n";
     std::cout << "  SESSION SUMMARY\n";
     std::cout << "  ---------------------------------------------------------\n";
-    uint64_t final_variance_n;
-    {
-        std::lock_guard<std::mutex> lk(variance_mutex);
-        final_variance_n = variance_n;
-    }
-    std::cout << "  Tokens processed : " << final_variance_n << "\n";
+    // Use LLMAdapter's cumulative counter — variance_n resets every 60 s.
+    std::cout << "  Tokens processed : " << llm_adapter.get_stats().tokens_processed << "\n";
     std::cout << "  Signals emitted  : " << trade_engine.get_stats().signals_generated.load() << "\n";
     {
         const auto& frs = risk_mgr.get_stats();
@@ -990,6 +994,17 @@ int main(int argc, char* argv[]) {
         std::cout << "  Uptime           : " << uptime_s << "s\n";
     }
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
+    {
+        std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
+        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get())) {
+            std::cout << "  OMS updates      : " << rest->update_count()
+                      << "  errors=" << rest->error_count() << "\n";
+        } else if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get())) {
+            std::cout << "  OMS updates      : " << fix->update_count()
+                      << "  errors=" << fix->error_count()
+                      << "  reconnects=" << fix->get_reconnect_count() << "\n";
+        }
+    }
     {
         auto top = llm_adapter.top_tokens_by_frequency(5);
         if (!top.empty()) {
