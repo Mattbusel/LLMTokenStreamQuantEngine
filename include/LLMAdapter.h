@@ -454,6 +454,26 @@ public:
         top_tokens_by_directional_bias(size_t n = 10) const;
 
     /**
+     * @brief Return the top N tokens by a composite influence score.
+     *
+     * The composite score blends normalised hit-frequency with absolute
+     * directional_bias:
+     *   score = 0.5 * (hit_count / max_hit_count) + 0.5 * |directional_bias|
+     *
+     * Tokens with a high score are both frequently encountered AND strongly
+     * directional, making them the most impactful tokens in the current run.
+     * Useful for debugging runaway bias or prioritising dictionary tuning.
+     *
+     * If the dictionary is empty or all hit-counts are zero the frequency
+     * component is treated as 0 for every token.
+     *
+     * @param n Maximum number of tokens to return (default: 10).
+     * @return Vector of (token, composite_score) sorted descending by score.
+     */
+    std::vector<std::pair<std::string, double>>
+        export_hot_tokens(size_t n = 10) const;
+
+    /**
      * @brief Return a snapshot of internal processing statistics.
      *
      * @return Struct with tokens_processed, cache_hits and cache_misses counts.

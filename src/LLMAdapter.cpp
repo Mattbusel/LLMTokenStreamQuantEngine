@@ -850,4 +850,37 @@ LLMAdapter::top_tokens_by_directional_bias(size_t n) const {
     return result;
 }
 
+std::vector<std::pair<std::string, double>>
+LLMAdapter::export_hot_tokens(size_t n) const {
+    // Compute max hit count for frequency normalisation.
+    uint64_t max_hits = 0;
+    for (const auto& [tok, ctr] : token_hit_counts_) {
+        uint64_t v = ctr->load(std::memory_order_relaxed);
+        if (v > max_hits) max_hits = v;
+    }
+
+    std::vector<std::pair<std::string, double>> result;
+    result.reserve(token_weights_.size());
+    for (const auto& [tok, weight] : token_weights_) {
+        double freq_norm = 0.0;
+        if (max_hits > 0) {
+            auto it = token_hit_counts_.find(tok);
+            if (it != token_hit_counts_.end()) {
+                freq_norm = static_cast<double>(it->second->load(std::memory_order_relaxed))
+                            / static_cast<double>(max_hits);
+            }
+        }
+        double score = 0.5 * freq_norm + 0.5 * std::abs(weight.directional_bias);
+        result.emplace_back(tok, score);
+    }
+
+    size_t take = std::min(n, result.size());
+    std::partial_sort(result.begin(),
+                      result.begin() + static_cast<std::ptrdiff_t>(take),
+                      result.end(),
+                      [](const auto& a, const auto& b) { return a.second > b.second; });
+    result.resize(take);
+    return result;
+}
+
 } // namespace llmquant

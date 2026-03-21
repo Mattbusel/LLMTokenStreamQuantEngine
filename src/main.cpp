@@ -1103,14 +1103,6 @@ int main(int argc, char* argv[]) {
                         uint64_t tot = nov + dup;
                         return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
                     }() << "\n";
-            {
-                double q_ema = trade_engine.get_signal_quality_ema();
-                if (q_ema >= 0.0) {
-                    snap << "# HELP llmquant_signal_quality_ema Exponential moving average of signal quality (alpha=0.1) in [0,1]\n"
-                         << "# TYPE llmquant_signal_quality_ema gauge\n"
-                         << "llmquant_signal_quality_ema " << std::setprecision(4) << q_ema << "\n";
-                }
-            }
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
