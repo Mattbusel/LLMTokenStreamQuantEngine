@@ -54,6 +54,57 @@ static uint64_t get_process_rss_bytes() {
 #endif
 }
 
+/// @brief Returns process CPU usage as a fraction [0.0, N_cores] since last call.
+///        Returns 0.0 if unavailable.  Not async-signal-safe; call from monitoring thread only.
+static double get_process_cpu_fraction() {
+#ifdef _WIN32
+    static FILETIME prev_kernel{}, prev_user{}, prev_wall{};
+    FILETIME creation, exit_ft, kernel, user;
+    if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit_ft, &kernel, &user))
+        return 0.0;
+    FILETIME now_ft;
+    GetSystemTimeAsFileTime(&now_ft);
+    auto to_u64 = [](FILETIME ft) -> uint64_t {
+        return (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    };
+    uint64_t k = to_u64(kernel), u = to_u64(user), w = to_u64(now_ft);
+    uint64_t dk = k - to_u64(prev_kernel);
+    uint64_t du = u - to_u64(prev_user);
+    uint64_t dw = w - to_u64(prev_wall);
+    prev_kernel = kernel; prev_user = user; prev_wall = now_ft;
+    if (dw == 0) return 0.0;
+    return static_cast<double>(dk + du) / static_cast<double>(dw);
+#else
+    // Linux: read /proc/self/stat fields utime+stime (jiffies), compare with wall clock.
+    static uint64_t prev_cpu_jiffies = 0;
+    static std::chrono::steady_clock::time_point prev_tp = std::chrono::steady_clock::now();
+    std::ifstream f("/proc/self/stat");
+    if (!f.is_open()) return 0.0;
+    std::string stat_line;
+    std::getline(f, stat_line);
+    // Fields 14 and 15 (1-indexed) are utime and stime; skip past the comm field.
+    auto rp = stat_line.rfind(')');
+    if (rp == std::string::npos) return 0.0;
+    std::istringstream iss(stat_line.substr(rp + 2));
+    uint64_t utime = 0, stime = 0;
+    std::string tok;
+    for (int i = 3; i <= 15; ++i) {
+        iss >> tok;
+        if (i == 14) utime = std::stoull(tok);
+        if (i == 15) stime = std::stoull(tok);
+    }
+    uint64_t cpu_jiffies = utime + stime;
+    auto now = std::chrono::steady_clock::now();
+    double elapsed_s = std::chrono::duration<double>(now - prev_tp).count();
+    double delta_jiffies = static_cast<double>(cpu_jiffies - prev_cpu_jiffies);
+    prev_cpu_jiffies = cpu_jiffies;
+    prev_tp = now;
+    if (elapsed_s <= 0.0) return 0.0;
+    long hz = sysconf(_SC_CLK_TCK);
+    return delta_jiffies / (elapsed_s * static_cast<double>(hz > 0 ? hz : 100));
+#endif
+}
+
 std::atomic<bool> g_running{true};
 
 void signal_handler(int /*signal*/) {
@@ -1030,7 +1081,7 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_avg_signal_quality Welford running mean of signal_quality [0,1]\n"
                  << "# TYPE llmquant_avg_signal_quality gauge\n"
                  << "llmquant_avg_signal_quality " << std::setprecision(6) << eng_stats.avg_signal_quality.load() << "\n"
-                 << "# HELP llmquant_signal_quality_ema EMA(alpha=0.1) of signal_quality; -1 = no signals yet\n"
+                 << "# HELP llmquant_signal_quality_ema EMA of signal_quality (alpha=0.1); -1=no signals yet\n"
                  << "# TYPE llmquant_signal_quality_ema gauge\n"
                  << "llmquant_signal_quality_ema " << std::setprecision(6) << trade_engine.get_signal_quality_ema() << "\n"
                  << "# HELP llmquant_dedup_duplicate_rate Fraction of checked tokens that were duplicates [0,1]\n"
@@ -1126,7 +1177,7 @@ int main(int argc, char* argv[]) {
             }
         }
         // Log system resource usage once per second (memory RSS; CPU unavailable cross-platform).
-        logger.log_system_stats(get_process_rss_bytes(), 0.0);
+        logger.log_system_stats(get_process_rss_bytes(), get_process_cpu_fraction());
 
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {

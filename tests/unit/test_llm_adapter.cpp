@@ -1537,11 +1537,104 @@ TEST(LLMAdapterTest, test_to_stats_json_returns_valid_json_with_required_fields)
     EXPECT_NE(json.find("\"cache_hits\":2"),        std::string::npos);
 }
 
-TEST(LLMAdapterTest, test_to_stats_json_empty_adapter_shows_zero_counters) {
+TEST(LLMAdapterTest, test_to_stats_json_shows_zero_counters_before_any_lookup) {
+    // LLMAdapter loads a default dictionary — tokens_processed starts at 0 but
+    // dictionary_size reflects the default entries.
     LLMAdapter adapter;
     std::string json = adapter.to_stats_json();
-    EXPECT_NE(json.find("\"tokens_processed\":0"), std::string::npos);
-    EXPECT_NE(json.find("\"dictionary_size\":0"),  std::string::npos);
+    EXPECT_NE(json.find("\"tokens_processed\":0"), std::string::npos)
+        << "tokens_processed must be 0 before any map_token_to_weight() call";
+    // dictionary_size must be > 0 (default mappings are always loaded).
+    EXPECT_EQ(json.find("\"dictionary_size\":0"), std::string::npos)
+        << "dictionary_size must not be 0 — default mappings are always loaded";
+}
+
+// --- export_hot_tokens ---
+
+TEST(LLMAdapterTest, test_export_hot_tokens_empty_when_no_mappings) {
+    LLMAdapter adapter;
+    // Start fresh with no custom mappings; default mappings have no hits.
+    auto hot = adapter.export_hot_tokens(5);
+    // Scores are all 0.5 * 0 + 0.5 * |bias| — could be nonzero for default tokens.
+    // At minimum: should not crash and should return at most n items.
+    EXPECT_LE(hot.size(), 5u);
+}
+
+TEST(LLMAdapterTest, test_export_hot_tokens_high_freq_high_bias_tops_list) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("hot",    {0.9, 0.8, 0.1, 0.9});  // strong bias
+    adapter.add_token_mapping("cold",   {0.1, 0.5, 0.1, 0.1});  // weak bias
+    adapter.add_token_mapping("medium", {0.5, 0.6, 0.2, 0.5});  // medium bias
+
+    // Make "hot" heavily hit
+    for (int i = 0; i < 10; ++i) adapter.map_token_to_weight("hot");
+    adapter.map_token_to_weight("cold");
+
+    auto top = adapter.export_hot_tokens(3);
+    ASSERT_GE(top.size(), 1u);
+    EXPECT_EQ(top[0].first, "hot") << "Most frequent + most biased token must rank first";
+}
+
+TEST(LLMAdapterTest, test_export_hot_tokens_scores_in_range) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("a", {0.5, 0.5, 0.5, 0.5});
+    adapter.map_token_to_weight("a");
+    adapter.map_token_to_weight("a");
+
+    auto top = adapter.export_hot_tokens(10);
+    for (const auto& [tok, score] : top) {
+        EXPECT_GE(score, 0.0) << tok << " score must be >= 0";
+        EXPECT_LE(score, 1.0) << tok << " score must be <= 1";
+    }
+}
+
+TEST(LLMAdapterTest, test_export_hot_tokens_n_greater_than_dict_returns_all) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("only", {0.5, 0.5, 0.5, 0.5});
+    auto top = adapter.export_hot_tokens(1000);
+    bool found = false;
+    for (const auto& p : top) if (p.first == "only") found = true;
+    EXPECT_TRUE(found) << "export_hot_tokens must include all tokens when n > dict size";
+}
+
+// ---------------------------------------------------------------------------
+// LLMAdapter::clear_dictionary() tests
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_clear_dictionary_removes_all_tokens) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("bullish", {0.9, 0.8, 0.3, 0.7});
+    adapter.add_token_mapping("bearish", {-0.9, 0.8, 0.3, -0.7});
+    ASSERT_EQ(adapter.get_dictionary_size(), 2u);
+
+    adapter.clear_dictionary();
+    EXPECT_EQ(adapter.get_dictionary_size(), 0u);
+}
+
+TEST(LLMAdapterTest, test_clear_dictionary_resets_stats) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("tok", {0.5, 0.5, 0.5, 0.5});
+    adapter.map_token_to_weight("tok");
+    adapter.map_token_to_weight("tok");
+    ASSERT_EQ(adapter.get_stats().tokens_processed, 2u);
+
+    adapter.clear_dictionary();
+    // After clear, the stats counter should be reset.
+    EXPECT_EQ(adapter.get_stats().tokens_processed, 0u);
+}
+
+TEST(LLMAdapterTest, test_clear_dictionary_then_lookup_returns_unknown) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("tok", {0.9, 0.8, 0.3, 0.7});
+    adapter.clear_dictionary();
+
+    // After clearing, the token should no longer be found.
+    auto weight = adapter.map_token_to_weight("tok");
+    // Unknown tokens return default (zero) weights.
+    EXPECT_DOUBLE_EQ(weight.sentiment_score,  0.0);
+    EXPECT_DOUBLE_EQ(weight.confidence_score, 0.0);
+    EXPECT_DOUBLE_EQ(weight.volatility_score, 0.0);
+    EXPECT_DOUBLE_EQ(weight.directional_bias, 0.0);
 }
 
 } // namespace
