@@ -535,6 +535,15 @@ std::vector<std::string> Config::validate() const {
         errors.emplace_back("risk_thresholds.drawdown_window_s must be > 0");
     if (!std::isfinite(rt.position_warn_fraction) || rt.position_warn_fraction < 0.0 || rt.position_warn_fraction > 1.0)
         errors.emplace_back("risk_thresholds.position_warn_fraction must be in [0, 1]");
+    const auto& sw = snap.semantic_weights;
+    if (!std::isfinite(sw.sentiment_multiplier))
+        errors.emplace_back("semantic_weights.sentiment_multiplier must be a finite number");
+    if (!std::isfinite(sw.confidence_multiplier))
+        errors.emplace_back("semantic_weights.confidence_multiplier must be a finite number");
+    if (!std::isfinite(sw.volatility_multiplier))
+        errors.emplace_back("semantic_weights.volatility_multiplier must be a finite number");
+    if (!std::isfinite(sw.bias_multiplier))
+        errors.emplace_back("semantic_weights.bias_multiplier must be a finite number");
     return errors;
 }
 
@@ -566,7 +575,11 @@ std::string Config::to_summary_string() const {
        << "  flush_ms=" << config_.logging.flush_interval_ms << "\n"
        << "[stream]   interval_ms=" << config_.token_stream.token_interval_ms
        << "  buffer=" << config_.token_stream.buffer_size
-       << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false") << "\n";
+       << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false") << "\n"
+       << "[sem_wts]  sentiment=" << config_.semantic_weights.sentiment_multiplier
+       << "  confidence=" << config_.semantic_weights.confidence_multiplier
+       << "  volatility=" << config_.semantic_weights.volatility_multiplier
+       << "  bias=" << config_.semantic_weights.bias_multiplier << "\n";
     return ss.str();
 }
 

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
 #include <cstdio>
 #include <cstdint>
 #include <functional>
@@ -70,6 +71,33 @@ struct TradeSignal {
             delta_bias_shift, volatility_adjustment, spread_modifier,
             confidence, signal_quality, latency_us,
             strategy_toggle, strategy_weight);
+        return buf;
+    }
+
+    /**
+     * @brief Return the signal as a compact JSON object string.
+     *
+     * All floating-point fields use 6 decimal places.  The timestamp is
+     * serialised as a 64-bit integer (nanoseconds since Unix epoch).
+     *
+     * @return Single-line JSON string, no trailing newline.
+     */
+    std::string to_json() const {
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+            "{\"timestamp_ns\":%" PRIu64
+            ",\"delta_bias_shift\":%.6f"
+            ",\"volatility_adjustment\":%.6f"
+            ",\"spread_modifier\":%.6f"
+            ",\"confidence\":%.6f"
+            ",\"latency_us\":%.6f"
+            ",\"strategy_toggle\":%d"
+            ",\"strategy_weight\":%.6f"
+            ",\"signal_quality\":%.6f}",
+            timestamp_ns,
+            delta_bias_shift, volatility_adjustment, spread_modifier,
+            confidence, latency_us, strategy_toggle,
+            strategy_weight, signal_quality);
         return buf;
     }
 };

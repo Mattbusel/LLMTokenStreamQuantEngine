@@ -9,6 +9,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 10 — 2026-03-21)
+- `Config::validate()` now checks all four `SemanticWeightsConfig` multipliers for
+  finiteness (rejects NaN / ±Inf).  Previously a corrupted YAML could inject NaN
+  into every SemanticWeight field without any error or warning.
+- `Config::to_summary_string()` now includes the `[sem_wts]` line showing the
+  four active multiplier values, making the config dump self-documenting.
+- `test_concurrent_evaluate_with_reason_no_crash` — new multi-threaded test
+  (8 threads × 200 iterations) that exercises `evaluate_with_reason()` concurrently
+  with mixed passing/blocking signals to verify `ewr_mutex_` eliminates the
+  callback use-after-free race introduced in v1.2.0.
+
 ### Added (Cycle 11 — 2026-03-21)
 - Prometheus: `llmquant_oms_update_count_total` and `llmquant_oms_error_count_total` now also
   cover `FixOmsAdapter` sessions — previously the `dynamic_cast` only checked `RestOmsAdapter`

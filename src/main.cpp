@@ -51,6 +51,8 @@ int main(int argc, char* argv[]) {
     bool        dry_run        = false;
     bool        backtest_mode  = false;
     bool        list_tokens    = false;
+    bool        dump_config    = false;
+    bool        quiet          = false;
     std::string oms_address;
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
@@ -74,6 +76,8 @@ int main(int argc, char* argv[]) {
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
                 "  --list-tokens     Print the full semantic dictionary and exit\n"
+                "  --dump-config     Print effective configuration and exit\n"
+                "  --quiet           Suppress console signal/stats output (log-file only)\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
                 "\n"
@@ -96,6 +100,10 @@ int main(int argc, char* argv[]) {
             debug_raw = true;
         } else if (arg == "--list-tokens") {
             list_tokens = true;
+        } else if (arg == "--dump-config") {
+            dump_config = true;
+        } else if (arg == "--quiet") {
+            quiet = true;
         } else if (arg == "--dry-run") {
             dry_run = true;
         } else if (arg == "--backtest") {
@@ -175,6 +183,44 @@ int main(int argc, char* argv[]) {
     }
 
     const auto& sys_config = config.get_config();
+
+    // --dump-config: print effective configuration and exit.
+    if (dump_config) {
+        const auto& ts  = sys_config.token_stream;
+        const auto& tr  = sys_config.trading;
+        const auto& lat = sys_config.latency;
+        const auto& log = sys_config.logging;
+        const auto& met = sys_config.metrics;
+        const auto& rt  = sys_config.risk_thresholds;
+        std::cout << "# Effective configuration loaded from: " << config_file << "\n"
+                  << "token_stream.use_memory_stream:       " << (ts.use_memory_stream ? "true" : "false") << "\n"
+                  << "token_stream.token_interval_ms:       " << ts.token_interval_ms << "\n"
+                  << "token_stream.buffer_size:             " << ts.buffer_size << "\n"
+                  << "token_stream.data_file_path:          " << ts.data_file_path << "\n"
+                  << "trading.bias_sensitivity:             " << tr.bias_sensitivity << "\n"
+                  << "trading.volatility_sensitivity:       " << tr.volatility_sensitivity << "\n"
+                  << "trading.signal_decay_rate:            " << tr.signal_decay_rate << "\n"
+                  << "trading.signal_cooldown_us:           " << tr.signal_cooldown_us << "\n"
+                  << "trading.max_signal_age_us:            " << tr.max_signal_age_us << "\n"
+                  << "trading.min_bias_threshold:           " << tr.min_bias_threshold << "\n"
+                  << "trading.max_accumulated_bias:         " << tr.max_accumulated_bias << "\n"
+                  << "latency.target_latency_us:            " << lat.target_latency_us << "\n"
+                  << "latency.sample_window:                " << lat.sample_window << "\n"
+                  << "latency.enable_profiling:             " << (lat.enable_profiling ? "true" : "false") << "\n"
+                  << "logging.log_file_path:                " << log.log_file_path << "\n"
+                  << "logging.format:                       " << log.format << "\n"
+                  << "logging.enable_console:               " << (log.enable_console ? "true" : "false") << "\n"
+                  << "logging.flush_interval_ms:            " << log.flush_interval_ms << "\n"
+                  << "metrics.stats_port:                   " << met.stats_port << "\n"
+                  << "metrics.bind_address:                 " << met.bind_address << "\n"
+                  << "risk_thresholds.max_bias_magnitude:   " << rt.max_bias_magnitude << "\n"
+                  << "risk_thresholds.max_volatility_magnitude: " << rt.max_volatility_magnitude << "\n"
+                  << "risk_thresholds.min_confidence:       " << rt.min_confidence << "\n"
+                  << "risk_thresholds.max_signals_per_second: " << rt.max_signals_per_second << "\n"
+                  << "risk_thresholds.max_drawdown:         " << rt.max_drawdown << "\n"
+                  << "risk_thresholds.drawdown_window_s:    " << rt.drawdown_window_s << "\n";
+        return 0;
+    }
 
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
     auto dedup_backend = std::make_shared<llmquant::InProcessDeduplicator>();
@@ -447,14 +493,17 @@ int main(int argc, char* argv[]) {
         }
 
         // Aligned columns: TIME(ms)  BIAS     VOL      LATENCY  GATE
-        std::cout << "\n  "
-                  << std::setw(12) << ts_ms          << "  "
-                  << std::setw(8)  << std::fixed << std::setprecision(4)
-                                   << signal.delta_bias_shift  << "  "
-                  << std::setw(8)  << signal.volatility_adjustment << "  "
-                  << std::setw(6)  << latency_us << "μs"
-                  << gate_str
-                  << std::flush;
+        // Suppressed in --quiet mode; all data still flows to MetricsLogger.
+        if (!quiet) {
+            std::cout << "\n  "
+                      << std::setw(12) << ts_ms          << "  "
+                      << std::setw(8)  << std::fixed << std::setprecision(4)
+                                       << signal.delta_bias_shift  << "  "
+                      << std::setw(8)  << signal.volatility_adjustment << "  "
+                      << std::setw(6)  << latency_us << "μs"
+                      << gate_str
+                      << std::flush;
+        }
 
         if (passed) {
             logger.log_signal_generated(

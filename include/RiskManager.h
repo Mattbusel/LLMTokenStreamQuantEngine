@@ -637,6 +637,41 @@ public:
              / static_cast<double>(total);
     }
 
+    /**
+     * @brief Return the name of the gate that has blocked the most signals.
+     *
+     * Compares per-gate block counters atomically and returns the name of the
+     * gate with the highest count.  If no signals have been blocked yet, or if
+     * all gates have equal zero counts, returns "none".
+     *
+     * Useful for operator dashboards and automated alerts: a single call
+     * identifies which constraint is the most binding bottleneck.
+     *
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return One of "magnitude", "confidence", "rate", "drawdown",
+     *         "position", or "none".
+     */
+    std::string get_most_blocked_gate() const noexcept {
+        uint64_t mag  = stats_.signals_blocked_magnitude.load(std::memory_order_relaxed);
+        uint64_t conf = stats_.signals_blocked_confidence.load(std::memory_order_relaxed);
+        uint64_t rate = stats_.signals_blocked_rate.load(std::memory_order_relaxed);
+        uint64_t dd   = stats_.signals_blocked_drawdown.load(std::memory_order_relaxed);
+        uint64_t pos  = stats_.signals_blocked_position.load(std::memory_order_relaxed);
+
+        uint64_t best = 0;
+        std::string name = "none";
+        auto update = [&](uint64_t v, const char* n) {
+            if (v > best) { best = v; name = n; }
+        };
+        update(mag,  "magnitude");
+        update(conf, "confidence");
+        update(rate, "rate");
+        update(dd,   "drawdown");
+        update(pos,  "position");
+        return name;
+    }
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);

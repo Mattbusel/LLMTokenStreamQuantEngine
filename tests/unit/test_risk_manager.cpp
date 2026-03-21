@@ -1540,3 +1540,51 @@ TEST(RiskManagerTest, test_get_confidence_block_rate_rises_after_low_confidence_
     EXPECT_GT(rm.get_confidence_block_rate(), 0.0);
     EXPECT_LE(rm.get_confidence_block_rate(), 1.0);
 }
+
+// Concurrent evaluate_with_reason — verifies ewr_mutex_ prevents callback
+// use-after-free when multiple threads call evaluate_with_reason() simultaneously.
+TEST(RiskManagerTest, test_concurrent_evaluate_with_reason_no_crash) {
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;  // disable rate gate so threads don't block each other
+    RiskManager rm(cfg);
+
+    // Register a no-op alert callback so the internal callback-swap path is exercised.
+    rm.set_alert_callback([](const std::string&, const TradeSignal&) {});
+
+    TradeSignal passing_sig;
+    passing_sig.delta_bias_shift      = 0.1;
+    passing_sig.volatility_adjustment = 0.05;
+    passing_sig.spread_modifier       = 0.01;
+    passing_sig.confidence            = 0.8;
+
+    TradeSignal blocking_sig;
+    blocking_sig.delta_bias_shift      = 99.0;  // exceeds max_bias_magnitude=2
+    blocking_sig.volatility_adjustment = 0.0;
+    blocking_sig.spread_modifier       = 0.0;
+    blocking_sig.confidence            = 0.8;
+
+    constexpr int N_THREADS = 8;
+    constexpr int N_ITERS   = 200;
+    std::vector<std::thread> threads;
+    threads.reserve(N_THREADS);
+
+    for (int t = 0; t < N_THREADS; ++t) {
+        threads.emplace_back([&, t]() {
+            for (int i = 0; i < N_ITERS; ++i) {
+                std::string reason;
+                // Alternate between passing and blocking signals across threads.
+                bool result = rm.evaluate_with_reason(
+                    (t % 2 == 0) ? passing_sig : blocking_sig, reason);
+                if (t % 2 != 0) {
+                    // Blocking thread: result must be false and reason non-empty.
+                    EXPECT_FALSE(result);
+                    EXPECT_FALSE(reason.empty());
+                }
+            }
+        });
+    }
+
+    for (auto& th : threads) th.join();
+    // If ewr_mutex_ is working, no crash / sanitizer report occurs.
+    SUCCEED();
+}
