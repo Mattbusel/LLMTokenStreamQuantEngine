@@ -678,7 +678,7 @@ public:
      *
      * @return Maximum |accumulated_bias| observed since last reset, in signal units.
      */
-    double get_peak_bias() const noexcept {
+    [[nodiscard]] double get_peak_bias() const noexcept {
         return stats_.peak_bias.load(std::memory_order_relaxed);
     }
 
@@ -693,7 +693,7 @@ public:
      *
      * @return Accumulator clamp rate in [0.0, 1.0].
      */
-    double get_accumulator_clamp_rate() const noexcept {
+    [[nodiscard]] double get_accumulator_clamp_rate() const noexcept {
         uint64_t total   = stats_.tokens_processed.load(std::memory_order_relaxed);
         uint64_t clamped = stats_.accumulator_clamped.load(std::memory_order_relaxed);
         return (total == 0) ? 0.0 : static_cast<double>(clamped) / static_cast<double>(total);
@@ -707,7 +707,7 @@ public:
      *
      * @return Elapsed session duration in milliseconds.
      */
-    double get_session_duration_ms() const noexcept;
+    [[nodiscard]] double get_session_duration_ms() const noexcept;
 
     /**
      * @brief Return the time elapsed since the last signal emission in microseconds.
@@ -719,7 +719,7 @@ public:
      *
      * @return Microseconds since last signal emission.
      */
-    double get_time_since_last_signal_us() const noexcept;
+    [[nodiscard]] double get_time_since_last_signal_us() const noexcept;
 
     /**
      * @brief Return true if the engine is currently within the cooldown window.
@@ -730,7 +730,7 @@ public:
      *
      * @return true if a new signal would be rate-limited by the cooldown.
      */
-    bool is_in_cooldown() const noexcept;
+    [[nodiscard]] bool is_in_cooldown() const noexcept;
 
     /**
      * @brief Flush all registered output sinks.
@@ -751,7 +751,7 @@ public:
      *
      * @return Single-line stats summary string.
      */
-    std::string format_stats() const;
+    [[nodiscard]] std::string format_stats() const;
 
     /**
      * @brief Serialise the current engine statistics to a JSON string.
@@ -763,7 +763,7 @@ public:
      *
      * @return JSON object as std::string.
      */
-    std::string to_stats_json() const noexcept {
+    [[nodiscard]] std::string to_stats_json() const noexcept {
         const Stats s = get_stats();
         char buf[768];
         std::snprintf(buf, sizeof(buf),
@@ -821,7 +821,7 @@ public:
      *
      * @return Snapshot of all current TradeSignalEngine state.
      */
-    Snapshot snapshot() const noexcept;
+    [[nodiscard]] Snapshot snapshot() const noexcept;
 
 private:
     bool should_emit_signal() const;

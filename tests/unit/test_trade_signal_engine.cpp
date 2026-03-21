@@ -1566,6 +1566,31 @@ TEST(TradeSignalEngineTest, test_format_stats_no_data_returns_early) {
         << "format_stats must return early message when no tokens processed";
 }
 
+TEST(TradeSignalEngineTest, test_format_stats_contains_quality_ema_field) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
+
+    std::string stats = engine.format_stats();
+    EXPECT_NE(stats.find("quality_ema="), std::string::npos)
+        << "format_stats must include quality_ema field after a signal is emitted";
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_quality_ema_sentinel_before_signals) {
+    TradeSignalEngine engine(make_config());
+    // Process a token that is below the noise gate so no signal is emitted,
+    // meaning quality_ema stays at the -1 sentinel.
+    engine.set_backtest_mode(true);
+    engine.set_min_bias_threshold(999.0); // impossibly high threshold
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.01, 0.01, 0.01, 0.01});
+
+    std::string stats = engine.format_stats();
+    EXPECT_NE(stats.find("quality_ema=-1"), std::string::npos)
+        << "format_stats must show quality_ema=-1 when no signal has been emitted";
+}
+
 // --- signal quality EMA ---
 
 TEST(TradeSignalEngineTest, test_signal_quality_ema_initial_is_minus_one) {
