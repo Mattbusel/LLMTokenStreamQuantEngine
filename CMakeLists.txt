@@ -152,7 +152,11 @@ endif()
 
 if(hiredis_FOUND OR HIREDIS_FOUND)
     target_compile_definitions(llmquant PUBLIC LLMQUANT_REDIS_ENABLED)
-    target_link_libraries(llmquant PUBLIC hiredis)
+    if(TARGET hiredis::hiredis)
+        target_link_libraries(llmquant PUBLIC hiredis::hiredis)
+    else()
+        target_link_libraries(llmquant PUBLIC hiredis)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

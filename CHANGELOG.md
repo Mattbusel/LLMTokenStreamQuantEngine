@@ -32,6 +32,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   YAML parsing, default values when the section is absent, and
   `to_yaml_string()` round-trip correctness for trading, semantic\_weights,
   and presence of all YAML sections.
+- Tests (`test_trade_signal_engine.cpp`): 3 new tests for `format_stats()`
+  quality histogram — verifies `quality_hist=[...]` field presence, 5-bucket
+  comma-separated structure, and early-return when no tokens processed.
+- Fixed unused-variable warning in `test_invariants.cpp` (`rm.evaluate` return
+  value now cast to `void`).
+- `CMakeLists.txt`: hiredis link target now falls back from the modern
+  `hiredis::hiredis` imported target to the legacy `hiredis` raw name, so the
+  build succeeds on both vcpkg/conan installs and manually built hiredis.
 
 ### Added (Cycle 18 — 2026-03-21)
 - `token_stream.dedup_ttl_ms` config field: configures the in-process deduplicator
