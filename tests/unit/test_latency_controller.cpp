@@ -1117,9 +1117,9 @@ TEST(LatencyControllerTest, test_record_batch_matches_individual_record_latency)
 
 TEST(LatencyControllerTest, test_to_stats_json_returns_valid_json_with_fields) {
     LatencyController lc(make_config());
-    lc.record(std::chrono::microseconds{5});
-    lc.record(std::chrono::microseconds{10});
-    lc.record(std::chrono::microseconds{15});
+    lc.record_latency(std::chrono::microseconds{5});
+    lc.record_latency(std::chrono::microseconds{10});
+    lc.record_latency(std::chrono::microseconds{15});
 
     std::string json = lc.to_stats_json();
     ASSERT_FALSE(json.empty());

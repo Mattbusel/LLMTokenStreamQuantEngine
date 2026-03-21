@@ -235,6 +235,19 @@ public:
     }
 
     /**
+     * @brief Override token_interval_ms at runtime (e.g. from a CLI flag).
+     *
+     * Values <= 0 are silently ignored. Thread-safe.
+     *
+     * @param ms New interval in milliseconds (must be >= 1).
+     */
+    void set_token_interval_ms(int ms) {
+        if (ms <= 0) return;
+        std::lock_guard<std::mutex> lk(config_mutex_);
+        config_.token_stream.token_interval_ms = ms;
+    }
+
+    /**
      * @brief Start watching the config file for changes and reload automatically.
      *
      * Spawns a background thread that polls the file's mtime every
@@ -309,6 +322,24 @@ public:
      * @return Number of environment variables successfully applied.
      */
     int load_from_env();
+
+    /**
+     * @brief Return a list of fields that differ from compiled-in defaults.
+     *
+     * Constructs a default-initialised SystemConfig and compares every field
+     * against the current configuration.  Each non-default field produces one
+     * human-readable entry of the form:
+     *   "<section>.<field> = <current_value>  (default: <default_value>)"
+     *
+     * Useful for startup diagnostics and for sanitising operator-supplied YAML
+     * before it enters production.  An empty return value means nothing differs
+     * from the compiled defaults.
+     *
+     * Thread-safe (acquires config_mutex_).
+     *
+     * @return Vector of diff strings; empty if configuration matches defaults.
+     */
+    [[nodiscard]] std::vector<std::string> diff_from_defaults() const;
 
     /**
      * @brief Validate the current configuration and return a list of error messages.

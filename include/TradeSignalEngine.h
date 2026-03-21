@@ -163,6 +163,40 @@ public:
     };
 
     /**
+     * @brief Breakdown of suppressed signals by suppression type.
+     *
+     * Provides fine-grained visibility into why TradeSignalEngine suppressed
+     * tokens before they were emitted.  The three named categories are mutually
+     * exclusive; @c total is the sum of all three plus any unrouted signals.
+     */
+    struct SuppressionBreakdown {
+        uint64_t noise_filtered{0};         ///< Suppressed by the min_bias_threshold noise gate.
+        uint64_t aged_out{0};               ///< Suppressed by the max_signal_age_us staleness guard.
+        uint64_t cooldown_suppressed{0};    ///< Skipped because signal_cooldown had not elapsed.
+        uint64_t total{0};                  ///< Total suppressed (noise + aged_out + cooldown + unrouted).
+    };
+
+    /**
+     * @brief Return a breakdown of suppressed signals by suppression type.
+     *
+     * Reads the relevant atomic counters from Stats and packages them into a
+     * SuppressionBreakdown for callers that need per-category visibility.
+     * Thread-safe (atomic loads with relaxed ordering).
+     *
+     * @return SuppressionBreakdown snapshot.
+     */
+    [[nodiscard]] SuppressionBreakdown get_suppression_breakdown() const noexcept {
+        SuppressionBreakdown bd;
+        bd.noise_filtered       = stats_.noise_filtered.load(std::memory_order_relaxed);
+        bd.aged_out             = stats_.signals_aged_out.load(std::memory_order_relaxed);
+        bd.cooldown_suppressed  = stats_.signals_suppressed_cooldown.load(std::memory_order_relaxed);
+        bd.total                = stats_.signals_suppressed.load(std::memory_order_relaxed)
+                                + bd.aged_out
+                                + bd.cooldown_suppressed;
+        return bd;
+    }
+
+    /**
      * @brief Return the distribution of emitted signal qualities in 5 fixed buckets.
      *
      * Bucket ranges: [0.0, 0.2), [0.2, 0.4), [0.4, 0.6), [0.6, 0.8), [0.8, 1.0].
@@ -211,6 +245,8 @@ public:
         /// Unlike signals_suppressed, this counter is NOT incremented for signals
         /// that were emitted but had no registered callback or sink.
         std::atomic<uint64_t> noise_filtered{0};
+        /// Tokens skipped because the signal cooldown had not yet elapsed.
+        std::atomic<uint64_t> signals_suppressed_cooldown{0};
         std::atomic<double>   avg_signal_strength{0.0};
         std::atomic<double>   peak_bias{0.0}; ///< Maximum |accumulated_bias| observed since last reset.
         /// Welford running mean of signal_quality across emitted signals.
@@ -235,6 +271,7 @@ public:
             , accumulator_clamped{other.accumulator_clamped.load()}
             , tokens_processed{other.tokens_processed.load()}
             , noise_filtered{other.noise_filtered.load()}
+            , signals_suppressed_cooldown{other.signals_suppressed_cooldown.load()}
             , avg_signal_strength{other.avg_signal_strength.load()}
             , peak_bias{other.peak_bias.load()}
             , avg_signal_quality{other.avg_signal_quality.load()}
@@ -254,6 +291,7 @@ public:
                 accumulator_clamped.store(other.accumulator_clamped.load());
                 tokens_processed.store(other.tokens_processed.load());
                 noise_filtered.store(other.noise_filtered.load());
+                signals_suppressed_cooldown.store(other.signals_suppressed_cooldown.load());
                 avg_signal_strength.store(other.avg_signal_strength.load());
                 peak_bias.store(other.peak_bias.load());
                 avg_signal_quality.store(other.avg_signal_quality.load());

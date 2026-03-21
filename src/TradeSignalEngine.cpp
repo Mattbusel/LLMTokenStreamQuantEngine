@@ -99,7 +99,13 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     }
 
     // Check if we should emit a signal
-    if (should_emit_signal()) {
+    if (!should_emit_signal()) {
+        if (stats_.signals_suppressed_cooldown.load(std::memory_order_relaxed)
+                < std::numeric_limits<uint64_t>::max() - 1)
+            stats_.signals_suppressed_cooldown.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    {
         TradeSignal signal;
         signal.delta_bias_shift = current_bias;
         signal.volatility_adjustment = current_vol;
@@ -304,6 +310,7 @@ void TradeSignalEngine::reset() noexcept {
     stats_.accumulator_clamped.store(0, std::memory_order_relaxed);
     stats_.tokens_processed.store(0, std::memory_order_relaxed);
     stats_.noise_filtered.store(0, std::memory_order_relaxed);
+    stats_.signals_suppressed_cooldown.store(0, std::memory_order_relaxed);
     stats_.avg_signal_strength.store(0.0, std::memory_order_relaxed);
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
     stats_.avg_signal_quality.store(0.0, std::memory_order_relaxed);
