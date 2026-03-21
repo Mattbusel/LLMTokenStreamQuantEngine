@@ -9,6 +9,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 12 — 2026-03-21)
+- `MetricsLogger::log_pipeline_health()` now called once per second from the monitoring loop,
+  persisting SLO health, breach rate, and backoff multiplier to the structured log file on
+  every tick — previously implemented but never invoked.
+- `MetricsLogger::log_config_reload()` now called from the hot-reload callback, capturing each
+  successful config reload as a timestamped structured log entry — previously implemented but
+  never invoked.
+- Session exit summary now prints `Log entries` total from `MetricsLogger::get_log_entry_count()`.
+- P99 SLO breach now emits `spdlog::warn` (in addition to the existing console colour print)
+  so the breach is captured in the structured log file and visible to any spdlog sink.
+
 ### Added (Cycle 11 — 2026-03-21)
 - `--dump-config` CLI flag: loads the config file (or defaults), prints all
   effective settings as `key: value` pairs, and exits with code 0. Useful for
