@@ -112,7 +112,7 @@ TEST(ConfigTest, test_config_save_to_file_roundtrip_preserves_values) {
     const std::string tmp_path = "/tmp/llmquant_test_config_roundtrip.yaml";
 
     Config original;
-    original.load_from_yaml_string(kValidYaml);
+    ASSERT_TRUE(original.load_from_yaml_string(kValidYaml));
     ASSERT_TRUE(original.save_to_file(tmp_path));
 
     Config reloaded;

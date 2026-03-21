@@ -175,7 +175,7 @@ TEST(Invariants, test_invariant_risk_manager_passed_plus_blocked_equals_total) {
 
     const uint64_t total_calls = static_cast<uint64_t>(signals.size());
     for (const auto& s : signals) {
-        rm.evaluate(s);
+        (void)rm.evaluate(s);
     }
 
     const auto& st = rm.get_stats();

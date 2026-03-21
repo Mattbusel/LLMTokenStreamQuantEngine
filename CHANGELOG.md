@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 18 — 2026-03-21)
+- `token_stream.dedup_ttl_ms` config field: configures the in-process deduplicator
+  TTL directly rather than deriving it from `token_interval_ms * 10`. Setting to
+  `0` (default) preserves the existing auto behaviour. Hot-reload compatible.
+  Added to `TokenStreamConfig` in `Config.h`, parsed in `Config.cpp`, and
+  documented in `config.yaml`.
+- Prometheus: `llmquant_version_info{version="x.y.z"} 1` gauge exposes the engine
+  version as a Prometheus info metric with a label, following the standard
+  pattern for version discovery in Grafana dashboards.
+- `.gitignore`: added `build_*/` (covers `build_vs/` and other non-default build
+  dirs), `.vs/`, `*.user`, `CMakeSettings.json`, `out/`, `.DS_Store`, and common
+  editor temp files (`*.swp`, `*.swo`, `*~`).
+
 ### Added (Cycle 17 — 2026-03-21)
 - Semantic weight multipliers are now **hot-reloadable**.  Four
   `std::atomic<double>` variables (`sem_mult_sentiment`, `sem_mult_confidence`,

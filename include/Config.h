@@ -23,6 +23,8 @@ struct TokenStreamConfig {
     size_t buffer_size{1024};
     /** @brief When true the simulator reads from an in-memory vector instead of disk. */
     bool use_memory_stream{false};
+    /** @brief TTL for the in-process deduplicator in milliseconds (0 = 10× token_interval_ms). */
+    int dedup_ttl_ms{0};
 };
 
 /**

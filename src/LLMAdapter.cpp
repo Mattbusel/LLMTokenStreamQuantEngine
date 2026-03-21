@@ -814,4 +814,32 @@ void LLMAdapter::reset_frequency_counts() {
     }
 }
 
+std::vector<std::pair<std::string, double>>
+LLMAdapter::filter_tokens_by_directional_bias(double min_bias, double max_bias) const {
+    std::vector<std::pair<std::string, double>> result;
+    for (const auto& [tok, weight] : token_weights_) {
+        if (weight.directional_bias >= min_bias && weight.directional_bias <= max_bias) {
+            result.emplace_back(tok, weight.directional_bias);
+        }
+    }
+    return result;
+}
+
+std::vector<std::pair<std::string, double>>
+LLMAdapter::top_tokens_by_directional_bias(size_t n) const {
+    std::vector<std::pair<std::string, double>> result;
+    result.reserve(token_weights_.size());
+    for (const auto& [tok, weight] : token_weights_)
+        result.emplace_back(tok, weight.directional_bias);
+    size_t take = std::min(n, result.size());
+    std::partial_sort(result.begin(),
+                      result.begin() + static_cast<std::ptrdiff_t>(take),
+                      result.end(),
+                      [](const auto& a, const auto& b) {
+                          return std::abs(a.second) > std::abs(b.second);
+                      });
+    result.resize(take);
+    return result;
+}
+
 } // namespace llmquant

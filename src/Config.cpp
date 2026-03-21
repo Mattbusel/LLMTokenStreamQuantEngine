@@ -36,6 +36,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (ts["token_interval_ms"]) tmp.token_stream.token_interval_ms = ts["token_interval_ms"].as<int>();
             if (ts["buffer_size"]) tmp.token_stream.buffer_size = ts["buffer_size"].as<size_t>();
             if (ts["use_memory_stream"]) tmp.token_stream.use_memory_stream = ts["use_memory_stream"].as<bool>();
+            if (ts["dedup_ttl_ms"]) tmp.token_stream.dedup_ttl_ms = ts["dedup_ttl_ms"].as<int>();
         }
 
         // Trading settings
@@ -255,6 +256,7 @@ bool Config::save_to_file(const std::string& filepath) const {
     yaml["token_stream"]["token_interval_ms"] = snap_cfg.token_stream.token_interval_ms;
     yaml["token_stream"]["buffer_size"] = snap_cfg.token_stream.buffer_size;
     yaml["token_stream"]["use_memory_stream"] = snap_cfg.token_stream.use_memory_stream;
+    yaml["token_stream"]["dedup_ttl_ms"] = snap_cfg.token_stream.dedup_ttl_ms;
 
     // Trading
     yaml["trading"]["bias_sensitivity"] = snap_cfg.trading.bias_sensitivity;

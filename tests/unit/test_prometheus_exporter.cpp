@@ -297,7 +297,7 @@ TEST(PrometheusExporterTest, test_scrape_count_zero_after_stop_without_scrape) {
     cfg.port = 19902;
     PrometheusExporter exporter(cfg);
     exporter.set_metrics_callback([] { return std::string("# no metrics\n"); });
-    exporter.start();
+    ASSERT_TRUE(exporter.start());
     exporter.stop();
     EXPECT_EQ(exporter.scrape_count(), 0u)
         << "scrape_count must be 0 when stopped before any client connected";

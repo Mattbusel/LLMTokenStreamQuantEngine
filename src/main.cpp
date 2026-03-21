@@ -237,8 +237,12 @@ int main(int argc, char* argv[]) {
 
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
     auto dedup_backend = std::make_shared<llmquant::InProcessDeduplicator>();
+    // Dedup TTL: use config value when set (> 0), else default to 10× the token interval.
+    int dedup_ttl_ms = (sys_config.token_stream.dedup_ttl_ms > 0)
+        ? sys_config.token_stream.dedup_ttl_ms
+        : sys_config.token_stream.token_interval_ms * 10;
     llmquant::Deduplicator deduplicator(dedup_backend,
-        std::chrono::milliseconds(sys_config.token_stream.token_interval_ms * 10));
+        std::chrono::milliseconds(dedup_ttl_ms));
     // Prevent unbounded memory growth: purge expired entries every 60 s.
     dedup_backend->start_background_purge(60);
 
@@ -901,6 +905,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_backtest_mode Whether the engine is running in backtest mode (1=yes)\n"
                  << "# TYPE llmquant_backtest_mode gauge\n"
                  << "llmquant_backtest_mode " << (backtest_mode ? 1 : 0) << "\n"
+                 << "# HELP llmquant_version_info Engine version info (always 1; use labels for version string)\n"
+                 << "# TYPE llmquant_version_info gauge\n"
+                 << "llmquant_version_info{version=\"" LLMQUANT_VERSION "\"} 1\n"
                  << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)

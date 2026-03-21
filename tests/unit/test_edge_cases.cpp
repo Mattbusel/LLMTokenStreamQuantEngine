@@ -320,14 +320,14 @@ TEST(EdgeCase_Config, load_from_yaml_string_empty_string_returns_false) {
     // An empty string is valid YAML (null node) but will fail range validation
     // because defaults will be loaded, not the empty-string values.
     // The call must not crash.
-    EXPECT_NO_THROW(cfg.load_from_yaml_string(""));
+    EXPECT_NO_THROW({ (void)cfg.load_from_yaml_string(""); });
 }
 
 TEST(EdgeCase_Config, load_from_yaml_string_numeric_only_is_invalid) {
     Config cfg;
     // A bare scalar YAML value is valid YAML but not a mapping.
     // load_from_yaml_string must return without crashing.
-    EXPECT_NO_THROW(cfg.load_from_yaml_string("42"));
+    EXPECT_NO_THROW({ (void)cfg.load_from_yaml_string("42"); });
 }
 
 TEST(EdgeCase_Config, set_use_memory_stream_updates_config) {

@@ -1,4 +1,5 @@
 build/
+build_*/
 .claude/
 docs/api/
 *.log
@@ -6,3 +7,14 @@ docs/api/
 *.exe
 *.dll
 *.pdb
+# Visual Studio
+.vs/
+*.user
+CMakeSettings.json
+out/
+# macOS
+.DS_Store
+# Editor temp files
+*.swp
+*.swo
+*~

@@ -3,6 +3,7 @@ token_stream:
   token_interval_ms: 10
   buffer_size: 1024
   use_memory_stream: true
+  dedup_ttl_ms: 0        # 0 = auto (10× token_interval_ms); set > 0 to override
 
 trading:
   bias_sensitivity: 1.0

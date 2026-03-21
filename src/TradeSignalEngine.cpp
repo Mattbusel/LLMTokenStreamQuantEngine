@@ -408,7 +408,13 @@ std::string TradeSignalEngine::format_stats() const {
         << " bias=" << bias
         << " vol="  << vol
         << " peak_bias=" << peak
-        << " avg_quality=" << avg_qual;
+        << " avg_quality=" << avg_qual
+        << " quality_hist=["
+        << stats_.quality_bucket_0_20.load(std::memory_order_relaxed)  << ","
+        << stats_.quality_bucket_20_40.load(std::memory_order_relaxed) << ","
+        << stats_.quality_bucket_40_60.load(std::memory_order_relaxed) << ","
+        << stats_.quality_bucket_60_80.load(std::memory_order_relaxed) << ","
+        << stats_.quality_bucket_80_100.load(std::memory_order_relaxed) << "]";
     return oss.str();
 }
 

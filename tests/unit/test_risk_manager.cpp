@@ -160,7 +160,7 @@ TEST(RiskManagerTest, test_risk_manager_alert_callback_fired_on_block) {
 
     // Trigger a magnitude block.
     auto sig = make_signal(5.0, 0.1, 0.05, 0.8);
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
 
     EXPECT_EQ(captured_reason, "magnitude_exceeded");
 }
