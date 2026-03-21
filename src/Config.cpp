@@ -234,6 +234,28 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
+        // Validate semantic weight multipliers — must all be finite numbers.
+        const auto& sw = tmp.semantic_weights;
+        if (!std::isfinite(sw.sentiment_multiplier)) {
+            spdlog::error("Config validation failed: semantic_weights.sentiment_multiplier must be a finite number");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(sw.confidence_multiplier)) {
+            spdlog::error("Config validation failed: semantic_weights.confidence_multiplier must be a finite number");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(sw.volatility_multiplier)) {
+            spdlog::error("Config validation failed: semantic_weights.volatility_multiplier must be a finite number");
+            set_defaults();
+            return false;
+        }
+        if (!std::isfinite(sw.bias_multiplier)) {
+            spdlog::error("Config validation failed: semantic_weights.bias_multiplier must be a finite number");
+            set_defaults();
+            return false;
+        }
 
         {
             std::lock_guard<std::mutex> lk(config_mutex_);
@@ -471,6 +493,8 @@ int Config::load_from_env() {
         { config_.trading.max_signal_age_us = d; ++applied; }
     if (get_double("LLMQUANT_MIN_BIAS_THRESHOLD", d) && d >= 0.0)
         { config_.trading.min_bias_threshold = d; ++applied; }
+    if (get_double("LLMQUANT_MAX_ACCUMULATED_BIAS", d) && d >= 0.0)
+        { config_.trading.max_accumulated_bias = d; ++applied; }
     if (get_double("LLMQUANT_MAX_DRAWDOWN", d) && d >= 0.0)
         { config_.risk_thresholds.max_drawdown = d; ++applied; }
     if (get_size_t("LLMQUANT_MAX_SIGNALS_PER_SECOND", sz))

@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -126,6 +128,14 @@ public:
      * @param signal The rejected TradeSignal.
      */
     using AlertCallback = std::function<void(const std::string& reason, const TradeSignal&)>;
+
+    /**
+     * @brief Callback invoked when a gate transitions from passing to blocking.
+     *
+     * @param gate_name Identifies the gate that tripped (e.g. "magnitude").
+     * @param signal    The TradeSignal that caused the trip.
+     */
+    using GateTripCallback = std::function<void(const std::string& gate_name, const TradeSignal& signal)>;
 
     /**
      * @brief Construct a RiskManager with the given parameters.
@@ -672,6 +682,46 @@ public:
         return name;
     }
 
+    /**
+     * @brief Serialise the current risk statistics snapshot to a JSON string.
+     *
+     * Returns a single JSON object with all blocked-gate counters,
+     * signals_passed, aggregate blocked_rate_frac, is_healthy flag, and
+     * most_blocked_gate label. Intended for structured logging and diagnostics.
+     * Thread-safe (reads atomic counters with relaxed ordering).
+     *
+     * @return JSON object as std::string.
+     */
+    std::string to_stats_json() const noexcept {
+        uint64_t mag    = stats_.signals_blocked_magnitude.load(std::memory_order_relaxed);
+        uint64_t conf   = stats_.signals_blocked_confidence.load(std::memory_order_relaxed);
+        uint64_t ratel  = stats_.signals_blocked_rate.load(std::memory_order_relaxed);
+        uint64_t dd     = stats_.signals_blocked_drawdown.load(std::memory_order_relaxed);
+        uint64_t pos    = stats_.signals_blocked_position.load(std::memory_order_relaxed);
+        uint64_t pnl    = stats_.signals_blocked_pnl.load(std::memory_order_relaxed);
+        uint64_t passed = stats_.signals_passed.load(std::memory_order_relaxed);
+        uint64_t total_blocked = mag + conf + ratel + dd + pos;
+        uint64_t total = passed + total_blocked;
+        double bfrac = (total > 0) ? (static_cast<double>(total_blocked) / static_cast<double>(total)) : 0.0;
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+            "{\"signals_passed\":%" PRIu64
+            ",\"blocked_magnitude\":%" PRIu64
+            ",\"blocked_confidence\":%" PRIu64
+            ",\"blocked_rate\":%" PRIu64
+            ",\"blocked_drawdown\":%" PRIu64
+            ",\"blocked_position\":%" PRIu64
+            ",\"blocked_pnl\":%" PRIu64
+            ",\"blocked_rate_frac\":%.6f"
+            ",\"is_healthy\":%s"
+            ",\"most_blocked_gate\":\"%s\"}",
+            passed, mag, conf, ratel, dd, pos, pnl,
+            bfrac,
+            is_healthy() ? "true" : "false",
+            get_most_blocked_gate().c_str());
+        return buf;
+    }
+
 private:
     bool check_magnitude(const TradeSignal& signal);
     bool check_confidence(const TradeSignal& signal);
@@ -696,6 +746,18 @@ private:
     // Drawdown tracking.
     std::chrono::high_resolution_clock::time_point drawdown_window_start_;
     double cumulative_bias_{0.0};
+
+    // Per-gate trip-wire callbacks (pass→block edge trigger). Access via mutex_.
+    GateTripCallback gate_trip_magnitude_cb_;
+    GateTripCallback gate_trip_confidence_cb_;
+    GateTripCallback gate_trip_rate_cb_;
+    GateTripCallback gate_trip_drawdown_cb_;
+    GateTripCallback gate_trip_position_cb_;
+    bool gate_magnitude_last_blocked_{false};
+    bool gate_confidence_last_blocked_{false};
+    bool gate_rate_last_blocked_{false};
+    bool gate_drawdown_last_blocked_{false};
+    bool gate_position_last_blocked_{false};
 
     Stats stats_;
 };

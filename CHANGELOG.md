@@ -9,6 +9,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 21 — 2026-03-21)
+- Fixed: `Config::load_from_yaml_string()` now validates `semantic_weights`
+  multipliers for NaN/Inf — previously only `validate()` checked them, allowing
+  silent non-finite values to enter the hot path. Added inline checks for all
+  four multipliers (`sentiment`, `confidence`, `volatility`, `bias`).
+- `RiskManager::to_stats_json()`: new inline method in `RiskManager.h` that
+  serialises the risk statistics snapshot (all blocked-gate counters,
+  `signals_passed`, aggregate `blocked_rate_frac`, `is_healthy`, and
+  `most_blocked_gate`) to a JSON object string. Includes `<cinttypes>` and
+  `<cstdio>` for `PRIu64` and `snprintf`.
+- Tests: 2 new `ConfigTest` cases verifying NaN `sentiment_multiplier` and Inf
+  `bias_multiplier` are rejected by `load_from_yaml_string`.
+- Tests: 2 new `RiskManagerTest` cases verifying `to_stats_json()` produces
+  valid JSON with correct counter values and correct "none" / "magnitude" gate
+  identification.
+
 ### Added (Cycle 20 — 2026-03-21)
 - Prometheus: `llmquant_start_time_seconds` gauge — Unix epoch when the engine
   started, enabling Grafana to compute uptime via `time() - llmquant_start_time_seconds`.

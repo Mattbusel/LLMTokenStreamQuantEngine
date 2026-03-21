@@ -1626,3 +1626,42 @@ TEST(RiskManagerTest, test_get_most_blocked_gate_identifies_dominant_gate) {
 
     EXPECT_EQ(rm.get_most_blocked_gate(), "magnitude");
 }
+
+// ---------------------------------------------------------------------------
+// RiskManager::to_stats_json() tests
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_to_stats_json_returns_valid_json_with_correct_counts) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    TradeSignal good = make_signal(0.5, 0.1, 0.05, 0.9);
+    TradeSignal bad  = make_signal(5.0, 0.1, 0.05, 0.9);
+    rm.evaluate(good);
+    rm.evaluate(bad);
+    rm.evaluate(bad);
+
+    std::string json = rm.to_stats_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{');
+    EXPECT_EQ(json.back(),  '}');
+    EXPECT_NE(json.find("signals_passed"),    std::string::npos);
+    EXPECT_NE(json.find("blocked_magnitude"), std::string::npos);
+    EXPECT_NE(json.find("blocked_rate_frac"), std::string::npos);
+    EXPECT_NE(json.find("is_healthy"),        std::string::npos);
+    EXPECT_NE(json.find("most_blocked_gate"), std::string::npos);
+    EXPECT_NE(json.find("\"blocked_magnitude\":2"), std::string::npos);
+    EXPECT_NE(json.find("\"signals_passed\":1"),    std::string::npos);
+    EXPECT_NE(json.find("\"most_blocked_gate\":\"magnitude\""), std::string::npos);
+}
+
+TEST(RiskManagerTest, test_to_stats_json_no_signals_shows_none_gate_and_healthy) {
+    RiskManager::Config cfg;
+    RiskManager rm(cfg);
+    std::string json = rm.to_stats_json();
+    EXPECT_NE(json.find("\"signals_passed\":0"),           std::string::npos);
+    EXPECT_NE(json.find("\"most_blocked_gate\":\"none\""),  std::string::npos);
+    EXPECT_NE(json.find("\"is_healthy\":true"),             std::string::npos);
+}

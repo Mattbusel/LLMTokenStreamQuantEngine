@@ -1015,5 +1015,32 @@ TEST(ConfigTest, test_to_yaml_string_contains_all_sections) {
     EXPECT_NE(yaml_str.find("semantic_weights"), std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// semantic_weights load validation (NaN/Inf must be rejected by load path)
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_semantic_weights_nan_sentiment_rejected_by_load) {
+    Config cfg;
+    // YAML allows .nan as a special float value.
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "semantic_weights:\n  sentiment_multiplier: .nan\n");
+    EXPECT_FALSE(ok) << "NaN sentiment_multiplier must fail load validation";
+}
+
+TEST(ConfigTest, test_semantic_weights_inf_bias_rejected_by_load) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "semantic_weights:\n  bias_multiplier: .inf\n");
+    EXPECT_FALSE(ok) << "Inf bias_multiplier must fail load validation";
+}
+
 } // namespace
 } // namespace llmquant
