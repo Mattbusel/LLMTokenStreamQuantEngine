@@ -9,6 +9,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 20 — 2026-03-21)
+- Prometheus: `llmquant_start_time_seconds` gauge — Unix epoch when the engine
+  started, enabling Grafana to compute uptime via `time() - llmquant_start_time_seconds`.
+  Captured with `system_clock` at startup alongside the existing `steady_clock`
+  reference so both uptime duration and absolute start timestamp are available.
+- Prometheus: `llmquant_process_rss_bytes` gauge — process resident set size in
+  bytes, sampled once per Prometheus scrape. Uses `GetProcessMemoryInfo/psapi` on
+  Windows and `/proc/self/status` (VmRSS) on Linux/macOS. CMakeLists.txt now
+  links `psapi` on WIN32.
+- `MetricsLogger::log_system_stats()` now wired in the monitoring loop (called
+  once per second with the process RSS). Previously implemented but never called,
+  so `SYSTEM_STATS` events never appeared in the structured log file.
+- Session exit summary: `Top bias tokens` row using `top_tokens_by_directional_bias(5)`
+  — shows the 5 tokens with the highest `|directional_bias|` to give a directional
+  view of what drove the session (complements the top-by-frequency row).
+- Session exit summary: removed redundant `Top blocked gate` row; the identical
+  `Most blocked gate` row earlier in the summary is retained.
+
 ### Added (Cycle 19 — 2026-03-21)
 - `Config::to_yaml_string()`: serialises the complete `SystemConfig` to a
   YAML-formatted string covering all subsystem sections including

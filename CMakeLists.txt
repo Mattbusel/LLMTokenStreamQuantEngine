@@ -142,7 +142,7 @@ target_link_libraries(llmquant
 )
 
 if(WIN32)
-    target_link_libraries(llmquant PUBLIC ws2_32)
+    target_link_libraries(llmquant PUBLIC ws2_32 psapi)
 endif()
 
 if(OpenSSL_FOUND OR OPENSSL_FOUND)

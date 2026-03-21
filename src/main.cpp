@@ -79,11 +79,12 @@ int main(int argc, char* argv[]) {
     std::string stream_api_key;
     bool        no_color       = false;
     bool        debug_raw      = false;
-    bool        dry_run        = false;
-    bool        backtest_mode  = false;
-    bool        list_tokens    = false;
-    bool        dump_config    = false;
-    bool        quiet          = false;
+    bool        dry_run         = false;
+    bool        backtest_mode   = false;
+    bool        list_tokens     = false;
+    bool        dump_config     = false;
+    bool        validate_config = false;
+    bool        quiet           = false;
     std::string export_dict_path;   // non-empty = write TSV to file and exit
     std::string oms_address;
     std::string fix_address;
@@ -110,6 +111,7 @@ int main(int argc, char* argv[]) {
                 "  --list-tokens     Print the full semantic dictionary and exit\n"
                 "  --export-dict FILE  Export semantic dictionary to a TSV file and exit\n"
                 "  --dump-config     Print effective configuration and exit\n"
+                "  --validate-config Validate configuration, print any errors, exit 0=OK 1=invalid\n"
                 "  --quiet           Suppress console signal/stats output (log-file only)\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
@@ -137,6 +139,8 @@ int main(int argc, char* argv[]) {
             export_dict_path = argv[++i];
         } else if (arg == "--dump-config") {
             dump_config = true;
+        } else if (arg == "--validate-config") {
+            validate_config = true;
         } else if (arg == "--quiet") {
             quiet = true;
         } else if (arg == "--dry-run") {
@@ -265,6 +269,19 @@ int main(int argc, char* argv[]) {
                   << "semantic_weights.volatility_multiplier: " << sw.volatility_multiplier << "\n"
                   << "semantic_weights.bias_multiplier:     " << sw.bias_multiplier << "\n";
         return 0;
+    }
+
+    // --validate-config: run the validation suite and report errors.
+    if (validate_config) {
+        auto errors = config.validate();
+        if (errors.empty()) {
+            std::cout << "Config OK: " << config_file << " is valid.\n";
+            return 0;
+        }
+        std::cerr << "Config INVALID: " << errors.size() << " error(s) in " << config_file << ":\n";
+        for (const auto& e : errors)
+            std::cerr << "  - " << e << "\n";
+        return 1;
     }
 
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
