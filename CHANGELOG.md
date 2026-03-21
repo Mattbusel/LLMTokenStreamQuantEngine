@@ -9,6 +9,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 19 — 2026-03-21)
+- `Config::to_yaml_string()`: serialises the complete `SystemConfig` to a
+  YAML-formatted string covering all subsystem sections including
+  `semantic_weights` and `risk_overrides` (previously missing from
+  `save_to_file`). Declared in `Config.h`, implemented in `Config.cpp`.
+  `save_to_file()` now delegates to `to_yaml_string()` to eliminate
+  duplication and ensure parity.
+- Fixed `save_to_file()` omitting `semantic_weights` and `risk_overrides`
+  sections from saved YAML — both sections are now included via the new
+  shared `to_yaml_string()` helper.
+- Prometheus: `llmquant_dedup_dup_rate_pct` gauge — duplicate token rate as
+  a percentage [0, 100] computed from the running novel/duplicate counters.
+- Prometheus: `llmquant_latency_window_fill_ratio` gauge — fraction of the
+  latency sample window that is filled [0, 1], enabling dashboards to detect
+  warm-up vs steady-state conditions.
+- Removed duplicate `llmquant_most_blocked_gate_info` Prometheus metric
+  (the redundant block appended after `llmquant_risk_healthy`); the
+  canonical `llmquant_risk_most_blocked_gate_info` metric in the main snap
+  stream is retained.
+- Tests (`test_config.cpp`): 5 new tests covering `SemanticWeightsConfig`
+  YAML parsing, default values when the section is absent, and
+  `to_yaml_string()` round-trip correctness for trading, semantic\_weights,
+  and presence of all YAML sections.
+
 ### Added (Cycle 18 — 2026-03-21)
 - `token_stream.dedup_ttl_ms` config field: configures the in-process deduplicator
   TTL directly rather than deriving it from `token_interval_ms * 10`. Setting to

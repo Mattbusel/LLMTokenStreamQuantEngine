@@ -684,7 +684,7 @@ TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_clamps_at_
     RiskManager rm(cfg);
 
     // Accumulate 3 * 0.4 = 1.2 bias >> 0.1 max_drawdown.
-    for (int i = 0; i < 3; ++i) rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));
+    for (int i = 0; i < 3; ++i) (void)rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));
 
     // Budget must clamp at 0.0, not go negative.
     EXPECT_DOUBLE_EQ(rm.get_drawdown_budget_remaining(), 0.0);
@@ -818,7 +818,7 @@ TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_caps_at_one) {
     cfg.max_signals_per_second = 2;
     RiskManager rm(cfg);
     auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
-    for (int i = 0; i < 5; ++i) rm.evaluate(sig);
+    for (int i = 0; i < 5; ++i) (void)rm.evaluate(sig);
     EXPECT_LE(rm.get_rate_limit_utilization(), 1.0);
 }
 
@@ -1338,7 +1338,7 @@ TEST(RiskManagerTest, test_is_rate_limited_true_when_window_full) {
     rm.disable_all_gates();
     TradeSignal sig;
     sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
-    (void)rm.evaluate(sig); rm.evaluate(sig);
+    (void)rm.evaluate(sig); (void)rm.evaluate(sig);
     EXPECT_TRUE(rm.is_rate_limited())
         << "is_rate_limited must be true when max_signals_per_second is reached";
 }
