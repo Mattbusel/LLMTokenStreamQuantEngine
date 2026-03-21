@@ -2,10 +2,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <cinttypes>
+#include <cstdio>
 #include <cstdint>
 #include <cmath>
 #include <limits>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace llmquant {
@@ -474,6 +477,50 @@ public:
         uint64_t sum = total_latency_us_.load(std::memory_order_relaxed);
         double avg_us = static_cast<double>(sum) / static_cast<double>(n);
         return avg_us < static_cast<double>(config_.target_latency.count());
+    }
+
+    /**
+     * @brief Serialise the current latency statistics to a JSON string.
+     *
+     * Produces a JSON object with all LatencyStats percentile fields (avg,
+     * min, max, p5, p25, p50, p75, p95, p99), jitter_ms, measurements,
+     * target_breaches, window_fill_ratio, and slo_breach_rate.
+     * Thread-safe (delegates to get_stats() which acquires the sample mutex).
+     *
+     * @return JSON object as std::string.
+     */
+    std::string to_stats_json() const {
+        const LatencyStats s = get_stats();
+        double fill = get_window_fill_ratio();
+        double slo  = get_slo_breach_rate();
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+            "{\"avg_us\":%" PRId64
+            ",\"min_us\":%" PRId64
+            ",\"max_us\":%" PRId64
+            ",\"p5_us\":%" PRId64
+            ",\"p25_us\":%" PRId64
+            ",\"p50_us\":%" PRId64
+            ",\"p75_us\":%" PRId64
+            ",\"p95_us\":%" PRId64
+            ",\"p99_us\":%" PRId64
+            ",\"jitter_ms\":%.4f"
+            ",\"measurements\":%" PRIu64
+            ",\"target_breaches\":%" PRIu64
+            ",\"window_fill_ratio\":%.4f"
+            ",\"slo_breach_rate\":%.6f}",
+            static_cast<int64_t>(s.avg_latency.count()),
+            static_cast<int64_t>(s.min_latency.count()),
+            static_cast<int64_t>(s.max_latency.count()),
+            static_cast<int64_t>(s.p5_latency.count()),
+            static_cast<int64_t>(s.p25_latency.count()),
+            static_cast<int64_t>(s.p50_latency.count()),
+            static_cast<int64_t>(s.p75_latency.count()),
+            static_cast<int64_t>(s.p95_latency.count()),
+            static_cast<int64_t>(s.p99_latency.count()),
+            s.jitter_ms, s.measurements, s.target_breaches,
+            fill, slo);
+        return buf;
     }
 
 private:

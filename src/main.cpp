@@ -144,6 +144,7 @@ int main(int argc, char* argv[]) {
     std::string config_file    = "config.yaml"; // may be overridden by --config
     uint16_t    stats_port_override = 0;        // 0 = use config value
     std::string log_level_str  = "info";        // spdlog level name
+    int         stats_interval_ms  = 1000;      // monitoring loop tick period
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -166,6 +167,7 @@ int main(int argc, char* argv[]) {
                 "  --dump-config     Print effective configuration and exit\n"
                 "  --validate-config Validate configuration, print any errors, exit 0=OK 1=invalid\n"
                 "  --quiet           Suppress console signal/stats output (log-file only)\n"
+                "  --stats-interval N  Monitoring loop tick period in ms (default: 1000)\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
                 "\n"
@@ -208,6 +210,8 @@ int main(int argc, char* argv[]) {
             stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i]));
         } else if (arg == "--log-level" && i + 1 < argc) {
             log_level_str = argv[++i];
+        } else if (arg == "--stats-interval" && i + 1 < argc) {
+            stats_interval_ms = std::max(100, std::stoi(argv[++i]));
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -822,7 +826,7 @@ int main(int argc, char* argv[]) {
     // Main monitoring loop — prints a rolling stats bar every second.
     uint64_t last_tick = 0;
     while (g_running) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(stats_interval_ms));
 
         auto stats    = latency_ctrl.get_stats();
         auto pressure = latency_ctrl.get_pressure();
@@ -1087,9 +1091,15 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_avg_signal_quality Welford running mean of signal_quality [0,1]\n"
                  << "# TYPE llmquant_avg_signal_quality gauge\n"
                  << "llmquant_avg_signal_quality " << std::setprecision(6) << eng_stats.avg_signal_quality.load() << "\n"
-                 << "# HELP llmquant_signal_quality_ema EMA of signal_quality (alpha=0.1); -1=no signals yet\n"
-                 << "# TYPE llmquant_signal_quality_ema gauge\n"
-                 << "llmquant_signal_quality_ema " << std::setprecision(6) << trade_engine.get_signal_quality_ema() << "\n"
+                 << [&]() -> std::string {
+                        double q_ema = trade_engine.get_signal_quality_ema();
+                        if (q_ema < 0.0) return "";
+                        std::ostringstream o;
+                        o << "# HELP llmquant_signal_quality_ema EMA(alpha=0.1) of signal_quality [0,1]; omitted until first signal\n"
+                          << "# TYPE llmquant_signal_quality_ema gauge\n"
+                          << "llmquant_signal_quality_ema " << std::setprecision(6) << q_ema << "\n";
+                        return o.str();
+                    }()
                  << "# HELP llmquant_dedup_duplicate_rate Fraction of checked tokens that were duplicates [0,1]\n"
                  << "# TYPE llmquant_dedup_duplicate_rate gauge\n"
                  << "llmquant_dedup_duplicate_rate " << [&]() -> double {
@@ -1160,6 +1170,17 @@ int main(int argc, char* argv[]) {
                         uint64_t tot = nov + dup;
                         return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
                     }() << "\n";
+            // Top-5 influential tokens as labeled gauges for Grafana dashboards.
+            {
+                snap << "# HELP llmquant_top_influence_token Composite influence score (freq+bias blend) [0,1]\n"
+                     << "# TYPE llmquant_top_influence_token gauge\n";
+                for (const auto& [tok, score] : llm_adapter.top_tokens_by_influence(5)) {
+                    std::string safe_tok;
+                    for (char c : tok) safe_tok += (c == '"') ? '\'' : c;
+                    snap << "llmquant_top_influence_token{token=\"" << safe_tok << "\"} "
+                         << std::setprecision(4) << score << "\n";
+                }
+            }
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
@@ -1356,13 +1377,27 @@ int main(int argc, char* argv[]) {
             std::cout << "\n";
         }
     }
+    {
+        // Hot tokens: composite score = 0.5*(hit_rate) + 0.5*(|directional_bias|)
+        auto hot = llm_adapter.export_hot_tokens(5);
+        if (!hot.empty()) {
+            std::cout << "  Hot tokens       : ";
+            for (size_t i = 0; i < hot.size(); ++i) {
+                if (i > 0) std::cout << ", ";
+                std::cout << hot[i].first
+                          << "(" << std::fixed << std::setprecision(3) << hot[i].second << ")";
+            }
+            std::cout << "\n";
+        }
+    }
     std::cout << "  ---------------------------------------------------------\n\n";
 
-    // Emit structured JSON summaries for risk, engine, and adapter stats.
+    // Emit structured JSON summaries for risk, engine, adapter, and latency stats.
     if (!quiet) {
         std::cout << "  [json:risk]    " << risk_mgr.to_stats_json() << "\n";
         std::cout << "  [json:engine]  " << trade_engine.to_stats_json() << "\n";
         std::cout << "  [json:adapter] " << llm_adapter.to_stats_json() << "\n";
+        std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
     }
 
     trade_engine.flush_sinks();

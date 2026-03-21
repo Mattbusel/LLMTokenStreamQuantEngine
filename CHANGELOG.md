@@ -9,6 +9,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 24 — 2026-03-21)
+- `LatencyController::to_stats_json()`: inline method serialising all
+  `LatencyStats` fields (avg, min, max, p5/p25/p50/p75/p95/p99, jitter_ms,
+  measurements, target_breaches) plus `window_fill_ratio` and `slo_breach_rate`
+  to a JSON object string. Adds `<cinttypes>`, `<cstdio>`, and `<string>` to
+  `LatencyController.h`.
+- Session exit summary: `[json:latency]` line added alongside the existing
+  `[json:risk/engine/adapter]` lines (printed unless `--quiet`).
+- Tests (`test_latency_controller.cpp`): 2 new tests for `to_stats_json()` —
+  field presence / measurement count accuracy, and empty-controller zero state.
+
 ### Added (Cycle 23 — 2026-03-21)
 - Tests (`test_llm_adapter.cpp`): 3 new tests for `LLMAdapter::clear_dictionary()`
   covering: all tokens removed, stats reset to zero, and post-clear lookup

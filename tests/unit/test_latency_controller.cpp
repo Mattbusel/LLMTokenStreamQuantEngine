@@ -1111,5 +1111,34 @@ TEST(LatencyControllerTest, test_record_batch_matches_individual_record_latency)
     EXPECT_EQ(si.max_latency,  sb.max_latency);
 }
 
+// ---------------------------------------------------------------------------
+// LatencyController::to_stats_json() tests
+// ---------------------------------------------------------------------------
+
+TEST(LatencyControllerTest, test_to_stats_json_returns_valid_json_with_fields) {
+    LatencyController lc(make_config());
+    lc.record(std::chrono::microseconds{5});
+    lc.record(std::chrono::microseconds{10});
+    lc.record(std::chrono::microseconds{15});
+
+    std::string json = lc.to_stats_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{');
+    EXPECT_EQ(json.back(),  '}');
+    EXPECT_NE(json.find("avg_us"),            std::string::npos);
+    EXPECT_NE(json.find("p99_us"),            std::string::npos);
+    EXPECT_NE(json.find("measurements"),      std::string::npos);
+    EXPECT_NE(json.find("target_breaches"),   std::string::npos);
+    EXPECT_NE(json.find("window_fill_ratio"), std::string::npos);
+    EXPECT_NE(json.find("slo_breach_rate"),   std::string::npos);
+    EXPECT_NE(json.find("\"measurements\":3"), std::string::npos);
+}
+
+TEST(LatencyControllerTest, test_to_stats_json_empty_controller_shows_zero) {
+    LatencyController lc(make_config());
+    std::string json = lc.to_stats_json();
+    EXPECT_NE(json.find("\"measurements\":0"), std::string::npos);
+}
+
 } // namespace
 } // namespace llmquant
