@@ -411,21 +411,6 @@ public:
     double get_throughput_estimate() const noexcept;
 
     /**
-     * @brief Return the sum of all recorded latency values in microseconds.
-     *
-     * Reads the underlying atomic counter directly to avoid a floating-point
-     * round-trip through get_stats().  Used by the Prometheus exporter to
-     * emit the histogram `_sum` field without computing a full stats snapshot.
-     *
-     * Thread-safe (atomic load with relaxed ordering).
-     *
-     * @return Total accumulated latency in microseconds.
-     */
-    uint64_t get_total_latency_us() const noexcept {
-        return total_latency_us_.load(std::memory_order_relaxed);
-    }
-
-    /**
      * @brief Return a human-readable summary of current latency statistics.
      *
      * Format: "n=<count> avg=<avg>µs p50=<p50>µs p95=<p95>µs p99=<p99>µs

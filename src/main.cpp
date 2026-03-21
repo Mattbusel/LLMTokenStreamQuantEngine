@@ -219,6 +219,14 @@ int main(int argc, char* argv[]) {
                   << "risk_thresholds.max_signals_per_second: " << rt.max_signals_per_second << "\n"
                   << "risk_thresholds.max_drawdown:         " << rt.max_drawdown << "\n"
                   << "risk_thresholds.drawdown_window_s:    " << rt.drawdown_window_s << "\n";
+        const auto& pr = sys_config.pressure;
+        const auto& sw = sys_config.semantic_weights;
+        std::cout << "pressure.max_ingestion_rate_tps:      " << pr.max_ingestion_rate_tps << "\n"
+                  << "pressure.backoff_scale_factor:        " << pr.backoff_scale_factor << "\n"
+                  << "semantic_weights.sentiment_multiplier: " << sw.sentiment_multiplier << "\n"
+                  << "semantic_weights.confidence_multiplier: " << sw.confidence_multiplier << "\n"
+                  << "semantic_weights.volatility_multiplier: " << sw.volatility_multiplier << "\n"
+                  << "semantic_weights.bias_multiplier:     " << sw.bias_multiplier << "\n";
         return 0;
     }
 
