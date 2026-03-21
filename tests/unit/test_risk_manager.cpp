@@ -1749,3 +1749,45 @@ TEST(RiskManagerTest, test_gate_trip_callback_confidence_gate) {
     (void)rm.evaluate(low_conf);
     EXPECT_EQ(trip_count, 1);
 }
+
+// ---------------------------------------------------------------------------
+// reset_stats() trip-wire re-arm tests
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_reset_stats_zeroes_all_counters) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    TradeSignal bad  = make_signal(5.0, 0.1, 0.05, 0.9);
+    TradeSignal good = make_signal(0.5, 0.1, 0.05, 0.9);
+    (void)rm.evaluate(bad);
+    (void)rm.evaluate(bad);
+    (void)rm.evaluate(good);
+
+    rm.reset_stats();
+    const auto& s = rm.get_stats();
+    EXPECT_EQ(s.signals_blocked_magnitude, 0u) << "reset_stats must zero magnitude counter";
+    EXPECT_EQ(s.signals_passed,            0u) << "reset_stats must zero passed counter";
+}
+
+TEST(RiskManagerTest, test_reset_stats_rearms_trip_callback) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude = 1.0;
+    cfg.disable_rate_gate  = true;
+    RiskManager rm(cfg);
+
+    int trip_count = 0;
+    rm.set_gate_trip_callback("magnitude",
+        [&](const std::string&, const TradeSignal&) { ++trip_count; });
+
+    TradeSignal bad = make_signal(5.0, 0.1, 0.05, 0.9);
+    (void)rm.evaluate(bad);  // trip 1
+    (void)rm.evaluate(bad);  // no re-fire (consecutive block)
+    EXPECT_EQ(trip_count, 1);
+
+    rm.reset_stats();        // re-arms all gate callbacks
+    (void)rm.evaluate(bad);  // trip 2 (re-armed)
+    EXPECT_EQ(trip_count, 2) << "Trip callback must re-arm after reset_stats()";
+}

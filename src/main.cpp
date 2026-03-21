@@ -28,6 +28,8 @@
 #ifdef _WIN32
 #  include <windows.h>
 #  include <psapi.h>
+#else
+#  include <unistd.h>   // sysconf(_SC_CLK_TCK) for CPU fraction on Linux
 #endif
 
 using namespace llmquant;
@@ -837,6 +839,7 @@ int main(int argc, char* argv[]) {
         latency_ctrl.update_queue_pressure(eng_stats.signals_suppressed.load(), 1024);
 
         double backoff = latency_ctrl.get_backoff_multiplier();
+        double cpu_fraction = get_process_cpu_fraction();  // sampled once per loop tick
 
         // Colour the P99 value: green < 10μs, yellow < 50μs, red otherwise.
         auto p99 = stats.p99_latency.count();
@@ -1177,7 +1180,7 @@ int main(int argc, char* argv[]) {
             }
         }
         // Log system resource usage once per second (memory RSS; CPU unavailable cross-platform).
-        logger.log_system_stats(get_process_rss_bytes(), get_process_cpu_fraction());
+        logger.log_system_stats(get_process_rss_bytes(), cpu_fraction);
 
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
@@ -1334,6 +1337,18 @@ int main(int argc, char* argv[]) {
                 if (i > 0) std::cout << ", ";
                 std::cout << top_bias[i].first
                           << "(" << std::fixed << std::setprecision(3) << top_bias[i].second << ")";
+            }
+            std::cout << "\n";
+        }
+    }
+    {
+        auto top_inf = llm_adapter.top_tokens_by_influence(5);
+        if (!top_inf.empty()) {
+            std::cout << "  Top influence    : ";
+            for (size_t i = 0; i < top_inf.size(); ++i) {
+                if (i > 0) std::cout << ", ";
+                std::cout << top_inf[i].first
+                          << "(" << std::fixed << std::setprecision(3) << top_inf[i].second << ")";
             }
             std::cout << "\n";
         }
