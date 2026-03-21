@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 8 — 2026-03-21)
+- Startup banner now shows `BACKTEST: cooldown disabled` when `--backtest` is active, matching
+  the existing `DRY-RUN` display so operators can see mode at a glance.
+- Session exit summary: added uptime (seconds since startup), a compact full latency summary
+  via `LatencyController::format_stats()`, and the top-5 tokens by hit frequency using the new
+  `LLMAdapter::top_tokens_by_frequency()` method.
+
 ### Added (Cycle 7 — 2026-03-21)
 - `LatencyController::get_total_latency_us()` — inline accessor returning the
   raw `total_latency_us_` atomic without triggering percentile computation.
