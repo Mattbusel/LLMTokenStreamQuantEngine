@@ -4,7 +4,9 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace llmquant {
 namespace {
@@ -446,4 +448,75 @@ TEST(MetricsLoggerTest, test_log_pipeline_health_json_contains_event_key) {
                          std::istreambuf_iterator<char>());
     EXPECT_NE(content.find("pipeline_health"), std::string::npos);
     std::remove("tmp_pipeline_health_json_test.log");
+}
+
+// ---------------------------------------------------------------------------
+// Regression: log_risk_rejection CSV column alignment
+// Previously confidence was placed in column 7 (latency_us column), which was
+// wrong. It should only appear in JSON; the CSV row must have exactly 9 columns
+// and column 7 must be empty (not filled with the confidence value).
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_log_risk_rejection_csv_has_nine_columns) {
+    const std::string path = "tmp_risk_rejection_csv_cols.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path         = path;
+        cfg.format                = MetricsLogger::OutputFormat::CSV;
+        cfg.enable_console_output = false;
+        MetricsLogger logger(cfg);
+        logger.log_risk_rejection("magnitude_exceeded", 1.5, 0.9);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string line;
+    // Skip CSV header line.
+    ASSERT_TRUE(std::getline(f, line));
+    // Read the first data row.
+    ASSERT_TRUE(std::getline(f, line));
+    // Count commas: a 9-column row has exactly 8 commas.
+    int commas = 0;
+    for (char c : line) if (c == ',') ++commas;
+    EXPECT_EQ(commas, 8)
+        << "RISK_REJECTION CSV row must have exactly 9 columns (8 commas); got "
+        << commas << " commas in: " << line;
+    // Column 7 (index 6, latency_us) must be empty — not filled with confidence.
+    // Split by comma and check field index 6.
+    std::vector<std::string> fields;
+    std::istringstream ss(line);
+    std::string field;
+    while (std::getline(ss, field, ',')) fields.push_back(field);
+    ASSERT_GE(fields.size(), 9u);
+    EXPECT_TRUE(fields[6].empty())
+        << "CSV column 7 (latency_us) must be empty for RISK_REJECTION; got: '"
+        << fields[6] << "'";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_log_risk_rejection_csv_reason_in_token_column) {
+    const std::string path = "tmp_risk_rejection_csv_reason.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path         = path;
+        cfg.format                = MetricsLogger::OutputFormat::CSV;
+        cfg.enable_console_output = false;
+        MetricsLogger logger(cfg);
+        logger.log_risk_rejection("confidence_below_minimum", 0.5, 0.05);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open());
+    std::string line;
+    ASSERT_TRUE(std::getline(f, line)); // header
+    ASSERT_TRUE(std::getline(f, line)); // data row
+    // The rejection reason must appear in column 3 (token column, 0-indexed col 2).
+    std::vector<std::string> fields;
+    std::istringstream ss(line);
+    std::string field;
+    while (std::getline(ss, field, ',')) fields.push_back(field);
+    ASSERT_GE(fields.size(), 3u);
+    EXPECT_EQ(fields[2], "confidence_below_minimum")
+        << "Rejection reason must be in the token column (index 2)";
+    std::remove(path.c_str());
 }

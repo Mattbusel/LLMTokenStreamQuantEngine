@@ -153,9 +153,11 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
 
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
+        // Columns: timestamp,RISK_REJECTION,reason,,bias,,,, (9 cols matching header).
+        // confidence has no dedicated CSV column; it is written to JSON only.
+        // Previously confidence was placed in column 7 (latency_us), which was wrong.
         oss << timestamp << ",RISK_REJECTION," << reason << ",,"
-            << std::fixed << std::setprecision(3) << bias << ",,"
-            << confidence << ",,";
+            << std::fixed << std::setprecision(3) << bias << ",,,,";
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
             console_logger_->warn("Risk rejection: {} bias={:+.3f} conf={:.3f}", reason, bias, confidence);

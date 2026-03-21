@@ -21,6 +21,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `.gitignore`: added `build_*/` (covers `build_vs/` and other non-default build
   dirs), `.vs/`, `*.user`, `CMakeSettings.json`, `out/`, `.DS_Store`, and common
   editor temp files (`*.swp`, `*.swo`, `*~`).
+- `LLMAdapter::filter_tokens_by_directional_bias(min, max)`: returns all
+  dictionary entries whose `directional_bias` falls in `[min, max]`, enabling
+  callers to slice the token set by orientation (bullish-only, bearish-only)
+  for backtesting and reporting.
+- `LLMAdapter::top_tokens_by_directional_bias(n)`: returns the top-N tokens
+  ranked by `|directional_bias|` via `std::partial_sort` (O(k log k)); backed
+  by the existing `token_weights_` map with zero extra storage.
 
 ### Added (Cycle 17 — 2026-03-21)
 - Semantic weight multipliers are now **hot-reloadable**.  Four

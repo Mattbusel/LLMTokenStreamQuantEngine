@@ -231,7 +231,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_oms_event_callback_fires_on_posit
         // Manually fire evaluate to trigger OMS callback. We only care about
         // triggering the soft-warn path (projected 0.5 + sig <= 1.0).
         if (sig.delta_bias_shift > 0.3 && sig.delta_bias_shift <= 0.5) {
-            risk_mgr.evaluate(sig);
+            (void)risk_mgr.evaluate(sig);
         }
     });
 
@@ -274,7 +274,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_reset_stats_restores_clean_counte
     TradeSignalEngine engine(backtest_engine_cfg());
     engine.set_backtest_mode(true);
     engine.set_signal_callback([&](const TradeSignal& sig) {
-        risk_mgr.evaluate(sig);
+        (void)risk_mgr.evaluate(sig);
     });
 
     pump_signals(engine, 10, 0.5, 0.1);   // bias >> 0.01, all blocked by magnitude
@@ -312,7 +312,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_rate_limit_suppresses_rapid_signa
     TradeSignalEngine engine(backtest_engine_cfg());
     engine.set_backtest_mode(true);
     engine.set_signal_callback([&](const TradeSignal& sig) {
-        risk_mgr.evaluate(sig);
+        (void)risk_mgr.evaluate(sig);
     });
 
     // Fire 20 signals in a tight loop — rate guard must kick in.
@@ -384,7 +384,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_drawdown_gate_blocks_after_thresh
     TradeSignalEngine engine(backtest_engine_cfg());
     engine.set_backtest_mode(true);
     engine.set_signal_callback([&](const TradeSignal& sig) {
-        risk_mgr.evaluate(sig);
+        (void)risk_mgr.evaluate(sig);
     });
 
     // Pump high-bias signals until cumulative drawdown exceeds 0.5.

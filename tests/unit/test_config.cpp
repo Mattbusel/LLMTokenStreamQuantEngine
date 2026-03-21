@@ -192,7 +192,7 @@ TEST(ConfigTest, test_config_hot_reload_detects_file_change) {
     }
 
     Config cfg;
-    cfg.load_from_file(tmp_path);
+    ASSERT_TRUE(cfg.load_from_file(tmp_path));
 
     std::atomic<bool> callback_fired{false};
     std::atomic<int>  reloaded_interval{0};
@@ -343,7 +343,7 @@ TEST(ConfigTest, test_config_concurrent_hot_reload_and_get_config_is_safe) {
     }
 
     Config cfg;
-    cfg.load_from_file(tmp_path);
+    ASSERT_TRUE(cfg.load_from_file(tmp_path));
     cfg.start_watching(tmp_path, [](const SystemConfig&) {}, /*poll_interval_ms=*/50);
 
     std::atomic<bool> stop_readers{false};

@@ -535,15 +535,23 @@ int main(int argc, char* argv[]) {
 
         bool passed = risk_mgr.evaluate(signal);
 
+        // Capture the rejection reason once, under the lock, so it is available
+        // for both the console gate_str and the structured log call below.
+        // Previously the reason was cleared after gate_str was built, making
+        // the second read always fall back to "risk".
+        std::string block_reason_copy;
+        if (!passed) {
+            std::lock_guard<std::mutex> lk(block_reason_mutex);
+            block_reason_copy = last_block_reason.empty() ? "risk" : last_block_reason;
+            if (block_reason_copy.size() > 16) block_reason_copy = block_reason_copy.substr(0, 16);
+            last_block_reason.clear();
+        }
+
         std::string gate_str;
         if (passed) {
             gate_str = std::string(" ") + C("\033[32m") + "PASS" + C("\033[0m");
         } else {
-            std::lock_guard<std::mutex> lk(block_reason_mutex);
-            std::string reason = last_block_reason.empty() ? "risk" : last_block_reason;
-            if (reason.size() > 16) reason = reason.substr(0, 16);
-            gate_str = std::string(" ") + C("\033[31m") + "BLOCK" + C("\033[0m") + "(" + reason + ")";
-            last_block_reason.clear();
+            gate_str = std::string(" ") + C("\033[31m") + "BLOCK" + C("\033[0m") + "(" + block_reason_copy + ")";
         }
 
         // Aligned columns: TIME(ms)  BIAS     VOL      LATENCY  GATE
@@ -567,13 +575,7 @@ int main(int argc, char* argv[]) {
                 static_cast<double>(latency_us),
                 signal.signal_quality);
         } else {
-            // Log the rejection to the structured log file.
-            std::string reject_reason;
-            {
-                std::lock_guard<std::mutex> lk(block_reason_mutex);
-                reject_reason = last_block_reason.empty() ? "risk" : last_block_reason;
-            }
-            logger.log_risk_rejection(reject_reason,
+            logger.log_risk_rejection(block_reason_copy,
                                       signal.delta_bias_shift,
                                       signal.confidence);
         }
@@ -653,8 +655,11 @@ int main(int argc, char* argv[]) {
             "Use words: bullish, bearish, surge, crash, breakout, collapse, volatile.";
 
         stream_client = std::make_unique<llmquant::LLMStreamClient>(stream_cfg);
+        // Each stream token gets a unique monotonically-increasing sequence ID so
+        // MetricsLogger and dedup logs can distinguish individual stream tokens.
+        std::atomic<uint64_t> stream_seq_id{0};
         stream_client->set_token_callback([&](const std::string& text) {
-            process_token(text, 0);
+            process_token(text, stream_seq_id.fetch_add(1, std::memory_order_relaxed));
         });
         stream_client->set_done_callback([](const std::string& err) {
             if (!err.empty())
@@ -795,9 +800,6 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_blocked_pnl_total Signals blocked: PnL limit breached\n"
                  << "# TYPE llmquant_signals_blocked_pnl_total counter\n"
                  << "llmquant_signals_blocked_pnl_total " << rs.signals_blocked_pnl.load() << "\n"
-                 << "# HELP llmquant_risk_most_blocked_gate_info Name of the risk gate with the highest block count\n"
-                 << "# TYPE llmquant_risk_most_blocked_gate_info gauge\n"
-                 << "llmquant_risk_most_blocked_gate_info{gate=\"" << risk_mgr.get_most_blocked_gate() << "\"} 1\n"
                  << "# HELP llmquant_latency_p99_us p99 token-to-signal latency in microseconds\n"
                  << "# TYPE llmquant_latency_p99_us gauge\n"
                  << "llmquant_latency_p99_us " << p99 << "\n"
@@ -1007,14 +1009,6 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
                  << "# TYPE llmquant_risk_healthy gauge\n"
                  << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n";
-            // Export most-blocked gate as a Prometheus info metric with a label.
-            // Emits exactly one time-series per scrape: gauge value 1 with {gate=<name>}.
-            {
-                snap << "# HELP llmquant_most_blocked_gate_info Risk gate with the highest block count since startup\n"
-                     << "# TYPE llmquant_most_blocked_gate_info gauge\n"
-                     << "llmquant_most_blocked_gate_info{gate=\""
-                     << risk_mgr.get_most_blocked_gate() << "\"} 1\n";
-            }
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

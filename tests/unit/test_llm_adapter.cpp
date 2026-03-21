@@ -1436,5 +1436,61 @@ TEST(LLMAdapterTest, test_frequency_normalisation_case_insensitive) {
         << "Hit count must be accessible via normalised (lowercase) key";
 }
 
+// --- filter_tokens_by_directional_bias ---
+
+TEST(LLMAdapterTest, test_directional_bias_filter_returns_in_range) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("rocket",  {0.9, 0.9, 0.1, 0.8});
+    adapter.add_token_mapping("neutral", {0.0, 0.5, 0.1, 0.0});
+    adapter.add_token_mapping("crash",   {-0.9, 0.8, 0.9, -0.7});
+
+    auto bullish = adapter.filter_tokens_by_directional_bias(0.5, 1.0);
+    ASSERT_EQ(bullish.size(), 1u);
+    EXPECT_EQ(bullish[0].first, "rocket");
+    EXPECT_DOUBLE_EQ(bullish[0].second, 0.8);
+}
+
+TEST(LLMAdapterTest, test_directional_bias_filter_empty_when_no_match) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("crash", {-0.9, 0.8, 0.9, -0.7});
+
+    auto result = adapter.filter_tokens_by_directional_bias(0.5, 1.0);
+    EXPECT_TRUE(result.empty()) << "No tokens in range should return empty vector";
+}
+
+TEST(LLMAdapterTest, test_directional_bias_filter_inclusive_bounds) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("exact", {0.5, 0.5, 0.5, 0.5});
+
+    auto result = adapter.filter_tokens_by_directional_bias(0.5, 0.5);
+    ASSERT_EQ(result.size(), 1u) << "Inclusive bounds must match exactly equal value";
+    EXPECT_DOUBLE_EQ(result[0].second, 0.5);
+}
+
+// --- top_tokens_by_directional_bias ---
+
+TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_sorted_by_abs) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("weak_bull",   {0.2, 0.5, 0.1,  0.2});
+    adapter.add_token_mapping("strong_bear", {-0.9, 0.8, 0.9, -0.8});
+    adapter.add_token_mapping("mid_bull",    {0.5, 0.6, 0.3,  0.5});
+
+    auto top = adapter.top_tokens_by_directional_bias(3);
+    ASSERT_GE(top.size(), 3u);
+    EXPECT_EQ(top[0].first, "strong_bear");
+    EXPECT_NEAR(std::abs(top[0].second), 0.8, 1e-9);
+    EXPECT_EQ(top[1].first, "mid_bull");
+}
+
+TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_n_greater_than_dict) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("only", {0.3, 0.5, 0.1, 0.3});
+
+    auto top = adapter.top_tokens_by_directional_bias(100);
+    bool found = false;
+    for (const auto& p : top) if (p.first == "only") found = true;
+    EXPECT_TRUE(found) << "top_tokens_by_directional_bias must include all tokens when n > dict size";
+}
+
 } // namespace
 } // namespace llmquant
