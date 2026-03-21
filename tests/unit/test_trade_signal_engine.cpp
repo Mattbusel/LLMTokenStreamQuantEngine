@@ -1534,18 +1534,20 @@ TEST(TradeSignalEngineTest, test_trade_signal_to_json_values_reflect_fields) {
 // --- format_stats quality histogram ---
 
 TEST(TradeSignalEngineTest, test_format_stats_contains_quality_hist_field) {
-    LLMAdapter adapter;
-    TradeSignalEngine engine(adapter);
-    engine.process_token("bullish", 0.8, 0.9);
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
     std::string stats = engine.format_stats();
     EXPECT_NE(stats.find("quality_hist="), std::string::npos)
         << "format_stats must include quality_hist field after processing a token";
 }
 
 TEST(TradeSignalEngineTest, test_format_stats_quality_hist_five_buckets) {
-    LLMAdapter adapter;
-    TradeSignalEngine engine(adapter);
-    engine.process_token("bullish", 0.8, 0.9);
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.5, 0.7});
     std::string stats = engine.format_stats();
     // quality_hist=[a,b,c,d,e] — expect exactly 4 commas inside the brackets
     auto start = stats.find("quality_hist=[");
@@ -1558,8 +1560,7 @@ TEST(TradeSignalEngineTest, test_format_stats_quality_hist_five_buckets) {
 }
 
 TEST(TradeSignalEngineTest, test_format_stats_no_data_returns_early) {
-    LLMAdapter adapter;
-    TradeSignalEngine engine(adapter);
+    TradeSignalEngine engine(make_config());
     std::string stats = engine.format_stats();
     EXPECT_EQ(stats, "tokens=0 (no data)")
         << "format_stats must return early message when no tokens processed";

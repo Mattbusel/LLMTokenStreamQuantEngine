@@ -133,6 +133,11 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             set_defaults();
             return false;
         }
+        if (ts.dedup_ttl_ms < 0) {
+            spdlog::error("Config validation failed: dedup_ttl_ms must be >= 0 (0 = auto)");
+            set_defaults();
+            return false;
+        }
         if (!std::isfinite(tr.bias_sensitivity) || tr.bias_sensitivity <= 0.0 || tr.bias_sensitivity > 10.0) {
             spdlog::error("Config: bias_sensitivity must be in (0, 10]");
             set_defaults();
@@ -242,66 +247,83 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
     }
 }
 
-bool Config::save_to_file(const std::string& filepath) const {
+std::string Config::to_yaml_string() const {
     SystemConfig snap;
     {
         std::lock_guard<std::mutex> lk(config_mutex_);
         snap = config_;
     }
-    const auto& snap_cfg = snap;  // local alias — avoids shadowing the config_ member
     YAML::Node yaml;
 
     // Token stream
-    yaml["token_stream"]["data_file_path"] = snap_cfg.token_stream.data_file_path;
-    yaml["token_stream"]["token_interval_ms"] = snap_cfg.token_stream.token_interval_ms;
-    yaml["token_stream"]["buffer_size"] = snap_cfg.token_stream.buffer_size;
-    yaml["token_stream"]["use_memory_stream"] = snap_cfg.token_stream.use_memory_stream;
-    yaml["token_stream"]["dedup_ttl_ms"] = snap_cfg.token_stream.dedup_ttl_ms;
+    yaml["token_stream"]["data_file_path"]   = snap.token_stream.data_file_path;
+    yaml["token_stream"]["token_interval_ms"] = snap.token_stream.token_interval_ms;
+    yaml["token_stream"]["buffer_size"]       = snap.token_stream.buffer_size;
+    yaml["token_stream"]["use_memory_stream"] = snap.token_stream.use_memory_stream;
+    yaml["token_stream"]["dedup_ttl_ms"]      = snap.token_stream.dedup_ttl_ms;
 
     // Trading
-    yaml["trading"]["bias_sensitivity"] = snap_cfg.trading.bias_sensitivity;
-    yaml["trading"]["volatility_sensitivity"] = snap_cfg.trading.volatility_sensitivity;
-    yaml["trading"]["signal_decay_rate"] = snap_cfg.trading.signal_decay_rate;
-    yaml["trading"]["signal_cooldown_us"]  = snap_cfg.trading.signal_cooldown_us;
-    yaml["trading"]["max_signal_age_us"]    = snap_cfg.trading.max_signal_age_us;
-    yaml["trading"]["min_bias_threshold"]  = snap_cfg.trading.min_bias_threshold;
-    yaml["trading"]["max_accumulated_bias"] = snap_cfg.trading.max_accumulated_bias;
+    yaml["trading"]["bias_sensitivity"]      = snap.trading.bias_sensitivity;
+    yaml["trading"]["volatility_sensitivity"] = snap.trading.volatility_sensitivity;
+    yaml["trading"]["signal_decay_rate"]     = snap.trading.signal_decay_rate;
+    yaml["trading"]["signal_cooldown_us"]    = snap.trading.signal_cooldown_us;
+    yaml["trading"]["max_signal_age_us"]     = snap.trading.max_signal_age_us;
+    yaml["trading"]["min_bias_threshold"]    = snap.trading.min_bias_threshold;
+    yaml["trading"]["max_accumulated_bias"]  = snap.trading.max_accumulated_bias;
 
     // Latency
-    yaml["latency"]["target_latency_us"] = snap_cfg.latency.target_latency_us;
-    yaml["latency"]["sample_window"] = snap_cfg.latency.sample_window;
-    yaml["latency"]["enable_profiling"] = snap_cfg.latency.enable_profiling;
+    yaml["latency"]["target_latency_us"] = snap.latency.target_latency_us;
+    yaml["latency"]["sample_window"]     = snap.latency.sample_window;
+    yaml["latency"]["enable_profiling"]  = snap.latency.enable_profiling;
 
     // Logging
-    yaml["logging"]["log_file_path"] = snap_cfg.logging.log_file_path;
-    yaml["logging"]["format"] = snap_cfg.logging.format;
-    yaml["logging"]["enable_console"] = snap_cfg.logging.enable_console;
-    yaml["logging"]["flush_interval_ms"] = snap_cfg.logging.flush_interval_ms;
+    yaml["logging"]["log_file_path"]    = snap.logging.log_file_path;
+    yaml["logging"]["format"]           = snap.logging.format;
+    yaml["logging"]["enable_console"]   = snap.logging.enable_console;
+    yaml["logging"]["flush_interval_ms"] = snap.logging.flush_interval_ms;
 
     // Metrics endpoint
-    yaml["metrics"]["stats_port"]   = snap_cfg.metrics.stats_port;
-    yaml["metrics"]["bind_address"] = snap_cfg.metrics.bind_address;
+    yaml["metrics"]["stats_port"]   = snap.metrics.stats_port;
+    yaml["metrics"]["bind_address"] = snap.metrics.bind_address;
 
     // Pressure
-    yaml["pressure"]["max_ingestion_rate_tps"] = snap_cfg.pressure.max_ingestion_rate_tps;
-    yaml["pressure"]["backoff_scale_factor"]   = snap_cfg.pressure.backoff_scale_factor;
+    yaml["pressure"]["max_ingestion_rate_tps"] = snap.pressure.max_ingestion_rate_tps;
+    yaml["pressure"]["backoff_scale_factor"]   = snap.pressure.backoff_scale_factor;
 
     // Risk thresholds
-    yaml["risk_thresholds"]["max_bias_magnitude"]       = snap_cfg.risk_thresholds.max_bias_magnitude;
-    yaml["risk_thresholds"]["max_volatility_magnitude"] = snap_cfg.risk_thresholds.max_volatility_magnitude;
-    yaml["risk_thresholds"]["max_spread_magnitude"]     = snap_cfg.risk_thresholds.max_spread_magnitude;
-    yaml["risk_thresholds"]["min_confidence"]           = snap_cfg.risk_thresholds.min_confidence;
-    yaml["risk_thresholds"]["max_signals_per_second"]   = snap_cfg.risk_thresholds.max_signals_per_second;
-    yaml["risk_thresholds"]["max_drawdown"]             = snap_cfg.risk_thresholds.max_drawdown;
-    yaml["risk_thresholds"]["drawdown_window_s"]        = snap_cfg.risk_thresholds.drawdown_window_s;
-    yaml["risk_thresholds"]["position_warn_fraction"]   = snap_cfg.risk_thresholds.position_warn_fraction;
+    yaml["risk_thresholds"]["max_bias_magnitude"]       = snap.risk_thresholds.max_bias_magnitude;
+    yaml["risk_thresholds"]["max_volatility_magnitude"] = snap.risk_thresholds.max_volatility_magnitude;
+    yaml["risk_thresholds"]["max_spread_magnitude"]     = snap.risk_thresholds.max_spread_magnitude;
+    yaml["risk_thresholds"]["min_confidence"]           = snap.risk_thresholds.min_confidence;
+    yaml["risk_thresholds"]["max_signals_per_second"]   = snap.risk_thresholds.max_signals_per_second;
+    yaml["risk_thresholds"]["max_drawdown"]             = snap.risk_thresholds.max_drawdown;
+    yaml["risk_thresholds"]["drawdown_window_s"]        = snap.risk_thresholds.drawdown_window_s;
+    yaml["risk_thresholds"]["position_warn_fraction"]   = snap.risk_thresholds.position_warn_fraction;
 
+    // Risk overrides (gate bypass flags — testing/debugging only)
+    yaml["risk"]["disable_magnitude_gate"]  = snap.risk_overrides.disable_magnitude_gate;
+    yaml["risk"]["disable_confidence_gate"] = snap.risk_overrides.disable_confidence_gate;
+    yaml["risk"]["disable_rate_gate"]       = snap.risk_overrides.disable_rate_gate;
+    yaml["risk"]["disable_drawdown_gate"]   = snap.risk_overrides.disable_drawdown_gate;
+    yaml["risk"]["disable_position_gate"]   = snap.risk_overrides.disable_position_gate;
+
+    // Semantic weight multipliers
+    yaml["semantic_weights"]["sentiment_multiplier"]  = snap.semantic_weights.sentiment_multiplier;
+    yaml["semantic_weights"]["confidence_multiplier"] = snap.semantic_weights.confidence_multiplier;
+    yaml["semantic_weights"]["volatility_multiplier"] = snap.semantic_weights.volatility_multiplier;
+    yaml["semantic_weights"]["bias_multiplier"]       = snap.semantic_weights.bias_multiplier;
+
+    return YAML::Dump(yaml);
+}
+
+bool Config::save_to_file(const std::string& filepath) const {
+    std::string content = to_yaml_string();
     std::ofstream f(filepath);
     if (!f.is_open()) {
         spdlog::error("[config] Failed to open '{}' for writing", filepath);
         return false;
     }
-    f << yaml;
+    f << content;
     if (!f.good()) {
         spdlog::error("[config] Write error for '{}'", filepath);
         return false;

@@ -539,7 +539,7 @@ TEST(ConfigTest, test_config_metrics_defaults_when_section_absent) {
 
 TEST(ConfigTest, test_config_to_summary_string_contains_key_fields) {
     Config cfg;
-    cfg.load_from_yaml_string(
+    (void)cfg.load_from_yaml_string(
         "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
         "trading:\n  bias_sensitivity: 2.5\n  volatility_sensitivity: 1.0\n"
         "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
@@ -665,7 +665,7 @@ TEST(ConfigTest, test_config_load_from_env_multiple_vars_returns_correct_count) 
     setenv("LLMQUANT_SIGNAL_DECAY",     "0.9", 1);
 #endif
     Config cfg;
-    cfg.load_from_file("../config.yaml");
+    (void)cfg.load_from_file("../config.yaml");
     int count = cfg.load_from_env();
     EXPECT_GE(count, 3) << "At least 3 env vars should have been applied";
 
@@ -692,7 +692,7 @@ TEST(ConfigTest, test_config_load_from_env_nan_value_is_ignored) {
     setenv("LLMQUANT_BIAS_SENSITIVITY", "nan", 1);
 #endif
     Config cfg;
-    cfg.load_from_file("../config.yaml");
+    (void)cfg.load_from_file("../config.yaml");
     double before = cfg.get_config().trading.bias_sensitivity;
     int count = cfg.load_from_env();
     // NaN is not finite — load_from_env must skip it.
@@ -720,7 +720,7 @@ TEST(ConfigTest, test_config_validate_defaults_returns_empty) {
 
 TEST(ConfigTest, test_config_validate_after_valid_yaml_returns_empty) {
     Config cfg;
-    cfg.load_from_yaml_string(
+    (void)cfg.load_from_yaml_string(
         "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
         "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
         "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
@@ -778,7 +778,7 @@ TEST(ConfigTest, test_config_is_valid_true_for_default_config) {
 
 TEST(ConfigTest, test_config_is_valid_true_after_valid_yaml_load) {
     Config cfg;
-    cfg.load_from_yaml_string(
+    (void)cfg.load_from_yaml_string(
         "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
         "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
         "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
@@ -844,7 +844,7 @@ TEST(ConfigTest, test_config_load_from_env_log_format_uppercased) {
 
 TEST(ConfigTest, test_config_to_summary_string_contains_logging_section) {
     Config cfg;
-    cfg.load_from_yaml_string(
+    (void)cfg.load_from_yaml_string(
         "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
         "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
         "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
@@ -858,6 +858,161 @@ TEST(ConfigTest, test_config_to_summary_string_contains_logging_section) {
         << "to_summary_string must include the log_file_path value";
     EXPECT_NE(summary.find("JSON"), std::string::npos)
         << "to_summary_string must include the log format";
+}
+
+// ---------------------------------------------------------------------------
+// dedup_ttl_ms config field (added cycle 18)
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_dedup_ttl_ms_explicit_value_parsed) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "  use_memory_stream: true\n  dedup_ttl_ms: 250\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    ASSERT_TRUE(ok) << "Config with dedup_ttl_ms: 250 must parse successfully";
+    EXPECT_EQ(cfg.get_config().token_stream.dedup_ttl_ms, 250);
+}
+
+TEST(ConfigTest, test_config_dedup_ttl_ms_defaults_to_zero) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "  use_memory_stream: true\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    ASSERT_TRUE(ok);
+    EXPECT_EQ(cfg.get_config().token_stream.dedup_ttl_ms, 0)
+        << "dedup_ttl_ms must default to 0 when absent from YAML";
+}
+
+TEST(ConfigTest, test_config_dedup_ttl_ms_negative_rejected) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "  dedup_ttl_ms: -1\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    EXPECT_FALSE(ok) << "Negative dedup_ttl_ms must fail validation";
+}
+
+TEST(ConfigTest, test_config_dedup_ttl_ms_zero_is_valid) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "  dedup_ttl_ms: 0\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    ASSERT_TRUE(ok) << "dedup_ttl_ms: 0 (auto mode) must be valid";
+    EXPECT_EQ(cfg.get_config().token_stream.dedup_ttl_ms, 0);
+}
+
+// ---------------------------------------------------------------------------
+// SemanticWeightsConfig parsing tests
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_semantic_weights_parsed_from_yaml) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "semantic_weights:\n"
+        "  sentiment_multiplier: 2.5\n"
+        "  confidence_multiplier: 0.75\n"
+        "  volatility_multiplier: 1.5\n"
+        "  bias_multiplier: 3.0\n");
+    ASSERT_TRUE(ok);
+    const auto& sw = cfg.get_config().semantic_weights;
+    EXPECT_DOUBLE_EQ(sw.sentiment_multiplier,  2.5);
+    EXPECT_DOUBLE_EQ(sw.confidence_multiplier, 0.75);
+    EXPECT_DOUBLE_EQ(sw.volatility_multiplier, 1.5);
+    EXPECT_DOUBLE_EQ(sw.bias_multiplier,       3.0);
+}
+
+TEST(ConfigTest, test_semantic_weights_default_to_one_when_absent) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    ASSERT_TRUE(ok);
+    const auto& sw = cfg.get_config().semantic_weights;
+    EXPECT_DOUBLE_EQ(sw.sentiment_multiplier,  1.0);
+    EXPECT_DOUBLE_EQ(sw.confidence_multiplier, 1.0);
+    EXPECT_DOUBLE_EQ(sw.volatility_multiplier, 1.0);
+    EXPECT_DOUBLE_EQ(sw.bias_multiplier,       1.0);
+}
+
+// ---------------------------------------------------------------------------
+// Config::to_yaml_string() round-trip tests
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_to_yaml_string_round_trips_trading_config) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 3.0\n  volatility_sensitivity: 2.5\n"
+        "  signal_decay_rate: 0.88\n  signal_cooldown_us: 750\n"
+        "  max_signal_age_us: 250.0\n  min_bias_threshold: 0.05\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n");
+    ASSERT_TRUE(ok);
+
+    std::string yaml_str = cfg.to_yaml_string();
+    ASSERT_FALSE(yaml_str.empty());
+
+    Config cfg2;
+    ASSERT_TRUE(cfg2.load_from_yaml_string(yaml_str));
+    const auto& tr = cfg2.get_config().trading;
+    EXPECT_DOUBLE_EQ(tr.bias_sensitivity,      3.0);
+    EXPECT_DOUBLE_EQ(tr.volatility_sensitivity, 2.5);
+    EXPECT_DOUBLE_EQ(tr.signal_decay_rate,      0.88);
+    EXPECT_EQ(tr.signal_cooldown_us,            750);
+    EXPECT_DOUBLE_EQ(tr.max_signal_age_us,      250.0);
+    EXPECT_DOUBLE_EQ(tr.min_bias_threshold,     0.05);
+}
+
+TEST(ConfigTest, test_to_yaml_string_round_trips_semantic_weights) {
+    Config cfg;
+    bool ok = cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "semantic_weights:\n"
+        "  sentiment_multiplier: 1.8\n"
+        "  confidence_multiplier: 0.6\n"
+        "  volatility_multiplier: 2.2\n"
+        "  bias_multiplier: 0.9\n");
+    ASSERT_TRUE(ok);
+
+    Config cfg2;
+    ASSERT_TRUE(cfg2.load_from_yaml_string(cfg.to_yaml_string()));
+    const auto& sw = cfg2.get_config().semantic_weights;
+    EXPECT_DOUBLE_EQ(sw.sentiment_multiplier,  1.8);
+    EXPECT_DOUBLE_EQ(sw.confidence_multiplier, 0.6);
+    EXPECT_DOUBLE_EQ(sw.volatility_multiplier, 2.2);
+    EXPECT_DOUBLE_EQ(sw.bias_multiplier,       0.9);
+}
+
+TEST(ConfigTest, test_to_yaml_string_contains_all_sections) {
+    Config cfg;
+    std::string yaml_str = cfg.to_yaml_string();
+    EXPECT_NE(yaml_str.find("token_stream"),    std::string::npos);
+    EXPECT_NE(yaml_str.find("trading"),         std::string::npos);
+    EXPECT_NE(yaml_str.find("latency"),         std::string::npos);
+    EXPECT_NE(yaml_str.find("logging"),         std::string::npos);
+    EXPECT_NE(yaml_str.find("metrics"),         std::string::npos);
+    EXPECT_NE(yaml_str.find("pressure"),        std::string::npos);
+    EXPECT_NE(yaml_str.find("risk_thresholds"), std::string::npos);
+    EXPECT_NE(yaml_str.find("semantic_weights"), std::string::npos);
 }
 
 } // namespace

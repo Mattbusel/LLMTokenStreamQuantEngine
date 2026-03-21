@@ -177,7 +177,7 @@ TEST(RiskManagerTest, test_risk_manager_reset_clears_drawdown_and_rate) {
     auto sig = make_signal(0.3, 0.1, 0.05, 0.8);
 
     // Exhaust drawdown and rate limit.
-    rm.evaluate(sig);  // passes, cumulative = 0.3, rate used = 1
+    (void)rm.evaluate(sig);  // passes, cumulative = 0.3, rate used = 1
 
     // Both drawdown (0.3 + 0.3 = 0.6 > 0.3) and rate (already 1 in window)
     // would block, but after reset both should clear.
@@ -342,7 +342,7 @@ TEST(RiskManagerTest, test_risk_manager_oms_callback_receives_correct_event_stri
                                  const RiskManager::PositionState&,
                                  const TradeSignal&) { ev = event; });
 
-        rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // 0.95 + 0.1 > 1.0
+        (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // 0.95 + 0.1 > 1.0
         EXPECT_EQ(ev, "position_limit_breached");
     }
 
@@ -361,7 +361,7 @@ TEST(RiskManagerTest, test_risk_manager_oms_callback_receives_correct_event_stri
                                  const RiskManager::PositionState&,
                                  const TradeSignal&) { ev = event; });
 
-        rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+        (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
         EXPECT_EQ(ev, "pnl_limit_breached");
     }
 }
@@ -423,7 +423,7 @@ TEST(RiskManagerTest, test_risk_manager_concurrent_evaluate_no_crash) {
     for (int t = 0; t < N_THREADS; ++t) {
         threads.emplace_back([&]() {
             for (int i = 0; i < N_CALLS; ++i) {
-                rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+                (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
             }
         });
     }
@@ -443,8 +443,8 @@ TEST(RiskManagerTest, test_risk_manager_reset_stats_clears_counters) {
     RiskManager rm(default_config());
 
     // Block some signals to populate the counters.
-    rm.evaluate(make_signal(0.5, 0.1, 0.05, 0.8));  // passes
-    rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // blocked magnitude
+    (void)rm.evaluate(make_signal(0.5, 0.1, 0.05, 0.8));  // passes
+    (void)rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // blocked magnitude
     ASSERT_GT(rm.get_stats().signals_passed.load(),             0u);
     ASSERT_GT(rm.get_stats().signals_blocked_magnitude.load(),  0u);
 
@@ -460,7 +460,7 @@ TEST(RiskManagerTest, test_risk_manager_reset_stats_clears_counters) {
     EXPECT_EQ(rm.get_stats().signals_blocked_pnl.load(),        0u);
 
     // Engine must still work normally after reset_stats().
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
     EXPECT_EQ(rm.get_stats().signals_passed.load(), 1u);
 }
 
@@ -472,7 +472,7 @@ TEST(RiskManagerTest, test_risk_manager_get_cumulative_bias_updates_and_resets) 
     EXPECT_DOUBLE_EQ(rm.get_cumulative_bias(), 0.0);
 
     // Process signals with a known bias shift to accumulate drawdown.
-    rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));  // contributes 0.4 to drawdown
+    (void)rm.evaluate(make_signal(0.4, 0.1, 0.05, 0.8));  // contributes 0.4 to drawdown
     EXPECT_NE(rm.get_cumulative_bias(), 0.0)
         << "Cumulative bias must be non-zero after evaluating a signal";
 
@@ -494,7 +494,7 @@ TEST(RiskManagerTest, test_risk_manager_alert_callback_fires_for_each_blocked_si
 
     // 3 signals that exceed the max_bias_magnitude (1.0).
     for (int i = 0; i < 3; ++i) {
-        rm.evaluate(make_signal(9.0, 0.1, 0.05, 0.8));
+        (void)rm.evaluate(make_signal(9.0, 0.1, 0.05, 0.8));
     }
 
     EXPECT_EQ(alert_count.load(), 3)
@@ -669,7 +669,7 @@ TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_decreases_
     RiskManager rm(cfg);
 
     auto sig = make_signal(1.0, 0.1, 0.05, 0.8);
-    rm.evaluate(sig);  // cumulative_bias = 1.0
+    (void)rm.evaluate(sig);  // cumulative_bias = 1.0
 
     double remaining = rm.get_drawdown_budget_remaining();
     // max_drawdown(5.0) - |cumulative_bias(1.0)| = 4.0
@@ -693,7 +693,7 @@ TEST(RiskManagerTest, test_risk_manager_get_drawdown_budget_remaining_clamps_at_
 TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_confidence_reason) {
     RiskManager rm(default_config());
     std::string reason;
-    rm.evaluate_with_reason(make_signal(0.1, 0.1, 0.05, 0.01 /*below 0.1 min*/), reason);
+    (void)rm.evaluate_with_reason(make_signal(0.1, 0.1, 0.05, 0.01 /*below 0.1 min*/), reason);
     EXPECT_EQ(reason, "confidence_below_minimum");
 }
 
@@ -751,7 +751,7 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_rate_limit_reason) 
 
     std::string reason;
     // First signal passes.
-    rm.evaluate_with_reason(make_signal(), reason);
+    (void)rm.evaluate_with_reason(make_signal(), reason);
     EXPECT_TRUE(reason.empty());
 
     // Immediately fire a second — rate limit fires.
@@ -774,7 +774,7 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_drawdown_reason) {
         s.spread_modifier       = 0.05;
         s.confidence            = 0.8;
         s.timestamp_ns          = static_cast<uint64_t>(i + 1);
-        rm.evaluate_with_reason(s, reason);
+        (void)rm.evaluate_with_reason(s, reason);
     }
     EXPECT_EQ(reason, "drawdown_limit_exceeded");
 }
@@ -788,7 +788,7 @@ TEST(RiskManagerTest, test_risk_manager_evaluate_with_reason_does_not_disturb_ex
     });
 
     std::string reason;
-    rm.evaluate_with_reason(make_signal(5.0, 0.1, 0.05, 0.8), reason);  // magnitude block
+    (void)rm.evaluate_with_reason(make_signal(5.0, 0.1, 0.05, 0.8), reason);  // magnitude block
     EXPECT_FALSE(reason.empty());
     // The original callback must still have fired.
     EXPECT_EQ(alert_count.load(), 1);
@@ -807,9 +807,9 @@ TEST(RiskManagerTest, test_risk_manager_rate_limit_utilization_increases_with_si
     cfg.max_signals_per_second = 10;
     RiskManager rm(cfg);
     auto sig = make_signal(0.1, 0.1, 0.05, 0.8);
-    rm.evaluate(sig);
-    rm.evaluate(sig);
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
+    (void)rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     EXPECT_DOUBLE_EQ(rm.get_rate_limit_utilization(), 0.3);
 }
 
@@ -902,8 +902,8 @@ TEST(RiskManagerTest, test_risk_manager_stats_blocked_total_sums_all_gates) {
     cfg.max_signals_per_second = 1000;
     RiskManager rm(cfg);
 
-    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.01)); // confidence block
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.01)); // confidence block
 
     uint64_t total = rm.get_stats().blocked_total();
     EXPECT_EQ(total, 2u) << "blocked_total must equal magnitude + confidence blocks";
@@ -911,15 +911,15 @@ TEST(RiskManagerTest, test_risk_manager_stats_blocked_total_sums_all_gates) {
 
 TEST(RiskManagerTest, test_risk_manager_blocked_rate_zero_when_all_pass) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));
     EXPECT_DOUBLE_EQ(rm.get_blocked_rate(), 0.0)
         << "Blocked rate must be 0 when all signals pass";
 }
 
 TEST(RiskManagerTest, test_risk_manager_blocked_rate_correct_fraction) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
-    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
 
     // 1 blocked out of 2 evaluated -> 0.5
     EXPECT_NEAR(rm.get_blocked_rate(), 0.5, 1e-9);
@@ -1020,7 +1020,7 @@ TEST(RiskManagerTest, test_risk_manager_snapshot_reflects_current_state) {
     RiskManager rm(cfg);
 
     // Process a signal to accumulate some drawdown.
-    rm.evaluate(make_signal(1.0, 0.1, 0.05, 0.8));  // cumulative_bias = 1.0
+    (void)rm.evaluate(make_signal(1.0, 0.1, 0.05, 0.8));  // cumulative_bias = 1.0
 
     auto snap = rm.snapshot();
 
@@ -1034,7 +1034,7 @@ TEST(RiskManagerTest, test_risk_manager_snapshot_reflects_current_state) {
 
 TEST(RiskManagerTest, test_risk_manager_snapshot_blocked_total_matches_stats) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // magnitude block
 
     auto snap = rm.snapshot();
     EXPECT_EQ(snap.signals_blocked_total, rm.get_stats().blocked_total())
@@ -1051,9 +1051,9 @@ TEST(RiskManagerTest, test_risk_manager_get_total_evaluated_zero_at_start) {
 
 TEST(RiskManagerTest, test_risk_manager_get_total_evaluated_counts_all_signals) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
-    rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));  // blocked magnitude
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.8));  // passes
     EXPECT_EQ(rm.get_total_evaluated(), 3u);
 }
 
@@ -1233,7 +1233,7 @@ TEST(RiskManagerTest, test_get_signals_per_second_non_negative_after_passing) {
     TradeSignal sig;
     sig.delta_bias_shift = 0.1;
     sig.confidence = 0.8;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     // After at least one signal passes, rate should be >= 0.
     EXPECT_GE(rm.get_signals_per_second(), 0.0)
         << "get_signals_per_second must be >= 0 after signals pass";
@@ -1338,7 +1338,7 @@ TEST(RiskManagerTest, test_is_rate_limited_true_when_window_full) {
     rm.disable_all_gates();
     TradeSignal sig;
     sig.delta_bias_shift = 0.1; sig.confidence = 0.8;
-    rm.evaluate(sig); rm.evaluate(sig);
+    (void)rm.evaluate(sig); rm.evaluate(sig);
     EXPECT_TRUE(rm.is_rate_limited())
         << "is_rate_limited must be true when max_signals_per_second is reached";
 }
@@ -1363,7 +1363,7 @@ TEST(RiskManagerTest, test_get_blocked_by_gate_magnitude_increments) {
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier = 0.0;
     sig.confidence = 0.9;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     auto bg = rm.get_blocked_by_gate();
     EXPECT_GE(bg.magnitude, uint64_t{1});
 }
@@ -1377,7 +1377,7 @@ TEST(RiskManagerTest, test_get_blocked_by_gate_confidence_increments) {
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier = 0.0;
     sig.confidence = 0.5;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     auto bg = rm.get_blocked_by_gate();
     EXPECT_GE(bg.confidence, uint64_t{1});
 }
@@ -1391,7 +1391,7 @@ TEST(RiskManagerTest, test_get_blocked_by_gate_resets_with_reset_stats) {
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier = 0.0;
     sig.confidence = 0.9;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     rm.reset_stats();
     auto bg = rm.get_blocked_by_gate();
     EXPECT_EQ(bg.magnitude, uint64_t{0});
@@ -1426,7 +1426,7 @@ TEST(RiskManagerTest, test_get_drawdown_utilization_rises_after_signals_pass) {
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier = 0.0;
     sig.confidence = 0.8;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     // Utilization should be > 0 now that bias has accumulated.
     EXPECT_GE(rm.get_drawdown_utilization(), 0.0);
     EXPECT_LE(rm.get_drawdown_utilization(), 1.0);
@@ -1442,7 +1442,7 @@ TEST(RiskManagerTest, test_get_drawdown_utilization_in_range) {
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier = 0.0;
     sig.confidence = 0.9;
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     double util = rm.get_drawdown_utilization();
     EXPECT_GE(util, 0.0);
     EXPECT_LE(util, 1.0);
@@ -1457,8 +1457,8 @@ TEST(RiskManagerTest, test_get_rejection_rate_in_range_after_mix) {
     RiskManager::Config cfg = default_config();
     cfg.max_bias_magnitude = 0.5;
     RiskManager rm(cfg);
-    rm.evaluate(make_signal(0.1));  // passes
-    rm.evaluate(make_signal(9.9));  // blocked
+    (void)rm.evaluate(make_signal(0.1));  // passes
+    (void)rm.evaluate(make_signal(9.9));  // blocked
     double rate = rm.get_rejection_rate();
     EXPECT_GE(rate, 0.0);
     EXPECT_LE(rate, 1.0);
@@ -1474,8 +1474,8 @@ TEST(RiskManagerTest, test_get_total_signals_evaluated_counts_all) {
     RiskManager::Config cfg = default_config();
     cfg.max_bias_magnitude = 0.5;
     RiskManager rm(cfg);
-    rm.evaluate(make_signal(0.1));  // passes
-    rm.evaluate(make_signal(9.9));  // blocked
+    (void)rm.evaluate(make_signal(0.1));  // passes
+    (void)rm.evaluate(make_signal(9.9));  // blocked
     EXPECT_EQ(rm.get_total_signals_evaluated(), uint64_t{2});
 }
 
@@ -1488,8 +1488,8 @@ TEST(RiskManagerTest, test_get_pass_rate_plus_rejection_rate_equals_one) {
     RiskManager::Config cfg = default_config();
     cfg.max_bias_magnitude = 0.5;
     RiskManager rm(cfg);
-    rm.evaluate(make_signal(0.1));
-    rm.evaluate(make_signal(9.9));
+    (void)rm.evaluate(make_signal(0.1));
+    (void)rm.evaluate(make_signal(9.9));
     double p = rm.get_pass_rate();
     double r = rm.get_rejection_rate();
     EXPECT_NEAR(p + r, 1.0, 1e-12);
@@ -1497,14 +1497,14 @@ TEST(RiskManagerTest, test_get_pass_rate_plus_rejection_rate_equals_one) {
 
 TEST(RiskManagerTest, test_format_stats_contains_evaluated) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(0.1));
+    (void)rm.evaluate(make_signal(0.1));
     std::string s = rm.format_stats();
     EXPECT_NE(s.find("evaluated="), std::string::npos);
 }
 
 TEST(RiskManagerTest, test_format_stats_contains_passed_and_blocked) {
     RiskManager rm(default_config());
-    rm.evaluate(make_signal(0.1));
+    (void)rm.evaluate(make_signal(0.1));
     std::string s = rm.format_stats();
     EXPECT_NE(s.find("passed="),  std::string::npos);
     EXPECT_NE(s.find("blocked="), std::string::npos);
@@ -1536,7 +1536,7 @@ TEST(RiskManagerTest, test_get_confidence_block_rate_rises_after_low_confidence_
     sig.volatility_adjustment = 0.0;
     sig.spread_modifier       = 0.0;
     sig.confidence            = 0.5;  // below min_confidence
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
     EXPECT_GT(rm.get_confidence_block_rate(), 0.0);
     EXPECT_LE(rm.get_confidence_block_rate(), 1.0);
 }
@@ -1604,8 +1604,8 @@ TEST(RiskManagerTest, test_get_most_blocked_gate_identifies_magnitude) {
     TradeSignal sig{};
     sig.delta_bias_shift = 5.0;
     sig.confidence       = 1.0;
-    rm.evaluate(sig);
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
+    (void)rm.evaluate(sig);
 
     EXPECT_EQ(rm.get_most_blocked_gate(), "magnitude");
 }
@@ -1620,9 +1620,9 @@ TEST(RiskManagerTest, test_get_most_blocked_gate_identifies_dominant_gate) {
     TradeSignal sig{};
     sig.delta_bias_shift = 5.0;
     sig.confidence       = 0.5;
-    rm.evaluate(sig);
-    rm.evaluate(sig);
-    rm.evaluate(sig);
+    (void)rm.evaluate(sig);
+    (void)rm.evaluate(sig);
+    (void)rm.evaluate(sig);
 
     EXPECT_EQ(rm.get_most_blocked_gate(), "magnitude");
 }

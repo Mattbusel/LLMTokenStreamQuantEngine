@@ -202,6 +202,8 @@ int main(int argc, char* argv[]) {
                   << "token_stream.token_interval_ms:       " << ts.token_interval_ms << "\n"
                   << "token_stream.buffer_size:             " << ts.buffer_size << "\n"
                   << "token_stream.data_file_path:          " << ts.data_file_path << "\n"
+                  << "token_stream.dedup_ttl_ms:            " << ts.dedup_ttl_ms
+                      << (ts.dedup_ttl_ms == 0 ? " (auto: 10x token_interval_ms)" : "") << "\n"
                   << "trading.bias_sensitivity:             " << tr.bias_sensitivity << "\n"
                   << "trading.volatility_sensitivity:       " << tr.volatility_sensitivity << "\n"
                   << "trading.signal_decay_rate:            " << tr.signal_decay_rate << "\n"
@@ -1008,7 +1010,18 @@ int main(int argc, char* argv[]) {
                  << "llmquant_noise_filtered_total " << eng_stats.noise_filtered.load() << "\n"
                  << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
                  << "# TYPE llmquant_risk_healthy gauge\n"
-                 << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n";
+                 << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n"
+                 << "# HELP llmquant_dedup_dup_rate_pct Duplicate token rate as percentage [0,100]\n"
+                 << "# TYPE llmquant_dedup_dup_rate_pct gauge\n"
+                 << "llmquant_dedup_dup_rate_pct " << [&]() -> double {
+                        uint64_t nov = dedup_backend->total_novel();
+                        uint64_t dup = dedup_backend->total_duplicates();
+                        uint64_t tot = nov + dup;
+                        return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
+                    }() << "\n"
+                 << "# HELP llmquant_latency_window_fill_ratio Fraction of the latency sample window that is filled [0,1]\n"
+                 << "# TYPE llmquant_latency_window_fill_ratio gauge\n"
+                 << "llmquant_latency_window_fill_ratio " << std::setprecision(4) << latency_ctrl.get_window_fill_ratio() << "\n";
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }

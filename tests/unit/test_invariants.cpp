@@ -429,7 +429,7 @@ TEST(Invariants, test_invariant_risk_manager_total_evaluated_equals_passed_plus_
         sig.spread_modifier       = 0.05;
         sig.confidence            = s.conf;
         sig.timestamp_ns          = 1;
-        rm.evaluate(sig);
+        (void)rm.evaluate(sig);
     }
 
     const auto& stats = rm.get_stats();

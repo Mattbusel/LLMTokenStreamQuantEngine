@@ -261,6 +261,18 @@ public:
     void stop_watching();
 
     /**
+     * @brief Serialise the current configuration to a YAML-formatted string.
+     *
+     * Produces a complete, round-trippable YAML document covering all
+     * subsystem sections (including semantic_weights and risk_overrides).
+     * The output can be passed back to load_from_yaml_string() to restore
+     * an identical SystemConfig.  Thread-safe (acquires config_mutex_).
+     *
+     * @return YAML document as a std::string.
+     */
+    std::string to_yaml_string() const;
+
+    /**
      * @brief Return a human-readable summary of the active configuration.
      *
      * Produces a compact multi-line string suitable for startup logging.
