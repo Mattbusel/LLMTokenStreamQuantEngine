@@ -916,6 +916,13 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_version_info Engine version info (always 1; use labels for version string)\n"
                  << "# TYPE llmquant_version_info gauge\n"
                  << "llmquant_version_info{version=\"" LLMQUANT_VERSION "\"} 1\n"
+                 << "# HELP llmquant_start_time_seconds Unix timestamp (seconds) when the engine process started\n"
+                 << "# TYPE llmquant_start_time_seconds gauge\n"
+                 << "llmquant_start_time_seconds " << engine_start_unix_s << "\n"
+                 << "# HELP llmquant_uptime_seconds Number of seconds the engine has been running\n"
+                 << "# TYPE llmquant_uptime_seconds gauge\n"
+                 << "llmquant_uptime_seconds " << std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - engine_start_time).count() << "\n"
                  << "# HELP llmquant_avg_signal_strength Running Welford mean of |delta_bias_shift|\n"
                  << "# TYPE llmquant_avg_signal_strength gauge\n"
                  << "llmquant_avg_signal_strength " << std::setprecision(6)
@@ -1142,7 +1149,6 @@ int main(int argc, char* argv[]) {
     std::cout << "  Signals aged out : " << trade_engine.get_stats().signals_aged_out.load() << "\n";
     std::cout << "  Accum. clamped   : " << trade_engine.get_stats().accumulator_clamped.load() << "\n";
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
-    std::cout << "  Top blocked gate : " << risk_mgr.get_most_blocked_gate() << "\n";
     std::cout << "  Latency warmup   : " << std::fixed << std::setprecision(0)
               << (latency_ctrl.get_window_fill_ratio() * 100.0) << "% window filled\n";
     {
@@ -1180,6 +1186,18 @@ int main(int argc, char* argv[]) {
             for (size_t i = 0; i < top.size(); ++i) {
                 if (i > 0) std::cout << ", ";
                 std::cout << top[i].first << "(" << top[i].second << ")";
+            }
+            std::cout << "\n";
+        }
+    }
+    {
+        auto top_bias = llm_adapter.top_tokens_by_directional_bias(5);
+        if (!top_bias.empty()) {
+            std::cout << "  Top bias tokens  : ";
+            for (size_t i = 0; i < top_bias.size(); ++i) {
+                if (i > 0) std::cout << ", ";
+                std::cout << top_bias[i].first
+                          << "(" << std::fixed << std::setprecision(3) << top_bias[i].second << ")";
             }
             std::cout << "\n";
         }
