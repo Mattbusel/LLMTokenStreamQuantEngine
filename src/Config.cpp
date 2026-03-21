@@ -623,11 +623,19 @@ std::string Config::to_summary_string() const {
        << "  flush_ms=" << config_.logging.flush_interval_ms << "\n"
        << "[stream]   interval_ms=" << config_.token_stream.token_interval_ms
        << "  buffer=" << config_.token_stream.buffer_size
-       << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false") << "\n"
+       << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false")
+       << "  dedup_ttl_ms=" << config_.token_stream.dedup_ttl_ms
+       << (config_.token_stream.dedup_ttl_ms == 0 ? " (auto)" : "") << "\n"
        << "[sem_wts]  sentiment=" << config_.semantic_weights.sentiment_multiplier
        << "  confidence=" << config_.semantic_weights.confidence_multiplier
        << "  volatility=" << config_.semantic_weights.volatility_multiplier
-       << "  bias=" << config_.semantic_weights.bias_multiplier << "\n";
+       << "  bias=" << config_.semantic_weights.bias_multiplier << "\n"
+       << "[overrides]"
+       << " magnitude=" << (config_.risk_overrides.disable_magnitude_gate ? "DISABLED" : "on")
+       << "  confidence=" << (config_.risk_overrides.disable_confidence_gate ? "DISABLED" : "on")
+       << "  rate=" << (config_.risk_overrides.disable_rate_gate ? "DISABLED" : "on")
+       << "  drawdown=" << (config_.risk_overrides.disable_drawdown_gate ? "DISABLED" : "on")
+       << "  position=" << (config_.risk_overrides.disable_position_gate ? "DISABLED" : "on") << "\n";
     return ss.str();
 }
 

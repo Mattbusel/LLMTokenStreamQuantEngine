@@ -172,7 +172,7 @@ public:
      *
      * @return Vector of 5 QualityHistogramBucket entries in ascending bound order.
      */
-    std::vector<QualityHistogramBucket> get_quality_histogram() const;
+    [[nodiscard]] std::vector<QualityHistogramBucket> get_quality_histogram() const;
 
     /**
      * @brief Smoothing factor for the signal quality EMA.
@@ -194,7 +194,7 @@ public:
      *
      * @return EMA in [0.0, 1.0], or -1.0 if no signals emitted.
      */
-    double get_signal_quality_ema() const noexcept {
+    [[nodiscard]] double get_signal_quality_ema() const noexcept {
         return stats_.signal_quality_ema.load(std::memory_order_relaxed);
     }
 
@@ -360,7 +360,7 @@ public:
      *
      * @return Copy of the active Config struct.
      */
-    Config get_config() const noexcept { return config_; }
+    [[nodiscard]] Config get_config() const noexcept { return config_; }
 
     /**
      * @brief Return a copy of the current signal statistics.
@@ -369,7 +369,7 @@ public:
      *
      * @return Copy of the current Stats struct.
      */
-    Stats get_stats() const noexcept { return stats_; }
+    [[nodiscard]] Stats get_stats() const noexcept { return stats_; }
 
     /**
      * @brief Return the time elapsed since the last emitted signal, in microseconds.
@@ -379,7 +379,7 @@ public:
      *
      * @return Elapsed microseconds since the last emit_signal() call.
      */
-    double get_signal_age_us() const noexcept {
+    [[nodiscard]] double get_signal_age_us() const noexcept {
         uint64_t ts = last_signal_timestamp_ns_.load(std::memory_order_relaxed);
         if (ts == 0) return 0.0;
         auto now_ns = static_cast<uint64_t>(
@@ -393,7 +393,7 @@ public:
      *
      * @return Current accumulated bias value.
      */
-    double get_accumulated_bias() const noexcept {
+    [[nodiscard]] double get_accumulated_bias() const noexcept {
         return accumulated_bias_.load(std::memory_order_relaxed);
     }
 
@@ -404,7 +404,7 @@ public:
      * If min_bias_threshold is 0 (disabled), returns true whenever bias != 0.
      * Thread-safe (atomic reads).
      */
-    bool has_pending_bias() const noexcept {
+    [[nodiscard]] bool has_pending_bias() const noexcept {
         double bias = accumulated_bias_.load(std::memory_order_relaxed);
         if (config_.min_bias_threshold > 0.0)
             return std::fabs(bias) >= config_.min_bias_threshold;
@@ -416,7 +416,7 @@ public:
      *
      * @return +1 if accumulated bias > 0 (bullish), -1 if < 0 (bearish), 0 if zero.
      */
-    int get_bias_direction() const noexcept {
+    [[nodiscard]] int get_bias_direction() const noexcept {
         double b = accumulated_bias_.load(std::memory_order_relaxed);
         if (b > 0.0) return  1;
         if (b < 0.0) return -1;
@@ -435,7 +435,7 @@ public:
      *
      * @return Suppression rate in [0.0, 1.0].
      */
-    double suppression_rate() const noexcept {
+    [[nodiscard]] double suppression_rate() const noexcept {
         uint64_t gen  = stats_.signals_generated.load(std::memory_order_relaxed);
         uint64_t supp = stats_.signals_suppressed.load(std::memory_order_relaxed);
         uint64_t total = gen + supp;
@@ -449,7 +449,7 @@ public:
      *
      * @return Total emitted signal count.
      */
-    uint64_t get_signals_generated() const noexcept {
+    [[nodiscard]] uint64_t get_signals_generated() const noexcept {
         return stats_.signals_generated.load(std::memory_order_relaxed);
     }
 
@@ -460,7 +460,7 @@ public:
      *
      * @return Total suppressed signal count.
      */
-    uint64_t get_signals_suppressed() const noexcept {
+    [[nodiscard]] uint64_t get_signals_suppressed() const noexcept {
         return stats_.signals_suppressed.load(std::memory_order_relaxed);
     }
 
@@ -471,7 +471,7 @@ public:
      *
      * @return Total tokens processed count.
      */
-    uint64_t get_tokens_processed() const noexcept {
+    [[nodiscard]] uint64_t get_tokens_processed() const noexcept {
         return stats_.tokens_processed.load(std::memory_order_relaxed);
     }
 
@@ -483,7 +483,7 @@ public:
      *
      * @return Total aged-out signal count.
      */
-    uint64_t get_signals_aged_out() const noexcept {
+    [[nodiscard]] uint64_t get_signals_aged_out() const noexcept {
         return stats_.signals_aged_out.load(std::memory_order_relaxed);
     }
 
@@ -496,7 +496,7 @@ public:
      *
      * @return Aged-out rate in [0.0, 1.0].
      */
-    double get_aged_out_rate() const noexcept {
+    [[nodiscard]] double get_aged_out_rate() const noexcept {
         uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
         if (tokens == 0) return 0.0;
         return static_cast<double>(stats_.signals_aged_out.load(std::memory_order_relaxed))
@@ -510,7 +510,7 @@ public:
      * Returns 0.0 if no signals have been emitted yet.
      * Thread-safe (atomic read).
      */
-    double get_avg_signal_quality() const noexcept {
+    [[nodiscard]] double get_avg_signal_quality() const noexcept {
         return stats_.avg_signal_quality.load(std::memory_order_relaxed);
     }
 
@@ -519,7 +519,7 @@ public:
      *
      * @return Current accumulated volatility value.
      */
-    double get_accumulated_volatility() const noexcept {
+    [[nodiscard]] double get_accumulated_volatility() const noexcept {
         return accumulated_volatility_.load(std::memory_order_relaxed);
     }
 
@@ -534,7 +534,7 @@ public:
      *
      * @return Signal efficiency in [0.0, 1.0].
      */
-    double get_signal_efficiency() const noexcept {
+    [[nodiscard]] double get_signal_efficiency() const noexcept {
         uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
         if (tokens == 0) return 0.0;
         return static_cast<double>(stats_.signals_generated.load(std::memory_order_relaxed))
@@ -550,7 +550,7 @@ public:
      *
      * @return Average absolute bias contribution per token.
      */
-    double get_avg_bias_per_token() const noexcept {
+    [[nodiscard]] double get_avg_bias_per_token() const noexcept {
         uint64_t tokens = stats_.tokens_processed.load(std::memory_order_relaxed);
         if (tokens == 0) return 0.0;
         return std::fabs(accumulated_bias_.load(std::memory_order_relaxed))
@@ -565,7 +565,7 @@ public:
      *
      * @return signal_quality of the last emitted signal in [0.0, 1.0].
      */
-    double get_last_signal_quality() const noexcept {
+    [[nodiscard]] double get_last_signal_quality() const noexcept {
         return last_signal_quality_.load(std::memory_order_relaxed);
     }
 
@@ -579,7 +579,7 @@ public:
      *
      * @return Signal velocity in signals/second.
      */
-    double get_signal_velocity() const noexcept {
+    [[nodiscard]] double get_signal_velocity() const noexcept {
         uint64_t generated = stats_.signals_generated.load(std::memory_order_relaxed);
         if (generated == 0) return 0.0;
         auto now = std::chrono::high_resolution_clock::now();
@@ -656,7 +656,7 @@ public:
      *
      * @return Tokens processed per second.
      */
-    double get_tokens_per_second() const noexcept;
+    [[nodiscard]] double get_tokens_per_second() const noexcept;
 
     /**
      * @brief Return the fraction of processed tokens rejected by the noise gate.
@@ -669,7 +669,7 @@ public:
      *
      * @return Noise filter rate in [0.0, 1.0].
      */
-    double get_noise_filter_rate() const noexcept;
+    [[nodiscard]] double get_noise_filter_rate() const noexcept;
 
     /**
      * @brief Return the peak absolute accumulated bias observed since construction or last reset().

@@ -1085,5 +1085,34 @@ TEST(ConfigTest, test_semantic_weights_inf_bias_rejected_by_load) {
     EXPECT_FALSE(ok) << "Inf bias_multiplier must fail load validation";
 }
 
+// ---------------------------------------------------------------------------
+// to_summary_string completeness: dedup_ttl_ms and risk overrides
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_to_summary_string_contains_dedup_ttl_ms) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "  dedup_ttl_ms: 150\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    std::string summary = cfg.to_summary_string();
+    EXPECT_NE(summary.find("dedup_ttl_ms=150"), std::string::npos)
+        << "to_summary_string must include dedup_ttl_ms value";
+}
+
+TEST(ConfigTest, test_config_to_summary_string_contains_risk_overrides) {
+    Config cfg;
+    cfg.set_defaults();
+    std::string summary = cfg.to_summary_string();
+    EXPECT_NE(summary.find("overrides"), std::string::npos)
+        << "to_summary_string must include [overrides] section";
+    // Default: all gates enabled, summary should show 'on' for each.
+    EXPECT_NE(summary.find("magnitude=on"), std::string::npos)
+        << "magnitude gate should be 'on' with default config";
+}
+
 } // namespace
 } // namespace llmquant

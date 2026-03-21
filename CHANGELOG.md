@@ -21,6 +21,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   field presence / measurement count accuracy, and empty-controller zero state.
 
 ### Added (Cycle 23 — 2026-03-21)
+- `--stats-interval N` CLI flag: sets the monitoring loop tick period in
+  milliseconds (default 1000, minimum 100). Allows operators to reduce console
+  noise on long runs (`--stats-interval 5000`) or increase resolution for
+  debugging (`--stats-interval 200`). Sleep duration changed from hardcoded
+  `std::chrono::seconds(1)` to `std::chrono::milliseconds(stats_interval_ms)`.
+- Session exit summary: `Hot tokens` row using `LLMAdapter::export_hot_tokens(5)`
+  — composite score `0.5*(hit_rate) + 0.5*(|directional_bias|)` ranks tokens
+  that are both frequently seen AND strongly directional. Printed alongside the
+  existing top-by-frequency, top-by-bias, and top-by-influence rows.
 - Tests (`test_llm_adapter.cpp`): 3 new tests for `LLMAdapter::clear_dictionary()`
   covering: all tokens removed, stats reset to zero, and post-clear lookup
   returning default zero weights for a previously known token.
