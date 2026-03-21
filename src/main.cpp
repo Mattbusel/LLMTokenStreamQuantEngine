@@ -320,7 +320,7 @@ int main(int argc, char* argv[]) {
 
     // Start config hot-reload watcher now that risk_mgr exists so the callback
     // can update risk thresholds live without requiring a restart.
-    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine](const llmquant::SystemConfig& updated) {
+    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &logger, &config_file](const llmquant::SystemConfig& updated) {
         const auto& u = updated.risk_thresholds;
         llmquant::RiskManager::Config new_risk_cfg;
         new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;
@@ -346,6 +346,7 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
         new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
         trade_engine.update_config(new_eng_cfg);
+        logger.log_config_reload(config_file, true);
         std::cout << "\n[config] Hot-reloaded: bias_sensitivity="
                   << updated.trading.bias_sensitivity
                   << "  max_bias=" << u.max_bias_magnitude
@@ -941,32 +942,34 @@ int main(int argc, char* argv[]) {
         uint64_t hit_pct = (adapter_stats.tokens_processed > 0)
             ? (adapter_stats.cache_hits * 100 / adapter_stats.tokens_processed) : 0;
 
-        // Overwrite the stats line in-place.
-        std::cout << "\n  -- STATS "
-                  << " TPS:"   << std::setw(4) << tps
-                  << "  TOK:"  << std::setw(7) << tokens_total
-                  << "  AVG:"  << std::setw(5) << stats.avg_latency.count() << "us"
-                  << "  P99:"  << p99_colour
-                               << std::setw(5) << p99 << "us" << C("\033[0m")
-                  << "  PRESS:" << press_colour
-                               << std::fixed << std::setprecision(2)
-                               << pressure.composite << C("\033[0m")
-                  << "  BKOF:" << std::setprecision(1) << backoff << "x"
-                  << "  HIT%:" << hit_pct
-                  << "  DEDUP:" << dedup_backend->total_duplicates()
-                  << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
-                  << "  BLOCK:" << blocked
-                  << "  RATE%:" << [&]() -> uint64_t {
-                        uint64_t passed = risk_mgr.get_stats().signals_passed.load();
-                        uint64_t total  = (passed > UINT64_MAX - blocked) ? UINT64_MAX : passed + blocked;
-                        return (total > 0) ? (passed * 100 / total) : 100;
-                     }()
-                  << (!stream_mode ? (std::string("  DROPS:") + std::to_string(token_sim.get_stats().ring_buffer_drops.load())) : "")
-                  << std::flush;
+        // Overwrite the stats line in-place. Suppressed in --quiet mode.
+        if (!quiet) {
+            std::cout << "\n  -- STATS "
+                      << " TPS:"   << std::setw(4) << tps
+                      << "  TOK:"  << std::setw(7) << tokens_total
+                      << "  AVG:"  << std::setw(5) << stats.avg_latency.count() << "us"
+                      << "  P99:"  << p99_colour
+                                   << std::setw(5) << p99 << "us" << C("\033[0m")
+                      << "  PRESS:" << press_colour
+                                   << std::fixed << std::setprecision(2)
+                                   << pressure.composite << C("\033[0m")
+                      << "  BKOF:" << std::setprecision(1) << backoff << "x"
+                      << "  HIT%:" << hit_pct
+                      << "  DEDUP:" << dedup_backend->total_duplicates()
+                      << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
+                      << "  BLOCK:" << blocked
+                      << "  RATE%:" << [&]() -> uint64_t {
+                            uint64_t passed = risk_mgr.get_stats().signals_passed.load();
+                            uint64_t total  = (passed > UINT64_MAX - blocked) ? UINT64_MAX : passed + blocked;
+                            return (total > 0) ? (passed * 100 / total) : 100;
+                         }()
+                      << (!stream_mode ? (std::string("  DROPS:") + std::to_string(token_sim.get_stats().ring_buffer_drops.load())) : "")
+                      << std::flush;
 
-        // Alert if P99 exceeds budget.
-        if (p99 > sys_config.latency.target_latency_us && last_tick != stats.measurements) {
-            std::cout << "  " << C("\033[31m") << "[!] P99 > target" << C("\033[0m") << std::flush;
+            // Alert if P99 exceeds budget.
+            if (p99 > sys_config.latency.target_latency_us && last_tick != stats.measurements) {
+                std::cout << "  " << C("\033[31m") << "[!] P99 > target" << C("\033[0m") << std::flush;
+            }
         }
         last_tick = stats.measurements;
     }
