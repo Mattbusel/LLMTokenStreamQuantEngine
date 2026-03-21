@@ -1513,5 +1513,36 @@ TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_n_greater_than_dict) {
     EXPECT_TRUE(found) << "top_tokens_by_directional_bias must include all tokens when n > dict size";
 }
 
+// ---------------------------------------------------------------------------
+// LLMAdapter::to_stats_json() tests
+// ---------------------------------------------------------------------------
+
+TEST(LLMAdapterTest, test_to_stats_json_returns_valid_json_with_required_fields) {
+    LLMAdapter adapter;
+    adapter.add_token_mapping("bullish", {0.9, 0.8, 0.3, 0.7});
+    adapter.map_token_to_weight("bullish");
+    adapter.map_token_to_weight("bullish");
+
+    std::string json = adapter.to_stats_json();
+    ASSERT_FALSE(json.empty());
+    EXPECT_EQ(json.front(), '{');
+    EXPECT_EQ(json.back(),  '}');
+    EXPECT_NE(json.find("tokens_processed"),  std::string::npos);
+    EXPECT_NE(json.find("cache_hits"),        std::string::npos);
+    EXPECT_NE(json.find("cache_misses"),      std::string::npos);
+    EXPECT_NE(json.find("hit_rate_pct"),      std::string::npos);
+    EXPECT_NE(json.find("dictionary_size"),   std::string::npos);
+    // Both calls hit the cache (known token); 2 processed, 2 hits.
+    EXPECT_NE(json.find("\"tokens_processed\":2"), std::string::npos);
+    EXPECT_NE(json.find("\"cache_hits\":2"),        std::string::npos);
+}
+
+TEST(LLMAdapterTest, test_to_stats_json_empty_adapter_shows_zero_counters) {
+    LLMAdapter adapter;
+    std::string json = adapter.to_stats_json();
+    EXPECT_NE(json.find("\"tokens_processed\":0"), std::string::npos);
+    EXPECT_NE(json.find("\"dictionary_size\":0"),  std::string::npos);
+}
+
 } // namespace
 } // namespace llmquant
