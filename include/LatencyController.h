@@ -341,6 +341,45 @@ public:
     std::vector<HistogramBucket> histogram_buckets() const;
 
     /**
+     * @brief Convenience accessor: return the P99 latency in microseconds.
+     *
+     * Equivalent to get_stats().p99_latency.count() but avoids computing
+     * the full LatencyStats snapshot when only the P99 figure is needed.
+     * Returns 0 if no measurements have been recorded yet.
+     *
+     * Thread-safe (delegates to get_stats()).
+     *
+     * @return P99 latency in microseconds.
+     */
+    int64_t get_p99_us() const {
+        return get_stats().p99_latency.count();
+    }
+
+    /**
+     * @brief Convenience accessor: return the P95 latency in microseconds.
+     *
+     * Returns 0 if no measurements have been recorded yet.
+     * Thread-safe (delegates to get_stats()).
+     *
+     * @return P95 latency in microseconds.
+     */
+    int64_t get_p95_us() const {
+        return get_stats().p95_latency.count();
+    }
+
+    /**
+     * @brief Convenience accessor: return the P50 (median) latency in microseconds.
+     *
+     * Returns 0 if no measurements have been recorded yet.
+     * Thread-safe (delegates to get_stats()).
+     *
+     * @return P50 latency in microseconds.
+     */
+    int64_t get_p50_us() const {
+        return get_stats().p50_latency.count();
+    }
+
+    /**
      * @brief Estimate measurement throughput since construction or last reset_stats().
      *
      * Computed as total_measurements_ / elapsed_seconds since construction.

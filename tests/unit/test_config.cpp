@@ -798,5 +798,67 @@ TEST(ConfigTest, test_config_is_valid_consistent_with_validate) {
         << "is_valid() must return the same result as validate().empty()";
 }
 
+// ---------------------------------------------------------------------------
+// Env var: LLMQUANT_LOG_FILE and LLMQUANT_LOG_FORMAT
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_load_from_env_log_file_applies) {
+    Config cfg;
+    cfg.set_defaults();
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_LOG_FILE", "/var/log/engine.log");
+#else
+    setenv("LLMQUANT_LOG_FILE", "/var/log/engine.log", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0);
+    EXPECT_EQ(cfg.get_config().logging.log_file_path, "/var/log/engine.log");
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_LOG_FILE", "");
+#else
+    unsetenv("LLMQUANT_LOG_FILE");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_log_format_uppercased) {
+    Config cfg;
+    cfg.set_defaults();
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_LOG_FORMAT", "json");
+#else
+    setenv("LLMQUANT_LOG_FORMAT", "json", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0);
+    EXPECT_EQ(cfg.get_config().logging.format, "JSON");
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_LOG_FORMAT", "");
+#else
+    unsetenv("LLMQUANT_LOG_FORMAT");
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// to_summary_string includes [logging] section
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_to_summary_string_contains_logging_section) {
+    Config cfg;
+    cfg.load_from_yaml_string(
+        "token_stream:\n  token_interval_ms: 10\n  buffer_size: 64\n"
+        "trading:\n  bias_sensitivity: 1.0\n  volatility_sensitivity: 1.0\n"
+        "  signal_decay_rate: 0.95\n  signal_cooldown_us: 1000\n"
+        "latency:\n  target_latency_us: 10\n  sample_window: 100\n"
+        "logging:\n  log_file_path: mylog.log\n  format: JSON\n  flush_interval_ms: 200\n"
+        "pressure:\n  max_ingestion_rate_tps: 50\n  backoff_scale_factor: 5\n");
+    std::string summary = cfg.to_summary_string();
+    EXPECT_NE(summary.find("logging"), std::string::npos)
+        << "to_summary_string must include [logging] section";
+    EXPECT_NE(summary.find("mylog.log"), std::string::npos)
+        << "to_summary_string must include the log_file_path value";
+    EXPECT_NE(summary.find("JSON"), std::string::npos)
+        << "to_summary_string must include the log format";
+}
+
 } // namespace
 } // namespace llmquant

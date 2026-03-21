@@ -1384,5 +1384,44 @@ TEST(TradeSignalEngineTest, test_get_signal_velocity_positive_after_signal) {
     EXPECT_GE(engine.get_signal_velocity(), 0.0);
 }
 
+// ---------------------------------------------------------------------------
+// format_stats — noise_filtered, peak_bias, avg_quality fields added
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_format_stats_contains_noise_filtered_field) {
+    TradeSignalEngine::Config cfg = make_config(1.0, 1.0, 0.999, 0);
+    cfg.min_bias_threshold = 100.0;  // suppress all to force noise_filtered > 0
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    for (int i = 0; i < 3; ++i)
+        engine.process_semantic_weight({0.1, 0.5, 0.1, 0.1});
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("noise_filtered="), std::string::npos)
+        << "format_stats must include noise_filtered field";
+    EXPECT_NE(s.find("noise_filtered=3"), std::string::npos)
+        << "format_stats noise_filtered must match actual count";
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_contains_peak_bias_field) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.2, 0.7});
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("peak_bias="), std::string::npos)
+        << "format_stats must include peak_bias field";
+}
+
+TEST(TradeSignalEngineTest, test_format_stats_contains_avg_quality_field) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.8, 0.9, 0.2, 0.7});
+    std::string s = engine.format_stats();
+    EXPECT_NE(s.find("avg_quality="), std::string::npos)
+        << "format_stats must include avg_quality field";
+}
+
 } // namespace
 } // namespace llmquant

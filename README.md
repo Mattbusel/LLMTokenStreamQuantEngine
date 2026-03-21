@@ -5,6 +5,7 @@
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-788%20passing-brightgreen.svg)](tests/)
+[![Dictionary](https://img.shields.io/badge/token%20dictionary-~130%20entries-blue.svg)](src/LLMAdapter.cpp)
 [![Download](https://img.shields.io/badge/download-v1.1.0%20Windows%20x64-brightgreen.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0)
 
 > **Windows users:** grab the pre-built `.exe` from the [v1.1.0 release](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0) — extract, edit `config.yaml`, and run. No build tools required.
@@ -262,6 +263,7 @@ double get_max_volatility() const;
 double get_volatility_range() const;
 size_t count_tokens_above_volatility(double threshold) const;
 std::vector<std::pair<std::string, double>> top_tokens_by_volatility(size_t n = 10) const;
+std::vector<std::pair<std::string, double>> filter_tokens_by_volatility(double min, double max) const;
 
 // Dictionary analytics — directional bias
 double get_avg_directional_bias() const;
@@ -321,6 +323,9 @@ double get_tokens_per_second() const noexcept;
 double get_session_duration_ms() const noexcept;
 double get_time_since_last_signal_us() const noexcept;
 bool is_in_cooldown() const noexcept;
+
+// TradeSignal helpers (on the TradeSignal struct itself)
+std::string to_string() const;  // "bias=<v> vol=<v> conf=<v> quality=<v> lat=<v>us strategy=±1"
 
 // Output and introspection
 void add_output_sink(std::shared_ptr<OutputSink> sink);
@@ -386,6 +391,9 @@ double get_sample_variance_us() const;
 double get_stddev_us() const;
 double get_throughput_estimate() const noexcept;  // measurements per second
 bool is_under_target() const noexcept;
+int64_t get_p99_us() const;  // convenience: get_stats().p99_latency.count()
+int64_t get_p95_us() const;  // convenience: get_stats().p95_latency.count()
+int64_t get_p50_us() const;  // convenience: get_stats().p50_latency.count()
 
 // Back-pressure
 PressureState get_pressure() const;
@@ -499,12 +507,17 @@ rm.format_stats()               // single-line diagnostic string
 
 | Category | Tokens | Effect |
 |----------|--------|--------|
-| Fear / Panic | `crash`, `panic`, `collapse`, `plunge`, `dump`, `breakdown`, `fear`, `selloff`, `tumble`, `rout` | Strong negative BIAS, high VOL |
-| Directional Bullish | `bullish`, `rally`, `surge`, `breakout`, `soar`, `moon`, `buy`, `long` | Positive BIAS |
-| Directional Bearish | `bearish`, `short`, `sell` | Negative BIAS |
-| Volatility | `volatile`, `spike`, `whipsaw`, `swing`, `choppy`, `erratic` | VOL spike, near-zero BIAS |
+| Fear / Panic | `crash`, `panic`, `collapse`, `plunge`, `dump`, `breakdown`, `fear`, `selloff`, `tumble`, `rout`, `liquidation`, `capitulation`, `deleveraging` | Strong negative BIAS, high VOL |
+| Directional Bullish | `bullish`, `rally`, `surge`, `breakout`, `soar`, `moon`, `buy`, `long`, `accumulate`, `rebound`, `recovery`, `uptrend`, `oversold` | Positive BIAS |
+| Directional Bearish | `bearish`, `short`, `sell`, `downtrend`, `overbought`, `distribution` | Negative BIAS |
+| Volatility | `volatile`, `spike`, `whipsaw`, `swing`, `choppy`, `erratic`, `straddle`, `strangle`, `gamma`, `vega`, `iv`, `reversal`, `parabolic`, `divergence` | VOL spike, near-zero BIAS |
+| Options / Derivatives | `calls`, `puts`, `delta`, `dte`, `expiry`, `strike`, `hedge`, `squeeze` | Options market signals |
 | Certainty | `inevitable`, `guarantee`, `confident`, `confirmed`, `certain`, `assured` | Confidence boost |
-| Neutral filler | `the`, `and`, `is`, `a`, `an`, `in`, `of`, `to` | Near-zero weight on all dimensions |
+| Corporate / Earnings | `earnings`, `guidance`, `upgrade`, `downgrade`, `beats`, `misses`, `outlook`, `revenue`, `profit`, `loss`, `dividend`, `buyback`, `merger`, `acquisition`, `ipo` | Fundamental event signals |
+| Market Regime / Macro | `inflation`, `deflation`, `recession`, `stagflation`, `fed`, `hike`, `cut`, `pivot`, `gdp`, `risk-on`, `risk-off`, `stimulus`, `tightening`, `easing`, `default`, `sanctions`, `tariff`, `contagion`, `systemic`, `geopolitical` | Macro sentiment |
+| Analyst Sentiment | `upgrade`, `downgrade`, `overweight`, `underweight`, `outperform`, `underperform`, `neutral`, `hold`, `target` | Analyst-driven signals |
+| Crypto / Retail | `pump`, `rug`, `fud`, `hodl`, `rekt`, `ath`, `dte` | Social-media/Reddit sentiment |
+| Neutral filler | `the`, `and`, `is`, `a`, `an`, `in`, `of`, `to`, `or`, `not`, `with`, `for`, `as`, `at`, `on`, `it`, `by`, `from` | Near-zero weight on all dimensions |
 
 All entries are in `src/LLMAdapter.cpp::initialize_default_mappings()` and can be extended at runtime via `add_token_mapping()`, loaded in bulk from a whitespace-delimited file via `load_sentiment_dictionary()`, or imported from a TSV string via `load_dictionary_from_tsv()`. The full dictionary can be exported to TSV via `export_dictionary()`.
 

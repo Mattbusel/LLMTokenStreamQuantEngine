@@ -264,6 +264,8 @@ public:
      *   LLMQUANT_MAX_DRAWDOWN           → risk_thresholds.max_drawdown
      *   LLMQUANT_MAX_SIGNALS_PER_SECOND → risk_thresholds.max_signals_per_second
      *   LLMQUANT_STATS_PORT             → metrics.stats_port
+     *   LLMQUANT_LOG_FILE               → logging.log_file_path
+     *   LLMQUANT_LOG_FORMAT             → logging.format (uppercased, e.g. "CSV" or "JSON")
      *
      * Thread-safe (acquires config_mutex_).
      *

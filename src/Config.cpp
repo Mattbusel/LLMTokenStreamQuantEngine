@@ -445,6 +445,24 @@ int Config::load_from_env() {
     if (get_uint16("LLMQUANT_STATS_PORT", u16) && u16 > 0)
         { config_.metrics.stats_port = u16; ++applied; }
 
+    {
+        const char* log_file = std::getenv("LLMQUANT_LOG_FILE");
+        if (log_file && log_file[0] != '\0') {
+            config_.logging.log_file_path = log_file;
+            ++applied;
+        }
+    }
+    {
+        const char* log_fmt = std::getenv("LLMQUANT_LOG_FORMAT");
+        if (log_fmt && log_fmt[0] != '\0') {
+            std::string fmt = log_fmt;
+            std::transform(fmt.begin(), fmt.end(), fmt.begin(),
+                           [](unsigned char c){ return std::toupper(c); });
+            config_.logging.format = fmt;
+            ++applied;
+        }
+    }
+
 #ifdef _MSC_VER
 #  pragma warning(pop)
 #endif
@@ -534,6 +552,9 @@ std::string Config::to_summary_string() const {
        << "  bind=" << config_.metrics.bind_address << "\n"
        << "[pressure] max_tps=" << config_.pressure.max_ingestion_rate_tps
        << "  backoff_scale=" << config_.pressure.backoff_scale_factor << "\n"
+       << "[logging]  file=" << config_.logging.log_file_path
+       << "  format=" << config_.logging.format
+       << "  flush_ms=" << config_.logging.flush_interval_ms << "\n"
        << "[stream]   interval_ms=" << config_.token_stream.token_interval_ms
        << "  buffer=" << config_.token_stream.buffer_size
        << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false") << "\n";

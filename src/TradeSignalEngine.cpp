@@ -389,14 +389,20 @@ std::string TradeSignalEngine::format_stats() const {
     double bias  = accumulated_bias_.load(std::memory_order_relaxed);
     double vol   = accumulated_volatility_.load(std::memory_order_relaxed);
     std::ostringstream oss;
+    uint64_t noise    = stats_.noise_filtered.load(std::memory_order_relaxed);
+    double   peak     = stats_.peak_bias.load(std::memory_order_relaxed);
+    double   avg_qual = stats_.avg_signal_quality.load(std::memory_order_relaxed);
     oss << "tokens="    << tokens
         << " generated=" << generated
         << " suppressed=" << suppressed
         << " aged_out="  << aged_out
+        << " noise_filtered=" << noise
         << " efficiency=" << eff
         << " suppression_rate=" << supp
         << " bias=" << bias
-        << " vol="  << vol;
+        << " vol="  << vol
+        << " peak_bias=" << peak
+        << " avg_quality=" << avg_qual;
     return oss.str();
 }
 

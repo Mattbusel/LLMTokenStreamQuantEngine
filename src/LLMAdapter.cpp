@@ -382,6 +382,17 @@ size_t LLMAdapter::batch_add_token_mappings(
 }
 
 std::vector<std::pair<std::string, double>>
+LLMAdapter::filter_tokens_by_volatility(double min_volatility, double max_volatility) const {
+    std::vector<std::pair<std::string, double>> result;
+    for (const auto& [tok, weight] : token_weights_) {
+        if (weight.volatility_score >= min_volatility && weight.volatility_score <= max_volatility) {
+            result.emplace_back(tok, weight.volatility_score);
+        }
+    }
+    return result;
+}
+
+std::vector<std::pair<std::string, double>>
 LLMAdapter::filter_tokens_by_sentiment(double min_sentiment, double max_sentiment) const {
     std::vector<std::pair<std::string, double>> result;
     for (const auto& [tok, weight] : token_weights_) {
@@ -541,6 +552,58 @@ void LLMAdapter::initialize_default_mappings() {
     add_token_mapping("in",        {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("of",        {0.0,  0.1,  0.0,  0.0});
     add_token_mapping("to",        {0.0,  0.1,  0.0,  0.0});
+
+    // Corporate / earnings events
+    add_token_mapping("earnings",   { 0.1, 0.80, 0.75,  0.10});
+    add_token_mapping("guidance",   { 0.2, 0.75, 0.55,  0.20});
+    add_token_mapping("upgrade",    { 0.7, 0.85, 0.50,  0.70});
+    add_token_mapping("downgrade",  {-0.7, 0.85, 0.50, -0.70});
+    add_token_mapping("beats",      { 0.7, 0.85, 0.60,  0.65});
+    add_token_mapping("misses",     {-0.7, 0.85, 0.60, -0.65});
+    add_token_mapping("outlook",    { 0.1, 0.70, 0.45,  0.10});
+    add_token_mapping("revenue",    { 0.2, 0.70, 0.40,  0.15});
+    add_token_mapping("profit",     { 0.5, 0.80, 0.40,  0.45});
+    add_token_mapping("loss",       {-0.5, 0.80, 0.50, -0.50});
+    add_token_mapping("dividend",   { 0.4, 0.75, 0.20,  0.35});
+    add_token_mapping("buyback",    { 0.5, 0.80, 0.30,  0.50});
+    add_token_mapping("merger",     { 0.3, 0.75, 0.65,  0.30});
+    add_token_mapping("acquisition",{ 0.3, 0.75, 0.65,  0.35});
+    add_token_mapping("ipo",        { 0.4, 0.70, 0.70,  0.40});
+
+    // Market-regime / macro signals
+    add_token_mapping("risk-on",    { 0.6, 0.80, 0.55,  0.60});
+    add_token_mapping("risk-off",   {-0.6, 0.80, 0.60, -0.60});
+    add_token_mapping("systemic",   {-0.5, 0.80, 0.75, -0.50});
+    add_token_mapping("contagion",  {-0.7, 0.85, 0.80, -0.70});
+    add_token_mapping("stimulus",   { 0.5, 0.80, 0.50,  0.50});
+    add_token_mapping("tightening", {-0.3, 0.80, 0.55, -0.35});
+    add_token_mapping("easing",     { 0.4, 0.80, 0.50,  0.40});
+    add_token_mapping("default",    {-0.8, 0.85, 0.80, -0.80});
+    add_token_mapping("sanctions",  {-0.5, 0.80, 0.70, -0.45});
+    add_token_mapping("tariff",     {-0.3, 0.75, 0.60, -0.30});
+    add_token_mapping("deregulation",{ 0.4, 0.70, 0.45, 0.40});
+    add_token_mapping("geopolitical",{-0.3, 0.75, 0.70,-0.25});
+
+    // Analyst sentiment
+    add_token_mapping("overweight",  { 0.6, 0.80, 0.35,  0.60});
+    add_token_mapping("underweight", {-0.6, 0.80, 0.35, -0.60});
+    add_token_mapping("outperform",  { 0.6, 0.80, 0.35,  0.60});
+    add_token_mapping("underperform",{-0.6, 0.80, 0.35, -0.60});
+    add_token_mapping("neutral",     { 0.0, 0.60, 0.15,  0.00});
+    add_token_mapping("hold",        { 0.0, 0.65, 0.20,  0.00});
+    add_token_mapping("target",      { 0.1, 0.60, 0.30,  0.10});
+
+    // Common neutral filler (additional)
+    add_token_mapping("or",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("not",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("with",       {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("for",        {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("as",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("at",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("on",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("it",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("by",         {0.0,  0.1,  0.0,  0.0});
+    add_token_mapping("from",       {0.0,  0.1,  0.0,  0.0});
 
     // Options / derivatives — additional terms (expiry, strike, hedge are new;
     // calls/puts/squeeze/gamma/delta already defined above with better values)

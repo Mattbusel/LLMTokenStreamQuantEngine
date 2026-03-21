@@ -386,6 +386,20 @@ public:
         filter_tokens_by_confidence(double min_confidence, double max_confidence) const;
 
     /**
+     * @brief Return all tokens whose volatility_score falls within [min_volatility, max_volatility].
+     *
+     * Useful for identifying tokens in a specific volatility band, e.g. all
+     * medium-volatility tokens (0.4–0.7) for regime-specific filtering.
+     * Both bounds are inclusive.
+     *
+     * @param min_volatility Lower bound (inclusive) on volatility_score.
+     * @param max_volatility Upper bound (inclusive) on volatility_score.
+     * @return Vector of (token, volatility_score) pairs in unspecified order.
+     */
+    std::vector<std::pair<std::string, double>>
+        filter_tokens_by_volatility(double min_volatility, double max_volatility) const;
+
+    /**
      * @brief Return the top N tokens sorted by volatility_score descending.
      *
      * Identifies the most volatility-contributing tokens in the dictionary.

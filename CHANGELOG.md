@@ -9,6 +9,28 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 1 — 2026-03-21)
+- `LLMAdapter::filter_tokens_by_volatility(min, max)` — range filter returning
+  all dictionary tokens whose `volatility_score` falls within [min, max].
+  Completes the analytics API alongside the existing `filter_tokens_by_sentiment`
+  and `filter_tokens_by_confidence` overloads.
+- `TradeSignal::to_string()` — inline one-liner for logging/debugging:
+  `"bias=<val> vol=<val> conf=<val> quality=<val> lat=<val>us strategy=<±1>"`.
+- `LatencyController::get_p99_us()`, `get_p95_us()`, `get_p50_us()` — typed
+  convenience accessors returning percentile latency in microseconds without
+  allocating a full `LatencyStats` snapshot.
+- Expanded `LLMAdapter` default dictionary from ~80 to ~130 tokens:
+  - **Corporate / earnings**: `earnings`, `guidance`, `upgrade`, `downgrade`,
+    `beats`, `misses`, `outlook`, `revenue`, `profit`, `loss`, `dividend`,
+    `buyback`, `merger`, `acquisition`, `ipo`
+  - **Market regime / macro**: `risk-on`, `risk-off`, `systemic`, `contagion`,
+    `stimulus`, `tightening`, `easing`, `default`, `sanctions`, `tariff`,
+    `deregulation`, `geopolitical`
+  - **Analyst sentiment**: `overweight`, `underweight`, `outperform`,
+    `underperform`, `neutral`, `hold`, `target`
+  - **Common filler**: `or`, `not`, `with`, `for`, `as`, `at`, `on`, `it`,
+    `by`, `from`
+
 ### Fixed
 - `CMakeLists.txt`: replaced deprecated `yaml-cpp` link target with
   `yaml-cpp::yaml-cpp` to silence CMake deprecation warnings from yaml-cpp 0.8+.

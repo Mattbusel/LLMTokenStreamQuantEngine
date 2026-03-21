@@ -2,9 +2,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -52,6 +54,22 @@ struct TradeSignal {
     /// Computed as: confidence * clamp((|delta_bias_shift| + |volatility_adjustment|) / 2, 0, 1).
     /// Higher = more confident and larger magnitude signal.
     double signal_quality{0.0};
+
+    /**
+     * @brief Return a compact human-readable one-liner for logging and debugging.
+     *
+     * Format: "bias=<val> vol=<val> conf=<val> quality=<val> lat=<val>us strategy=<+1|0|-1>"
+     *
+     * @return Single-line summary string.
+     */
+    std::string to_string() const {
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+            "bias=%.4f vol=%.4f conf=%.4f quality=%.4f lat=%.2fus strategy=%+d",
+            delta_bias_shift, volatility_adjustment, confidence,
+            signal_quality, latency_us, strategy_toggle);
+        return buf;
+    }
 };
 
 /**
@@ -281,11 +299,6 @@ public:
     }
 
     /**
-     * @brief Return the directional sign of the current accumulated bias.
-     *
-     * @return +1 if accumulated bias > 0 (bullish), -1 if < 0 (bearish), 0 if zero.
-     */
-    /**
      * @brief Return true if the accumulated bias exceeds the noise gate threshold.
      *
      * Equivalent to checking |accumulated_bias| >= config.min_bias_threshold.
@@ -299,6 +312,11 @@ public:
         return bias != 0.0;
     }
 
+    /**
+     * @brief Return the directional sign of the current accumulated bias.
+     *
+     * @return +1 if accumulated bias > 0 (bullish), -1 if < 0 (bearish), 0 if zero.
+     */
     int get_bias_direction() const noexcept {
         double b = accumulated_bias_.load(std::memory_order_relaxed);
         if (b > 0.0) return  1;
