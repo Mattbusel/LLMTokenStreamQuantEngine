@@ -9,6 +9,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 2 — 2026-03-21)
+- `--log-level LEVEL` CLI flag — set spdlog verbosity (`trace`/`debug`/`info`/`warn`/`error`/`critical`)
+  at startup without recompiling. Falls back to `info` with a warning for unknown level names.
+- `SIGTERM` handler wired alongside `SIGINT` so the engine shuts down cleanly under systemd / Docker stop.
+- Dedup statistics (novel count, duplicate count, duplicate rate %) added to the session summary printed
+  on exit.
+
+### Fixed (Cycle 2 — 2026-03-21)
+- `main.cpp`: replaced three remaining `std::cerr` calls (hot-reload watcher failure, stream done
+  callback, Prometheus bind failure) with `spdlog::warn` — consistent with the project-wide policy
+  of routing all library-level output through spdlog.
+- `main.cpp` `--version`: replaced hardcoded `"1.1.0"` string with the `LLMQUANT_VERSION` macro from
+  the CMake-generated `llmquant_version.h`, so the version flag always reflects the CMake project
+  version without a manual edit.
+- `main.cpp`: Prometheus bind-failure warning now includes the actual port number rather than the
+  hardcoded `9100`.
+
 ### Added (Cycle 1 — 2026-03-21)
 - `LLMAdapter::filter_tokens_by_volatility(min, max)` — range filter returning
   all dictionary tokens whose `volatility_score` falls within [min, max].

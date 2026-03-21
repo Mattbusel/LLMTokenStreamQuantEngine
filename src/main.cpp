@@ -12,6 +12,8 @@
 #include "FixOmsAdapter.h"
 #include "MockOmsAdapter.h"
 #include "PrometheusExporter.h"
+#include "llmquant_version.h"
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <iomanip>
 #include <memory>
@@ -35,7 +37,8 @@ void signal_handler(int /*signal*/) {
 
 int main(int argc, char* argv[]) {
   try {
-    std::signal(SIGINT, signal_handler);
+    std::signal(SIGINT,  signal_handler);
+    std::signal(SIGTERM, signal_handler);
 
     // Record engine start time for uptime metrics.
     const auto engine_start_time = std::chrono::steady_clock::now();
@@ -47,10 +50,12 @@ int main(int argc, char* argv[]) {
     bool        debug_raw      = false;
     bool        dry_run        = false;
     bool        backtest_mode  = false;
+    bool        list_tokens    = false;
     std::string oms_address;
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
     uint16_t    stats_port_override = 0;        // 0 = use config value
+    std::string log_level_str  = "info";        // spdlog level name
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -63,10 +68,12 @@ int main(int argc, char* argv[]) {
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
                 "  --config path     Path to config YAML (default: config.yaml)\n"
                 "  --stats-port N    Override Prometheus metrics port (default: from config, 9100)\n"
+                "  --log-level LEVEL Set spdlog log level: trace|debug|info|warn|error|critical (default: info)\n"
                 "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
                 "  --backtest        Enable backtest mode (emit signal on every token, no cooldown)\n"
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
+                "  --list-tokens     Print the full semantic dictionary and exit\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
                 "\n"
@@ -77,8 +84,7 @@ int main(int argc, char* argv[]) {
                 "  pressure, risk_thresholds, risk (override flags).\n";
             return 0;
         } else if (arg == "--version" || arg == "-v") {
-            // Version string injected by CMake via llmquant_version.h.in
-            std::cout << "LLMTokenStreamQuantEngine 1.1.0\n";
+            std::cout << "LLMTokenStreamQuantEngine " << LLMQUANT_VERSION << "\n";
             return 0;
         } else if (arg == "--stream") {
             stream_mode = true;
@@ -88,6 +94,8 @@ int main(int argc, char* argv[]) {
             no_color = true;
         } else if (arg == "--debug-raw") {
             debug_raw = true;
+        } else if (arg == "--list-tokens") {
+            list_tokens = true;
         } else if (arg == "--dry-run") {
             dry_run = true;
         } else if (arg == "--backtest") {
@@ -96,11 +104,24 @@ int main(int argc, char* argv[]) {
             config_file = argv[++i];
         } else if (arg == "--stats-port" && i + 1 < argc) {
             stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i]));
+        } else if (arg == "--log-level" && i + 1 < argc) {
+            log_level_str = argv[++i];
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
             fix_address = argv[++i];
         }
+    }
+
+    // Apply log level before any spdlog calls so early warnings are visible.
+    {
+        auto level = spdlog::level::from_str(log_level_str);
+        // from_str returns off for unknown names — warn and fall back to info.
+        if (level == spdlog::level::off && log_level_str != "off") {
+            spdlog::warn("Unknown --log-level '{}'; defaulting to info", log_level_str);
+            level = spdlog::level::info;
+        }
+        spdlog::set_level(level);
     }
 
     // API key security: fall back to LLMQUANT_API_KEY env var if not given on CLI.
@@ -266,7 +287,7 @@ int main(int argc, char* argv[]) {
                   << "  max_bias=" << u.max_bias_magnitude
                   << "  max_signals/s=" << u.max_signals_per_second << std::endl;
     })) {
-        std::cerr << "[warn] Config hot-reload watcher failed to start\n";
+        spdlog::warn("Config hot-reload watcher failed to start");
     }
 
     // OMS adapter: MockOmsAdapter by default; REST via --oms, FIX 4.2 via --fix.
@@ -474,7 +495,7 @@ int main(int argc, char* argv[]) {
         });
         stream_client->set_done_callback([](const std::string& err) {
             if (!err.empty())
-                std::cerr << "\n  [stream] " << err << std::endl;
+                spdlog::warn("stream: {}", err);
         });
         stream_client->connect();
     } else {
@@ -497,7 +518,7 @@ int main(int argc, char* argv[]) {
         return prom_snapshot;
     });
     if (!prom_exporter.start()) {
-        std::cerr << "[warn] PrometheusExporter failed to bind on port 9100\n";
+        spdlog::warn("PrometheusExporter failed to bind on port {}", eff_stats_port);
     }
 
     // Main monitoring loop — prints a rolling stats bar every second.
@@ -859,6 +880,16 @@ int main(int argc, char* argv[]) {
     std::cout << "  Signals aged out : " << trade_engine.get_stats().signals_aged_out.load() << "\n";
     std::cout << "  Accum. clamped   : " << trade_engine.get_stats().accumulator_clamped.load() << "\n";
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
+    {
+        auto ds = dedup_backend->get_stats();
+        uint64_t total_dedup = ds.total_novel + ds.total_duplicates;
+        double dup_rate = (total_dedup > 0)
+            ? (static_cast<double>(ds.total_duplicates) * 100.0 / static_cast<double>(total_dedup))
+            : 0.0;
+        std::cout << "  Dedup novel      : " << ds.total_novel << "\n";
+        std::cout << "  Dedup duplicates : " << ds.total_duplicates
+                  << "  (" << std::fixed << std::setprecision(1) << dup_rate << "% dup rate)\n";
+    }
     std::cout << "  ---------------------------------------------------------\n\n";
 
     trade_engine.flush_sinks();
