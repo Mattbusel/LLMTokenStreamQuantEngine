@@ -228,6 +228,15 @@
 #ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
 #  include "SentimentPhasePortrait.h"
 #endif
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+#  include "NarrativeTopicClassifier.h"
+#endif
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+#  include "TokenClockRecalibrator.h"
+#endif
+#ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
+#  include "SignalShadowPortfolio.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1289,6 +1298,19 @@ int main(int argc, char* argv[]) {
         // Attribute per-token marginal contribution to the current bias.
         token_influence.record(text, weight.directional_bias);
 #endif
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+        // Classify token into macro narrative topic.
+        narrative_classifier.classify(text, weight.directional_bias);
+#endif
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+        // Record token arrival timestamp for rate estimation.
+        {
+            auto tcr_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            token_clock.record_token(tcr_ns);
+        }
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -1993,6 +2015,87 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+    // SentimentPhasePortrait: discretises the (bias, velocity) state space into
+    // an N×N grid, tracking dwell time per cell, dominant attractors, and
+    // period-2 oscillation cycles in sentiment dynamics.
+    llmquant::SentimentPhasePortrait sentiment_phase_portrait;
+    {
+        llmquant::SentimentPhasePortrait::Config spp_cfg;
+        spp_cfg.grid_size           = 8;
+        spp_cfg.velocity_alpha      = 0.2;
+        spp_cfg.attractor_threshold = 0.15;
+        spp_cfg.cycle_window        = 20;
+        spp_cfg.min_visits          = 10;
+        spp_cfg.on_attractor_change = [](int row, int col) {
+            spdlog::info("[phase_portrait] attractor shifted → cell ({},{})", row, col);
+        };
+        spp_cfg.on_cycle_detected = [](int r1, int c1, int r2, int c2) {
+            spdlog::warn("[phase_portrait] period-2 cycle detected ({},{})↔({},{})", r1, c1, r2, c2);
+        };
+        sentiment_phase_portrait.update_config(spp_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+    // NarrativeTopicClassifier: online bag-of-centroids topic labeller.
+    // Registers macro-topic buckets keyed on token weight centroids.
+    // The dominant topic's signal_multiplier scales the downstream signal.
+    llmquant::NarrativeTopicClassifier narrative_classifier;
+    {
+        llmquant::NarrativeTopicClassifier::Config ntc_cfg;
+        ntc_cfg.freq_alpha     = 0.10;
+        ntc_cfg.dominant_alpha = 0.05;
+        ntc_cfg.min_warmup     = 20;
+        ntc_cfg.on_topic_change = [](const std::string& old_t, const std::string& new_t, double mult) {
+            spdlog::info("[narrative_topic] dominant topic {} → {} (mult={:.2f})", old_t, new_t, mult);
+        };
+        narrative_classifier.update_config(ntc_cfg);
+        // Register standard macro-narrative topics
+        narrative_classifier.register_topic({"earnings",       0.70, 1.30});
+        narrative_classifier.register_topic({"macro",          0.40, 0.90});
+        narrative_classifier.register_topic({"geopolitical",   0.60, 0.70});
+        narrative_classifier.register_topic({"technical",      0.30, 1.10});
+        narrative_classifier.register_topic({"neutral",        0.05, 0.80});
+    }
+#endif
+
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+    // TokenClockRecalibrator: estimates live LLM token emission rate and
+    // computes a budget_scale_factor so latency gates stay calibrated even
+    // when model throughput varies 2-5× from the default assumption.
+    llmquant::TokenClockRecalibrator token_clock;
+    {
+        llmquant::TokenClockRecalibrator::Config tcr_cfg;
+        tcr_cfg.window_size            = 64;
+        tcr_cfg.target_rate_hz         = 30.0;
+        tcr_cfg.min_scale              = 0.25;
+        tcr_cfg.max_scale              = 4.0;
+        tcr_cfg.rate_change_threshold  = 0.15;
+        tcr_cfg.on_rate_change = [](double rate_hz, double scale) {
+            spdlog::info("[token_clock] rate={:.1f} Hz  budget_scale={:.2f}x", rate_hz, scale);
+        };
+        token_clock.update_config(tcr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
+    // SignalShadowPortfolio: paper-trades raw signals in parallel with the live
+    // strategy, attributing P&L drag to risk constraints and cooldown windows.
+    llmquant::SignalShadowPortfolio shadow_portfolio;
+    {
+        llmquant::SignalShadowPortfolio::Config sp_cfg;
+        sp_cfg.unit_size            = 1000.0;
+        sp_cfg.max_position         = 10000.0;
+        sp_cfg.drag_alert_threshold = 50.0;
+        sp_cfg.on_drag_alert = [](double drag, double shad, double live) {
+            spdlog::warn("[shadow_portfolio] constraint drag={:.2f}  shadow={:.2f}  live={:.2f}",
+                         drag, shad, live);
+        };
+        shadow_portfolio.update_config(sp_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2499,6 +2602,14 @@ int main(int argc, char* argv[]) {
             if (ofb_dt > 0.0)
                 options_flow_bridge.record_bias(signal.delta_bias_shift, ofb_dt);
         }
+#endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+        sentiment_phase_portrait.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
+        // Raw signal → shadow portfolio (unconstrained); actual execution → live portfolio.
+        shadow_portfolio.record_signal(signal.delta_bias_shift, signal.confidence);
+        shadow_portfolio.record_live_signal(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
