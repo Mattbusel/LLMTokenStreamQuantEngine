@@ -1671,6 +1671,36 @@ else()
     message(STATUS "Feature: TokenSentimentGraphBuilder DISABLED (LLMQUANT_ENABLE_SENTIMENT_GRAPH=OFF)")
 endif()
 
+# BiasKalmanFilter: 1-D Kalman filter with online R estimation and NIS-based mismatch detection.
+option(LLMQUANT_ENABLE_KALMAN_FILTER    "Build BiasKalmanFilter: random-walk Kalman filter smoothing bias stream; NIS-based model-mismatch alarm" ON)
+if(LLMQUANT_ENABLE_KALMAN_FILTER)
+    target_sources(llmquant PRIVATE src/BiasKalmanFilter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_KALMAN_FILTER_ENABLED)
+    message(STATUS "Feature: BiasKalmanFilter ENABLED (Kalman smoothing, NIS model-mismatch detection)")
+else()
+    message(STATUS "Feature: BiasKalmanFilter DISABLED (LLMQUANT_ENABLE_KALMAN_FILTER=OFF)")
+endif()
+
+# SignalSpectralEntropy: DCT-II based spectral entropy for frequency-domain complexity.
+option(LLMQUANT_ENABLE_SPECTRAL_ENTROPY "Build SignalSpectralEntropy: DCT-II power spectral density entropy; fires on_entropy_change" ON)
+if(LLMQUANT_ENABLE_SPECTRAL_ENTROPY)
+    target_sources(llmquant PRIVATE src/SignalSpectralEntropy.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SPECTRAL_ENTROPY_ENABLED)
+    message(STATUS "Feature: SignalSpectralEntropy ENABLED (DCT-II spectral entropy, on_entropy_change)")
+else()
+    message(STATUS "Feature: SignalSpectralEntropy DISABLED (LLMQUANT_ENABLE_SPECTRAL_ENTROPY=OFF)")
+endif()
+
+# BiasBootstrapCI: non-parametric bootstrap 95% confidence interval for rolling mean.
+option(LLMQUANT_ENABLE_BOOTSTRAP_CI     "Build BiasBootstrapCI: model-free bootstrap CI for rolling bias mean; fires on_ci_wide/narrow" ON)
+if(LLMQUANT_ENABLE_BOOTSTRAP_CI)
+    target_sources(llmquant PRIVATE src/BiasBootstrapCI.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BOOTSTRAP_CI_ENABLED)
+    message(STATUS "Feature: BiasBootstrapCI ENABLED (bootstrap CI, wide/narrow callbacks)")
+else()
+    message(STATUS "Feature: BiasBootstrapCI DISABLED (LLMQUANT_ENABLE_BOOTSTRAP_CI=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
