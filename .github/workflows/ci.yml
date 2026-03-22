@@ -54,7 +54,8 @@ jobs:
           sudo apt-get install -y \
             libspdlog-dev libfmt-dev libyaml-cpp-dev \
             libgtest-dev nlohmann-json3-dev \
-            libssl-dev libhiredis-dev
+            libssl-dev libhiredis-dev \
+            clang clang-tidy
       - name: Configure (ASan + UBSan)
         run: |
           cmake -B build-asan \

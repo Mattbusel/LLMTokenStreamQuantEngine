@@ -718,7 +718,7 @@ public:
      *
      * @return JSON object as std::string.
      */
-    std::string to_stats_json() const noexcept {
+    std::string to_stats_json() const {
         uint64_t mag    = stats_.signals_blocked_magnitude.load(std::memory_order_relaxed);
         uint64_t conf   = stats_.signals_blocked_confidence.load(std::memory_order_relaxed);
         uint64_t ratel  = stats_.signals_blocked_rate.load(std::memory_order_relaxed);

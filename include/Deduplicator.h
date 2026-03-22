@@ -284,7 +284,7 @@ public:
      *
      * @return JSON object as std::string.
      */
-    std::string to_stats_json() const noexcept {
+    std::string to_stats_json() const {
         uint64_t nov  = total_novel_.load(std::memory_order_relaxed);
         uint64_t dup  = total_duplicates_.load(std::memory_order_relaxed);
         uint64_t tot  = nov + dup;

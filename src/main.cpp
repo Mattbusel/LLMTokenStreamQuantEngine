@@ -9,9 +9,13 @@
 #include "LLMStreamClient.h"
 #include "OmsAdapter.h"
 #include "RestOmsAdapter.h"
-#include "FixOmsAdapter.h"
+#ifdef LLMQUANT_FIX_OMS_ENABLED
+#  include "FixOmsAdapter.h"
+#endif
 #include "MockOmsAdapter.h"
-#include "PrometheusExporter.h"
+#ifdef LLMQUANT_PROMETHEUS_ENABLED
+#  include "PrometheusExporter.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -175,6 +179,9 @@ int main(int argc, char* argv[]) {
                 "  --validate-config Validate configuration, print any errors, exit 0=OK 1=invalid\n"
                 "  --quiet           Suppress console signal/stats output (log-file only)\n"
                 "  --stats-interval N  Monitoring loop tick period in ms (default: 1000)\n"
+                "  --no-prometheus   Disable the Prometheus /metrics scrape endpoint\n"
+                "  --no-dedup        Disable token deduplication (all tokens treated as novel)\n"
+                "  --no-hot-reload   Disable config file hot-reload watcher\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
                 "\n"
@@ -221,6 +228,12 @@ int main(int argc, char* argv[]) {
             log_level_str = argv[++i];
         } else if (arg == "--stats-interval" && i + 1 < argc) {
             stats_interval_ms = std::max(100, std::stoi(argv[++i]));
+        } else if (arg == "--no-prometheus") {
+            no_prometheus = true;
+        } else if (arg == "--no-dedup") {
+            no_dedup = true;
+        } else if (arg == "--no-hot-reload") {
+            no_hot_reload = true;
         } else if (arg == "--oms" && i + 1 < argc) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
@@ -495,6 +508,7 @@ int main(int argc, char* argv[]) {
     // OMS adapter: MockOmsAdapter by default; REST via --oms, FIX 4.2 via --fix.
     std::unique_ptr<llmquant::OmsAdapter> oms_adapter;
     if (!fix_address.empty()) {
+#ifdef LLMQUANT_FIX_OMS_ENABLED
         llmquant::FixOmsAdapter::Config fix_cfg;
         size_t colon = fix_address.find(':');
         if (colon != std::string::npos) {
@@ -504,6 +518,10 @@ int main(int argc, char* argv[]) {
             fix_cfg.host = fix_address;
         }
         oms_adapter = std::make_unique<llmquant::FixOmsAdapter>(fix_cfg);
+#else
+        spdlog::error("--fix requested but FIX OMS support was disabled at build time "
+                      "(LLMQUANT_ENABLE_FIX_OMS=OFF). Falling back to MockOmsAdapter.");
+#endif
     } else if (!oms_address.empty()) {
         std::string endpoint = oms_address;
         llmquant::RestOmsAdapter::Config oms_cfg;
@@ -541,7 +559,10 @@ int main(int argc, char* argv[]) {
     // Start config hot-reload watcher now that all pipeline objects exist.
     // The callback can update every subsystem live, including reloading the
     // token file when token_stream.data_file_path changes at runtime.
-    if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &token_sim,
+    // Disabled when --no-hot-reload is passed (useful in CI/embedded contexts).
+    if (no_hot_reload) {
+        spdlog::info("--no-hot-reload: config file watcher disabled");
+    } else if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &token_sim,
                                               &logger, &config_file,
                                               &sem_mult_sentiment, &sem_mult_confidence,
                                               &sem_mult_volatility, &sem_mult_bias](const llmquant::SystemConfig& updated) {
@@ -604,8 +625,8 @@ int main(int argc, char* argv[]) {
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
-        // Skip duplicate tokens within the dedup window.
-        {
+        // Skip duplicate tokens within the dedup window (unless --no-dedup).
+        if (!no_dedup) {
             auto dedup_result = deduplicator.check(text);
             logger.log_dedup_event(text, dedup_result == llmquant::DedupResult::Duplicate);
             if (dedup_result == llmquant::DedupResult::Duplicate) {
@@ -825,6 +846,7 @@ int main(int argc, char* argv[]) {
     std::string prom_snapshot;
     std::mutex  prom_snapshot_mutex;
 
+#ifdef LLMQUANT_PROMETHEUS_ENABLED
     uint16_t eff_stats_port = (stats_port_override != 0)
                                   ? stats_port_override
                                   : sys_config.metrics.stats_port;
@@ -834,9 +856,19 @@ int main(int argc, char* argv[]) {
         std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
         return prom_snapshot;
     });
-    if (!prom_exporter.start()) {
-        spdlog::warn("PrometheusExporter failed to bind on port {}", eff_stats_port);
+    if (!no_prometheus) {
+        if (!prom_exporter.start()) {
+            spdlog::warn("PrometheusExporter failed to bind on port {}", eff_stats_port);
+        }
+    } else {
+        spdlog::info("--no-prometheus: Prometheus scrape endpoint disabled");
     }
+#else
+    (void)stats_port_override;
+    if (!no_prometheus)
+        spdlog::info("Prometheus scrape endpoint not available "
+                     "(built with LLMQUANT_ENABLE_PROMETHEUS=OFF)");
+#endif
 
     // Main monitoring loop — prints a rolling stats bar every second.
     uint64_t last_tick = 0;
@@ -978,8 +1010,10 @@ int main(int argc, char* argv[]) {
                  << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->update_count();
+#ifdef LLMQUANT_FIX_OMS_ENABLED
                         if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
                             return fix->update_count();
+#endif
                         return 0;
                     }() << "\n"
                  << "# HELP llmquant_oms_error_count_total Total OMS connection errors\n"
@@ -987,15 +1021,19 @@ int main(int argc, char* argv[]) {
                  << "llmquant_oms_error_count_total " << [&]() -> uint64_t {
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->error_count();
+#ifdef LLMQUANT_FIX_OMS_ENABLED
                         if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
                             return fix->error_count();
+#endif
                         return 0;
                     }() << "\n"
                  << "# HELP llmquant_oms_reconnect_count_total Total FIX session reconnect attempts\n"
                  << "# TYPE llmquant_oms_reconnect_count_total counter\n"
                  << "llmquant_oms_reconnect_count_total " << [&]() -> uint64_t {
+#ifdef LLMQUANT_FIX_OMS_ENABLED
                         if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
                             return fix->get_reconnect_count();
+#endif
                         return 0;
                     }() << "\n"
                  << "# HELP llmquant_dedup_novel_total Tokens processed as novel (not seen in TTL window)\n"
@@ -1417,6 +1455,7 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "  ---------------------------------------------------------\n\n";
 
+#ifdef LLMQUANT_JSON_STATS_SUMMARY
     // Emit structured JSON summaries for all subsystems.
     if (!quiet) {
         std::cout << "  [json:risk]    " << risk_mgr.to_stats_json() << "\n";
@@ -1425,6 +1464,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
         std::cout << "  [json:dedup]   " << dedup_backend->to_stats_json() << "\n";
     }
+#endif // LLMQUANT_JSON_STATS_SUMMARY
 
     trade_engine.flush_sinks();
     logger.log_performance_summary();

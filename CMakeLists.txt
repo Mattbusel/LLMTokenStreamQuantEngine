@@ -23,6 +23,7 @@ option(LLMQUANT_ENABLE_FIX_OMS    "Build the FIX 4.2 OMS adapter (FixOmsAdapter)
 option(LLMQUANT_ENABLE_REST_OMS   "Build the REST OMS polling adapter (RestOmsAdapter)" ON)
 option(LLMQUANT_ENABLE_PROFILING  "Compile latency profiling / percentile tracking"     ON)
 option(LLMQUANT_ENABLE_DEDUP      "Build the token deduplication subsystem"             ON)
+option(LLMQUANT_ENABLE_JSON_STATS_SUMMARY "Emit structured JSON stats lines to stdout on session exit" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -215,6 +216,12 @@ if(LLMQUANT_ENABLE_DEDUP)
     message(STATUS "Feature: Token deduplication ENABLED")
 else()
     message(STATUS "Feature: Token deduplication DISABLED (LLMQUANT_ENABLE_DEDUP=OFF)")
+endif()
+if(LLMQUANT_ENABLE_JSON_STATS_SUMMARY)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_JSON_STATS_SUMMARY)
+    message(STATUS "Feature: JSON stats summary on exit ENABLED")
+else()
+    message(STATUS "Feature: JSON stats summary on exit DISABLED (LLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

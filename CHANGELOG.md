@@ -10,6 +10,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 26 — 2026-03-21)
+- **Bug fix (CI)**: `asan` job in `.github/workflows/ci.yml` was missing `clang`
+  and `clang-tidy` from its `apt-get install` step, causing the Configure step
+  (`-DCMAKE_CXX_COMPILER=clang++`) to fail with "clang++ not found".
+- **Bug fix**: `InProcessDeduplicator::to_stats_json()` and
+  `RiskManager::to_stats_json()` were incorrectly declared `noexcept` despite
+  internally calling `size()` (acquires mutex) and `is_healthy()` /
+  `get_most_blocked_gate()` (both acquire mutex). Removed `noexcept` from both.
+- **Feature flag** `LLMQUANT_ENABLE_JSON_STATS_SUMMARY` (CMake option, default
+  ON): gates the structured `[json:*]` exit-summary block in `src/main.cpp`
+  behind `#ifdef LLMQUANT_JSON_STATS_SUMMARY`. Disable with
+  `-DLLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF` for minimal/embedded builds that
+  do not want stdout JSON output. Added to CMakeLists.txt alongside existing
+  feature flags; wired via `target_compile_definitions`.
+
+### Added (Cycle 26 — 2026-03-21 — previous entries)
 - `RiskManager::format_gate_blocks()`: returns a compact per-gate block-count
   string (`"mag=N conf=N rate=N dd=N pos=N pnl=N"`) for console/log output.
   Implemented in `RiskManager.cpp`; declared in `RiskManager.h`.
