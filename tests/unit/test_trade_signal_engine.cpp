@@ -1889,9 +1889,6 @@ TEST(TradeSignalEngineTest, test_bias_reversals_format_stats_includes_field) {
         << "format_stats() must include the bias_reversals field";
 }
 
-} // namespace
-} // namespace llmquant
-
 // ---------------------------------------------------------------------------
 // Time-based bias decay tests (time_decay_half_life_ms feature)
 // ---------------------------------------------------------------------------
@@ -1945,3 +1942,6 @@ TEST(TradeSignalEngineTest, test_time_decay_reduces_bias_over_elapsed_time) {
         << " initial=" << bias_initial << " decayed=" << bias_decayed;
 }
 
+
+} // namespace
+} // namespace llmquant

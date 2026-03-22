@@ -33,7 +33,8 @@ option(LLMQUANT_ENABLE_SIGNAL_TRACE  "Emit per-token spdlog::trace lines in the 
 option(LLMQUANT_ENABLE_SIMD          "Use SSE2 intrinsics in LLMAdapter::map_sequence_simd (disable for ARM/non-SSE2 targets or reproducibility testing)" ON)
 option(LLMQUANT_ENABLE_MOCK_OMS      "Build MockOmsAdapter (deterministic test double); disable for production/minimal builds" ON)
 option(LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY "Build SentimentTrajectoryAnalyzer (online linear-regression trend detector for token sentiment streams)" ON)
-option(LLMQUANT_ENABLE_AUDIT_LOG     "Build the async NDJSON signal audit log (SignalAuditLog)" ON)
+option(LLMQUANT_ENABLE_AUDIT_LOG         "Build the async NDJSON signal audit log (SignalAuditLog)" ON)
+option(LLMQUANT_ENABLE_CIRCUIT_BREAKER   "Build the pipeline circuit-breaker (auto-pause on sustained high block rate)" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -171,6 +172,15 @@ if(LLMQUANT_ENABLE_AUDIT_LOG)
     message(STATUS "Feature: SignalAuditLog ENABLED (async NDJSON signal audit log)")
 else()
     message(STATUS "Feature: SignalAuditLog DISABLED (LLMQUANT_ENABLE_AUDIT_LOG=OFF)")
+endif()
+
+# PipelineCircuitBreaker: auto-pause when sustained block rate exceeds threshold.
+if(LLMQUANT_ENABLE_CIRCUIT_BREAKER)
+    target_sources(llmquant PRIVATE src/PipelineCircuitBreaker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CIRCUIT_BREAKER_ENABLED)
+    message(STATUS "Feature: PipelineCircuitBreaker ENABLED (auto-pause on high block rate)")
+else()
+    message(STATUS "Feature: PipelineCircuitBreaker DISABLED (LLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF)")
 endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).

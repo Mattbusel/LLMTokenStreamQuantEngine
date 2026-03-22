@@ -27,6 +27,9 @@
 #ifdef LLMQUANT_AUDIT_LOG_ENABLED
 #  include "SignalAuditLog.h"
 #endif
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+#  include "PipelineCircuitBreaker.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -979,6 +982,24 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+    // Circuit-breaker: auto-pause signal emission when block rate stays
+    // above the threshold for the configured sustained window.
+    llmquant::PipelineCircuitBreaker circuit_breaker;
+    circuit_breaker.set_state_change_callback(
+        [](llmquant::PipelineCircuitBreaker::State s, double rate) {
+            if (s == llmquant::PipelineCircuitBreaker::State::Open) {
+                spdlog::error("[circuit_breaker] pipeline OPEN — {:.0f}% of signals blocked; "
+                              "signal emission suppressed until block rate drops",
+                              rate * 100.0);
+            } else if (s == llmquant::PipelineCircuitBreaker::State::Closed) {
+                spdlog::info("[circuit_breaker] pipeline CLOSED — recovered");
+            } else {
+                spdlog::info("[circuit_breaker] pipeline HALF-OPEN — probing recovery");
+            }
+        });
+#endif
+
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
     std::array<double, kSparkSlots> spark_ring{};
@@ -999,6 +1020,15 @@ int main(int argc, char* argv[]) {
                           ).count();
 
         bool passed = risk_mgr.evaluate(signal);
+
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+        circuit_breaker.record_signal(!passed);
+        // When the circuit is open, treat the signal as blocked regardless
+        // of the risk manager decision (unless suppress_when_open is false).
+        if (passed && circuit_breaker.is_open()) {
+            passed = false;
+        }
+#endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
