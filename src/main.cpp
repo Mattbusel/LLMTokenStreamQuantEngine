@@ -480,6 +480,21 @@
 #ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
 #  include "SignalChoppinessIndex.h"
 #endif
+#ifdef LLMQUANT_ACCELERATION_METER_ENABLED
+#  include "SignalAccelerationMeter.h"
+#endif
+#ifdef LLMQUANT_FATIGUE_DETECTOR_ENABLED
+#  include "NarrativeFatigueDetector.h"
+#endif
+#ifdef LLMQUANT_SKEWNESS_TRACKER_ENABLED
+#  include "BiasSkewnessTracker.h"
+#endif
+#ifdef LLMQUANT_ZERO_CROSS_RATE_ENABLED
+#  include "SignalZeroCrossRate.h"
+#endif
+#ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
+#  include "TokenBiasCorrelogram.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3360,11 +3375,10 @@ int main(int argc, char* argv[]) {
     llmquant::SignalTrendStrengthIndex trend_strength;
     {
         llmquant::SignalTrendStrengthIndex::Config ts_cfg;
-        ts_cfg.fast_period       = 8;
-        ts_cfg.slow_period       = 25;
-        ts_cfg.signal_period     = 13;
-        ts_cfg.strength_threshold = 50.0;
-        ts_cfg.min_samples       = 20;
+        ts_cfg.r                  = 13;
+        ts_cfg.s                  = 7;
+        ts_cfg.strength_threshold = 30.0;
+        ts_cfg.min_samples        = 20;
         ts_cfg.on_zero_cross = [](double prev_tsi, double curr_tsi) {
             spdlog::info("[tsi] ZERO-CROSS {:.1f} → {:.1f}", prev_tsi, curr_tsi);
         };
@@ -3414,6 +3428,101 @@ int main(int argc, char* argv[]) {
             spdlog::info("[choppiness] CHOPPY ci={:.1f}", ci);
         };
         choppiness.update_config(ci_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ACCELERATION_METER_ENABLED
+    // SignalAccelerationMeter: EMA-smoothed velocity and acceleration of bias stream.
+    // Fires on_inflection when acceleration changes sign; on_surge on large |accel| spikes.
+    llmquant::SignalAccelerationMeter accel_meter;
+    {
+        llmquant::SignalAccelerationMeter::Config am_cfg;
+        am_cfg.alpha_vel       = 0.2;
+        am_cfg.alpha_acc       = 0.2;
+        am_cfg.surge_threshold = 0.005;
+        am_cfg.min_samples     = 5;
+        am_cfg.on_inflection = [](double vel, double acc) {
+            spdlog::info("[accel] INFLECTION vel={:.4f} acc={:.4f}", vel, acc);
+        };
+        am_cfg.on_surge = [](double acc) {
+            spdlog::warn("[accel] SURGE acc={:.4f}", acc);
+        };
+        accel_meter.update_config(am_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_FATIGUE_DETECTOR_ENABLED
+    // NarrativeFatigueDetector: dual-EMA ratio saturation sensor for bias responsiveness.
+    // is_fatigued() → fast and slow EMAs have converged; new tokens no longer move signal.
+    llmquant::NarrativeFatigueDetector fatigue_det;
+    {
+        llmquant::NarrativeFatigueDetector::Config fd_cfg;
+        fd_cfg.alpha_fast        = 0.3;
+        fd_cfg.alpha_slow        = 0.05;
+        fd_cfg.fatigue_threshold = 0.05;
+        fd_cfg.min_samples       = 10;
+        fd_cfg.on_fatigue = [](double ratio) {
+            spdlog::info("[fatigue] FATIGUED ratio={:.4f}", ratio);
+        };
+        fd_cfg.on_recovery = [](double ratio) {
+            spdlog::info("[fatigue] RECOVERED ratio={:.4f}", ratio);
+        };
+        fatigue_det.update_config(fd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SKEWNESS_TRACKER_ENABLED
+    // BiasSkewnessTracker: rolling third-moment skewness of bias distribution.
+    // Positive skew → right-tail bullish asymmetry; negative → bearish tail-risk.
+    llmquant::BiasSkewnessTracker skewness_tracker;
+    {
+        llmquant::BiasSkewnessTracker::Config sk_cfg;
+        sk_cfg.window      = 30;
+        sk_cfg.min_samples = 10;
+        sk_cfg.on_positive_skew = [](double skew) {
+            spdlog::info("[skew] POSITIVE skew={:.4f}", skew);
+        };
+        sk_cfg.on_negative_skew = [](double skew) {
+            spdlog::info("[skew] NEGATIVE skew={:.4f}", skew);
+        };
+        skewness_tracker.update_config(sk_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ZERO_CROSS_RATE_ENABLED
+    // SignalZeroCrossRate: rolling zero-crossing rate in [0, 1].
+    // High ZCR → rapid oscillation; low ZCR → sustained directional trend.
+    llmquant::SignalZeroCrossRate zcr_meter;
+    {
+        llmquant::SignalZeroCrossRate::Config zc_cfg;
+        zc_cfg.window         = 20;
+        zc_cfg.min_samples    = 5;
+        zc_cfg.high_threshold = 0.5;
+        zc_cfg.low_threshold  = 0.1;
+        zc_cfg.on_high_zcr = [](double zcr) {
+            spdlog::info("[zcr] HIGH oscillation zcr={:.3f}", zcr);
+        };
+        zc_cfg.on_low_zcr = [](double zcr) {
+            spdlog::info("[zcr] LOW zcr (trending) zcr={:.3f}", zcr);
+        };
+        zcr_meter.update_config(zc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
+    // TokenBiasCorrelogram: sliding multi-lag ACF to detect cyclical bias patterns.
+    // dominant_lag() → periodicity of narrative cycle; fires on_cycle_detected.
+    llmquant::TokenBiasCorrelogram bias_correlogram;
+    {
+        llmquant::TokenBiasCorrelogram::Config bc_cfg;
+        bc_cfg.window          = 64;
+        bc_cfg.max_lag         = 16;
+        bc_cfg.min_samples     = 20;
+        bc_cfg.cycle_threshold = 0.4;
+        bc_cfg.on_cycle_detected = [](int lag, double acf) {
+            spdlog::info("[correlogram] CYCLE lag={} acf={:.3f}", lag, acf);
+        };
+        bias_correlogram.update_config(bc_cfg);
     }
 #endif
 
@@ -4596,6 +4705,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
         choppiness.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ACCELERATION_METER_ENABLED
+        accel_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_FATIGUE_DETECTOR_ENABLED
+        fatigue_det.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SKEWNESS_TRACKER_ENABLED
+        skewness_tracker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ZERO_CROSS_RATE_ENABLED
+        zcr_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
+        bias_correlogram.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -6729,6 +6853,44 @@ int main(int argc, char* argv[]) {
               << "  choppy_events=" << choppiness.choppy_events()
               << "  obs=" << choppiness.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_ACCELERATION_METER_ENABLED
+    std::cout << "  Accel Meter      : "
+              << "vel=" << std::fixed << std::setprecision(5) << accel_meter.velocity()
+              << "  acc=" << accel_meter.acceleration()
+              << "  max_acc=" << accel_meter.max_accel()
+              << "  inflections=" << accel_meter.inflection_events()
+              << "  surges=" << accel_meter.surge_events()
+              << "  obs=" << accel_meter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_FATIGUE_DETECTOR_ENABLED
+    std::cout << "  Narrative Fatigue: "
+              << "ratio=" << std::fixed << std::setprecision(4) << fatigue_det.ratio_delta()
+              << "  fatigued=" << (fatigue_det.is_fatigued() ? "Y" : "N")
+              << "  fatigue_ev=" << fatigue_det.fatigue_events()
+              << "  recovery_ev=" << fatigue_det.recovery_events()
+              << "  obs=" << fatigue_det.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SKEWNESS_TRACKER_ENABLED
+    std::cout << "  Bias Skewness    : "
+              << "skew=" << std::fixed << std::setprecision(4) << skewness_tracker.skewness()
+              << "  pos_ev=" << skewness_tracker.positive_skew_events()
+              << "  neg_ev=" << skewness_tracker.negative_skew_events()
+              << "  obs=" << skewness_tracker.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ZERO_CROSS_RATE_ENABLED
+    std::cout << "  Zero Cross Rate  : "
+              << "zcr=" << std::fixed << std::setprecision(3) << zcr_meter.zcr()
+              << "  high_ev=" << zcr_meter.high_zcr_events()
+              << "  low_ev=" << zcr_meter.low_zcr_events()
+              << "  obs=" << zcr_meter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
+    std::cout << "  Bias Correlogram : "
+              << "dom_lag=" << bias_correlogram.dominant_lag()
+              << "  peak_acf=" << std::fixed << std::setprecision(3) << bias_correlogram.peak_acf()
+              << "  cycles=" << bias_correlogram.cycle_events()
+              << "  obs=" << bias_correlogram.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -6751,6 +6913,29 @@ int main(int argc, char* argv[]) {
               << "  decel=" << (convexity_meter.is_decelerating() ? "YES" : "no")
               << "  changes=" << convexity_meter.regime_changes()
               << "  obs=" << convexity_meter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED
+    std::cout << "  Entropy Clock    : "
+              << "kl=" << std::fixed << std::setprecision(4) << entropy_clock.accumulated_kl()
+              << "  delta=" << entropy_clock.last_delta_kl()
+              << "  exhaustions=" << entropy_clock.exhaustion_events()
+              << "  rec=" << entropy_clock.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED
+    std::cout << "  Decay Half-Life  : "
+              << "hl=" << std::fixed << std::setprecision(2) << decay_halflife.half_life()
+              << "  rate=" << std::setprecision(4) << decay_halflife.decay_rate()
+              << "  r2=" << std::setprecision(3) << decay_halflife.r_squared()
+              << "  fast=" << decay_halflife.fast_decay_events()
+              << "  slow=" << decay_halflife.slow_decay_events() << "\n";
+#endif
+#ifdef LLMQUANT_BAYESIAN_SENTIMENT_ENABLED
+    std::cout << "  Bayes Prior      : "
+              << "mu=" << std::fixed << std::setprecision(4) << bayes_prior.posterior_mean()
+              << "  std=" << bayes_prior.posterior_std()
+              << "  shifted=" << (bayes_prior.is_shifted() ? "YES" : "no")
+              << "  shifts=" << bayes_prior.belief_shifts()
+              << "  updates=" << bayes_prior.total_updates() << "\n";
 #endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
@@ -7285,6 +7470,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
         std::cout << "  [json:choppiness] " << choppiness.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ACCELERATION_METER_ENABLED
+        std::cout << "  [json:accel]      " << accel_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_FATIGUE_DETECTOR_ENABLED
+        std::cout << "  [json:fatigue]    " << fatigue_det.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SKEWNESS_TRACKER_ENABLED
+        std::cout << "  [json:skewness]   " << skewness_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ZERO_CROSS_RATE_ENABLED
+        std::cout << "  [json:zcr]        " << zcr_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
+        std::cout << "  [json:correlogram]" << bias_correlogram.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";

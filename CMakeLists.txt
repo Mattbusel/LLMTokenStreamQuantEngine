@@ -1941,6 +1941,56 @@ else()
     message(STATUS "Feature: SignalDecayHalfLife DISABLED (LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE=OFF)")
 endif()
 
+# SignalAccelerationMeter: second-derivative acceleration of the bias stream.
+option(LLMQUANT_ENABLE_ACCELERATION_METER "Build SignalAccelerationMeter: EMA velocity+acceleration; fires on_inflection/on_surge" ON)
+if(LLMQUANT_ENABLE_ACCELERATION_METER)
+    target_sources(llmquant PRIVATE src/SignalAccelerationMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ACCELERATION_METER_ENABLED)
+    message(STATUS "Feature: SignalAccelerationMeter ENABLED (EMA accel, inflection/surge callbacks)")
+else()
+    message(STATUS "Feature: SignalAccelerationMeter DISABLED (LLMQUANT_ENABLE_ACCELERATION_METER=OFF)")
+endif()
+
+# NarrativeFatigueDetector: fast/slow EMA ratio saturation sensor.
+option(LLMQUANT_ENABLE_FATIGUE_DETECTOR "Build NarrativeFatigueDetector: dual-EMA ratio fatigue sensor; fires on_fatigue/on_recovery" ON)
+if(LLMQUANT_ENABLE_FATIGUE_DETECTOR)
+    target_sources(llmquant PRIVATE src/NarrativeFatigueDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FATIGUE_DETECTOR_ENABLED)
+    message(STATUS "Feature: NarrativeFatigueDetector ENABLED (EMA ratio fatigue, on_fatigue/on_recovery)")
+else()
+    message(STATUS "Feature: NarrativeFatigueDetector DISABLED (LLMQUANT_ENABLE_FATIGUE_DETECTOR=OFF)")
+endif()
+
+# BiasSkewnessTracker: rolling third-moment skewness of bias distribution.
+option(LLMQUANT_ENABLE_SKEWNESS_TRACKER "Build BiasSkewnessTracker: rolling skewness of bias; fires on_positive_skew/on_negative_skew" ON)
+if(LLMQUANT_ENABLE_SKEWNESS_TRACKER)
+    target_sources(llmquant PRIVATE src/BiasSkewnessTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SKEWNESS_TRACKER_ENABLED)
+    message(STATUS "Feature: BiasSkewnessTracker ENABLED (rolling skewness, skew-flip callbacks)")
+else()
+    message(STATUS "Feature: BiasSkewnessTracker DISABLED (LLMQUANT_ENABLE_SKEWNESS_TRACKER=OFF)")
+endif()
+
+# SignalZeroCrossRate: rolling zero-crossing rate — oscillation vs. trend gauge.
+option(LLMQUANT_ENABLE_ZERO_CROSS_RATE "Build SignalZeroCrossRate: rolling ZCR in [0,1]; fires on_high_zcr/on_low_zcr" ON)
+if(LLMQUANT_ENABLE_ZERO_CROSS_RATE)
+    target_sources(llmquant PRIVATE src/SignalZeroCrossRate.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ZERO_CROSS_RATE_ENABLED)
+    message(STATUS "Feature: SignalZeroCrossRate ENABLED (rolling ZCR, high/low ZCR callbacks)")
+else()
+    message(STATUS "Feature: SignalZeroCrossRate DISABLED (LLMQUANT_ENABLE_ZERO_CROSS_RATE=OFF)")
+endif()
+
+# TokenBiasCorrelogram: sliding autocorrelation at multiple lags.
+option(LLMQUANT_ENABLE_BIAS_CORRELOGRAM "Build TokenBiasCorrelogram: multi-lag ACF; fires on_cycle_detected on dominant periodic lag" ON)
+if(LLMQUANT_ENABLE_BIAS_CORRELOGRAM)
+    target_sources(llmquant PRIVATE src/TokenBiasCorrelogram.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_CORRELOGRAM_ENABLED)
+    message(STATUS "Feature: TokenBiasCorrelogram ENABLED (multi-lag ACF, on_cycle_detected)")
+else()
+    message(STATUS "Feature: TokenBiasCorrelogram DISABLED (LLMQUANT_ENABLE_BIAS_CORRELOGRAM=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
