@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 29 — 2026-03-21)
+- **Feature flag** `LLMQUANT_ENABLE_STREAM_CLIENT` (CMake option, default ON):
+  gates the entire `LLMStreamClient` live-streaming path. When OFF:
+  - `LLMStreamClient.h` is not included in `main.cpp`
+  - `--stream` CLI option is hidden from help and silently unavailable
+  - Process falls back to the token simulator with a `spdlog::warn`
+  - `LLMQUANT_ENABLE_STREAM_CLIENT=OFF` added to the `minimal` build and
+    `feature-flags-matrix` CI job
+- **Prometheus** `llmquant_latency_warmed_up` (gauge, 0/1) and
+  `llmquant_latency_budget_remaining_us` (gauge, signed µs) added to the
+  Prometheus snapshot using `LatencyController::get_health_state()`. These
+  allow Grafana dashboards to alert on warmup state and latency budget
+  burn without deriving them from p99 and target separately.
+
 ### Added (Cycle 28 — 2026-03-21)
 - **Docs**: README test count badge updated 788 → 895; CLAUDE.md test coverage
   table updated with accurate per-file counts (actual `grep -c '^TEST('` values).

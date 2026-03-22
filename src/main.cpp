@@ -1333,6 +1333,15 @@ int main(int argc, char* argv[]) {
                 snap << "llmquant_token_latency_us_count " << last_count << "\n"
                      << "llmquant_token_latency_us_sum "   << latency_ctrl.get_total_latency_us() << "\n";
             }
+            {
+                auto hs = latency_ctrl.get_health_state();
+                snap << "# HELP llmquant_latency_warmed_up 1 when the sample window is >=50% populated, 0 during warmup\n"
+                     << "# TYPE llmquant_latency_warmed_up gauge\n"
+                     << "llmquant_latency_warmed_up " << (hs.warmed_up ? 1 : 0) << "\n"
+                     << "# HELP llmquant_latency_budget_remaining_us Signed latency budget: target_us minus p99_us (negative = over budget)\n"
+                     << "# TYPE llmquant_latency_budget_remaining_us gauge\n"
+                     << "llmquant_latency_budget_remaining_us " << std::fixed << std::setprecision(1) << hs.budget_remaining_us << "\n";
+            }
             snap << "# HELP llmquant_drawdown_cumulative_bias Current cumulative bias in the drawdown window\n"
                  << "# TYPE llmquant_drawdown_cumulative_bias gauge\n"
                  << "llmquant_drawdown_cumulative_bias " << std::fixed << std::setprecision(4) << risk_mgr.get_cumulative_bias() << "\n"
