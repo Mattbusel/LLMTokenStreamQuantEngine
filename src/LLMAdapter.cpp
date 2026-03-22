@@ -57,16 +57,16 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
     if (is_normalized(token)) {
         auto it_fast = token_weights_.find(token);
         if (it_fast != token_weights_.end()) {
-            stats_.tokens_processed++;
-            stats_.cache_hits++;
+            stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
+            stats_.cache_hits.fetch_add(1, std::memory_order_relaxed);
             auto hc = token_hit_counts_.find(token);
             if (hc != token_hit_counts_.end())
                 hc->second->fetch_add(1, std::memory_order_relaxed);
             return it_fast->second;
         }
         // Token is already normalized but not found — no need to normalize again.
-        stats_.tokens_processed++;
-        stats_.cache_misses++;
+        stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
+        stats_.cache_misses.fetch_add(1, std::memory_order_relaxed);
         return SemanticWeight{0.0, 0.5, 0.1, 0.0};
     }
 
@@ -76,16 +76,16 @@ SemanticWeight LLMAdapter::map_token_to_weight(const std::string& token) const {
 
     auto it = token_weights_.find(norm);
     if (it != token_weights_.end()) {
-        stats_.tokens_processed++;
-        stats_.cache_hits++;
+        stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
+        stats_.cache_hits.fetch_add(1, std::memory_order_relaxed);
         auto hc = token_hit_counts_.find(norm);
         if (hc != token_hit_counts_.end())
             hc->second->fetch_add(1, std::memory_order_relaxed);
         return it->second;
     }
 
-    stats_.tokens_processed++;
-    stats_.cache_misses++;
+    stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
+    stats_.cache_misses.fetch_add(1, std::memory_order_relaxed);
 
     // Default neutral weight for unknown tokens
     return SemanticWeight{0.0, 0.5, 0.1, 0.0};
