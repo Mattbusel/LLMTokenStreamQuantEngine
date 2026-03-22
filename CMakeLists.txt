@@ -138,6 +138,9 @@ option(LLMQUANT_ENABLE_LATENCY_JITTER               "Build LatencyJitterMonitor:
 option(LLMQUANT_ENABLE_HURST_ESTIMATOR              "Build SignalHurstEstimator: R/S rescaled-range Hurst exponent on rolling bias window; H>0.6=trending, H<0.4=mean-reverting" ON)
 option(LLMQUANT_ENABLE_RUN_LENGTH                   "Build BiasRunLengthEncoder: run-length stats on bias sign sequence (current_run, max_run, avg_run); fires on_long_run callback" ON)
 option(LLMQUANT_ENABLE_COVERAGE_METER               "Build SignalCoverageMeter: rolling min/max of bias values -> coverage fraction of configured range; fires on_range_expansion" ON)
+option(LLMQUANT_ENABLE_BIAS_HYSTERESIS_GATE         "Build BiasHysteresisGate: debounce gate requiring required_ticks consecutive exceedances before opening; exit hysteresis prevents chattering" ON)
+option(LLMQUANT_ENABLE_REALIZED_VOL                 "Build RealizedVolatilityTracker: rolling realized volatility (sqrt mean-squared return) with high/low callbacks" ON)
+option(LLMQUANT_ENABLE_CAUSAL_TRACER                "Build SignalCausalChainTracer: ring buffer of (token, contribution) pairs; trace(n) returns top-N causal tokens; fires on_strong_token" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1319,6 +1322,36 @@ if(LLMQUANT_ENABLE_COVERAGE_METER)
     message(STATUS "Feature: SignalCoverageMeter ENABLED (bias range coverage, on_range_expansion callback)")
 else()
     message(STATUS "Feature: SignalCoverageMeter DISABLED (LLMQUANT_ENABLE_COVERAGE_METER=OFF)")
+endif()
+
+# BiasHysteresisGate: debounce / time-persistence gate for bias direction changes.
+option(LLMQUANT_ENABLE_BIAS_HYSTERESIS "Build BiasHysteresisGate: N-tick debounce that requires bias to sustain above threshold before opening, preventing whipsaw" ON)
+if(LLMQUANT_ENABLE_BIAS_HYSTERESIS)
+    target_sources(llmquant PRIVATE src/BiasHysteresisGate.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_HYSTERESIS_ENABLED)
+    message(STATUS "Feature: BiasHysteresisGate ENABLED (N-tick debounce, entry/exit hysteresis)")
+else()
+    message(STATUS "Feature: BiasHysteresisGate DISABLED (LLMQUANT_ENABLE_BIAS_HYSTERESIS=OFF)")
+endif()
+
+# RealizedVolatilityTracker: rolling realized-volatility estimator for bias signal.
+option(LLMQUANT_ENABLE_REALIZED_VOL "Build RealizedVolatilityTracker: rolling sqrt(mean squared return) with high-vol alerts for dynamic position sizing" ON)
+if(LLMQUANT_ENABLE_REALIZED_VOL)
+    target_sources(llmquant PRIVATE src/RealizedVolatilityTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REALIZED_VOL_ENABLED)
+    message(STATUS "Feature: RealizedVolatilityTracker ENABLED (rolling RV, high/low-vol callbacks)")
+else()
+    message(STATUS "Feature: RealizedVolatilityTracker DISABLED (LLMQUANT_ENABLE_REALIZED_VOL=OFF)")
+endif()
+
+# SignalCausalChainTracer: traces top-N token contributions that caused a signal.
+option(LLMQUANT_ENABLE_CAUSAL_TRACER "Build SignalCausalChainTracer: rolling (token,contribution) ring ranked by impact for signal explainability" ON)
+if(LLMQUANT_ENABLE_CAUSAL_TRACER)
+    target_sources(llmquant PRIVATE src/SignalCausalChainTracer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CAUSAL_TRACER_ENABLED)
+    message(STATUS "Feature: SignalCausalChainTracer ENABLED (token causal chain, strong-token callback)")
+else()
+    message(STATUS "Feature: SignalCausalChainTracer DISABLED (LLMQUANT_ENABLE_CAUSAL_TRACER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

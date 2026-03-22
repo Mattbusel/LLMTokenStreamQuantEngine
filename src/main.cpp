@@ -297,6 +297,12 @@
 #ifdef LLMQUANT_LATENCY_JITTER_ENABLED
 #  include "LatencyJitterMonitor.h"
 #endif
+#ifdef LLMQUANT_RUN_LENGTH_ENABLED
+#  include "BiasRunLengthEncoder.h"
+#endif
+#ifdef LLMQUANT_COVERAGE_METER_ENABLED
+#  include "SignalCoverageMeter.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2581,6 +2587,39 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_RUN_LENGTH_ENABLED
+    // BiasRunLengthEncoder: run-length stats on bias sign sequence.
+    // Long runs → persistent directional regime; short runs → noisy/mean-reverting.
+    llmquant::BiasRunLengthEncoder run_length;
+    {
+        llmquant::BiasRunLengthEncoder::Config rl_cfg;
+        rl_cfg.long_run_threshold = 10;
+        rl_cfg.avg_alpha          = 0.20;
+        rl_cfg.on_long_run = [](int dir, int len) {
+            spdlog::info("[run_length] LONG RUN dir={} len={} — persistent {} regime",
+                         dir, len, dir > 0 ? "bullish" : "bearish");
+        };
+        run_length.update_config(rl_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_COVERAGE_METER_ENABLED
+    // SignalCoverageMeter: rolling bias range coverage [0,1].
+    // Low coverage = signals stuck in narrow band; high = full dynamic range used.
+    llmquant::SignalCoverageMeter coverage_meter;
+    {
+        llmquant::SignalCoverageMeter::Config cm_cfg;
+        cm_cfg.window               = 50;
+        cm_cfg.range_min            = -1.0;
+        cm_cfg.range_max            =  1.0;
+        cm_cfg.expansion_threshold  = 0.5;
+        cm_cfg.on_range_expansion   = [](double cov) {
+            spdlog::info("[coverage] range expanded coverage={:.3f} — full dynamic range in use", cov);
+        };
+        coverage_meter.update_config(cm_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -3153,6 +3192,14 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
         // Update OLS slope of recent bias values for trend acceleration detection.
         signal_slope.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_RUN_LENGTH_ENABLED
+        // Track run-length of bias sign for persistence/mean-reversion detection.
+        run_length.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_COVERAGE_METER_ENABLED
+        // Update rolling bias range coverage.
+        coverage_meter.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4988,6 +5035,21 @@ int main(int argc, char* argv[]) {
               << "  accel=" << (signal_slope.is_accelerating() ? "YES" : "no")
               << "  obs=" << signal_slope.observation_count() << "\n";
 #endif
+#ifdef LLMQUANT_RUN_LENGTH_ENABLED
+    std::cout << "  Run Length       : "
+              << "cur=" << run_length.current_run()
+              << "  dir=" << run_length.current_direction()
+              << "  max=" << run_length.max_run()
+              << "  avg=" << std::fixed << std::setprecision(2) << run_length.avg_run()
+              << "  runs=" << run_length.run_count() << "\n";
+#endif
+#ifdef LLMQUANT_COVERAGE_METER_ENABLED
+    std::cout << "  Range Coverage   : "
+              << std::fixed << std::setprecision(3) << coverage_meter.coverage()
+              << "  min=" << coverage_meter.rolling_min()
+              << "  max=" << coverage_meter.rolling_max()
+              << "  expanded=" << (coverage_meter.is_expanded() ? "YES" : "no") << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -5238,6 +5300,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
         std::cout << "  [json:slope]      " << signal_slope.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_RUN_LENGTH_ENABLED
+        std::cout << "  [json:run_length] " << run_length.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_COVERAGE_METER_ENABLED
+        std::cout << "  [json:coverage]   " << coverage_meter.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

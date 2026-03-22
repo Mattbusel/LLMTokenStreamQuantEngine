@@ -122,6 +122,9 @@
     unit/test_latency_jitter_monitor.cpp
     unit/test_bias_run_length_encoder.cpp
     unit/test_signal_coverage_meter.cpp
+    unit/test_bias_hysteresis_gate.cpp
+    unit/test_realized_volatility_tracker.cpp
+    unit/test_signal_causal_chain_tracer.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
