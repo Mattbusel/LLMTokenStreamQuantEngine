@@ -40,6 +40,9 @@ option(LLMQUANT_ENABLE_HEALTH_SERVER     "Build the HTTP /health JSON endpoint f
 option(LLMQUANT_ENABLE_KELLY_SIZER       "Build KellyPositionSizer: Kelly Criterion adaptive position sizing" ON)
 option(LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN "Build AdaptiveCooldownController: latency-aware dynamic signal cooldown" ON)
 option(LLMQUANT_ENABLE_SIGNAL_BLEND      "Build SignalBlendLayer: multi-source confidence-weighted signal blending" ON)
+option(LLMQUANT_ENABLE_STALE_DETECTOR    "Build StaleTokenDetector: watchdog that fires alerts when the LLM token stream goes silent" ON)
+option(LLMQUANT_ENABLE_REGIME_DETECTOR   "Build RegimeDetector: EMA-based regime classifier (Bull/Bear/Volatile/RiskOff/Neutral)" ON)
+option(LLMQUANT_ENABLE_TOKEN_REPLAY      "Build TokenReplayRecorder: binary token stream recorder and deterministic replay engine" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -231,6 +234,33 @@ if(LLMQUANT_ENABLE_SIGNAL_BLEND)
     message(STATUS "Feature: SignalBlendLayer ENABLED (multi-source signal blending)")
 else()
     message(STATUS "Feature: SignalBlendLayer DISABLED (LLMQUANT_ENABLE_SIGNAL_BLEND=OFF)")
+endif()
+
+# RegimeDetector: EMA-based signal pipeline regime classifier.
+if(LLMQUANT_ENABLE_REGIME_DETECTOR)
+    target_sources(llmquant PRIVATE src/RegimeDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_DETECTOR_ENABLED)
+    message(STATUS "Feature: RegimeDetector ENABLED (EMA-based regime classifier)")
+else()
+    message(STATUS "Feature: RegimeDetector DISABLED (LLMQUANT_ENABLE_REGIME_DETECTOR=OFF)")
+endif()
+
+# TokenReplayRecorder: binary token stream recorder and deterministic replay.
+if(LLMQUANT_ENABLE_TOKEN_REPLAY)
+    target_sources(llmquant PRIVATE src/TokenReplayRecorder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_REPLAY_ENABLED)
+    message(STATUS "Feature: TokenReplayRecorder ENABLED (binary token replay)")
+else()
+    message(STATUS "Feature: TokenReplayRecorder DISABLED (LLMQUANT_ENABLE_TOKEN_REPLAY=OFF)")
+endif()
+
+# StaleTokenDetector: watchdog that alerts when the LLM token stream goes silent.
+if(LLMQUANT_ENABLE_STALE_DETECTOR)
+    target_sources(llmquant PRIVATE src/StaleTokenDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STALE_DETECTOR_ENABLED)
+    message(STATUS "Feature: StaleTokenDetector ENABLED (LLM stream silence watchdog)")
+else()
+    message(STATUS "Feature: StaleTokenDetector DISABLED (LLMQUANT_ENABLE_STALE_DETECTOR=OFF)")
 endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).

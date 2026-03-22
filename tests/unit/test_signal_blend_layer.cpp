@@ -120,8 +120,8 @@ TEST(SignalBlendLayer, EqualBlendAveragesBias) {
     TradeSignal blended{};
     layer.set_blend_callback([&](const TradeSignal& s) { blended = s; });
 
-    layer.push_signal("a", make_signal(4.0));
-    layer.push_signal("b", make_signal(2.0));
+    (void)layer.push_signal("a", make_signal(4.0));
+    (void)layer.push_signal("b", make_signal(2.0));
 
     EXPECT_NEAR(blended.delta_bias_shift, 3.0, 1e-9);  // (4+2)/2
 }
@@ -144,8 +144,8 @@ TEST(SignalBlendLayer, ConfidenceWeightedBlend) {
     // high_conf: bias=10, confidence=0.8
     // low_conf:  bias=0,  confidence=0.2
     // expected blend: (10*0.8 + 0*0.2) / (0.8+0.2) = 8.0
-    layer.push_signal("high_conf", make_signal(10.0, 0.8));
-    layer.push_signal("low_conf",  make_signal(0.0,  0.2));
+    (void)layer.push_signal("high_conf", make_signal(10.0, 0.8));
+    (void)layer.push_signal("low_conf",  make_signal(0.0,  0.2));
 
     EXPECT_NEAR(blended.delta_bias_shift, 8.0, 1e-9);
 }
@@ -167,8 +167,8 @@ TEST(SignalBlendLayer, CustomWeightedBlend) {
 
     // wsb: bias=8, weight=3; stocks: bias=4, weight=1
     // expected: (8*3 + 4*1)/(3+1) = 28/4 = 7.0
-    layer.push_signal("wsb",    make_signal(8.0));
-    layer.push_signal("stocks", make_signal(4.0));
+    (void)layer.push_signal("wsb",    make_signal(8.0));
+    (void)layer.push_signal("stocks", make_signal(4.0));
 
     EXPECT_NEAR(blended.delta_bias_shift, 7.0, 1e-9);
 }
@@ -184,7 +184,7 @@ TEST(SignalBlendLayer, SetSourceWeightUpdatesBlend) {
     // With only 1 source, blend = signal (weight normalises to 1).
     TradeSignal blended{};
     layer.set_blend_callback([&](const TradeSignal& s) { blended = s; });
-    layer.push_signal("src", make_signal(6.0));
+    (void)layer.push_signal("src", make_signal(6.0));
     EXPECT_NEAR(blended.delta_bias_shift, 6.0, 1e-9);
 }
 
@@ -204,16 +204,16 @@ TEST(SignalBlendLayer, ResetPendingFlagsMeansEachBlendNeedsFreshUpdate) {
     std::atomic<int> cb_count{0};
     layer.set_blend_callback([&](const TradeSignal&) { ++cb_count; });
 
-    layer.push_signal("a", make_signal(1.0));
-    layer.push_signal("b", make_signal(1.0));
+    (void)layer.push_signal("a", make_signal(1.0));
+    (void)layer.push_signal("b", make_signal(1.0));
     EXPECT_EQ(cb_count.load(), 1);
 
     // After blend, flags are reset.  Single source doesn't trigger another.
-    layer.push_signal("a", make_signal(2.0));
+    (void)layer.push_signal("a", make_signal(2.0));
     EXPECT_EQ(cb_count.load(), 1);
 
     // Second source → second blend.
-    layer.push_signal("b", make_signal(2.0));
+    (void)layer.push_signal("b", make_signal(2.0));
     EXPECT_EQ(cb_count.load(), 2);
 }
 
@@ -228,7 +228,7 @@ TEST(SignalBlendLayer, ForceBlendWorksWithSingleSource) {
     SignalBlendLayer layer(cfg);
     layer.register_source("a");
 
-    layer.push_signal("a", make_signal(5.0));
+    (void)layer.push_signal("a", make_signal(5.0));
 
     TradeSignal blended = layer.force_blend();
     EXPECT_NEAR(blended.delta_bias_shift, 5.0, 1e-9);
@@ -249,7 +249,7 @@ TEST(SignalBlendLayer, ResetClearsSourceHistory) {
     cfg.min_sources = 1;
     SignalBlendLayer layer(cfg);
     layer.register_source("src");
-    layer.push_signal("src", make_signal(1.0));
+    (void)layer.push_signal("src", make_signal(1.0));
     layer.reset();
 
     // After reset, force_blend should return zero (no pushes since reset).
@@ -286,7 +286,7 @@ TEST(SignalBlendLayer, UpdateConfigChangesMinSources) {
 
     std::atomic<int> cb_count{0};
     layer.set_blend_callback([&](const TradeSignal&) { ++cb_count; });
-    layer.push_signal("a", make_signal(1.0));
+    (void)layer.push_signal("a", make_signal(1.0));
     EXPECT_EQ(cb_count.load(), 1);
 }
 
@@ -310,7 +310,7 @@ TEST(SignalBlendLayer, ConcurrentPushesAreSafe) {
     auto pusher = [&](const std::string& name) {
         while (!start.load()) {}
         for (int i = 0; i < 100; ++i)
-            layer.push_signal(name, make_signal(static_cast<double>(i)));
+            (void)layer.push_signal(name, make_signal(static_cast<double>(i)));
     };
 
     std::vector<std::thread> threads;

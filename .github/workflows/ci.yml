@@ -118,7 +118,10 @@ jobs:
             -DLLMQUANT_ENABLE_HEALTH_SERVER=OFF \
             -DLLMQUANT_ENABLE_KELLY_SIZER=OFF \
             -DLLMQUANT_ENABLE_ADAPTIVE_COOLDOWN=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_BLEND=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_BLEND=OFF \
+            -DLLMQUANT_ENABLE_STALE_DETECTOR=OFF \
+            -DLLMQUANT_ENABLE_REGIME_DETECTOR=OFF \
+            -DLLMQUANT_ENABLE_TOKEN_REPLAY=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -152,6 +155,9 @@ jobs:
           - flag: LLMQUANT_ENABLE_KELLY_SIZER
           - flag: LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN
           - flag: LLMQUANT_ENABLE_SIGNAL_BLEND
+          - flag: LLMQUANT_ENABLE_STALE_DETECTOR
+          - flag: LLMQUANT_ENABLE_REGIME_DETECTOR
+          - flag: LLMQUANT_ENABLE_TOKEN_REPLAY
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

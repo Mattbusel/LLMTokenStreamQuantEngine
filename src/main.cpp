@@ -42,6 +42,12 @@
 #ifdef LLMQUANT_SIGNAL_BLEND_ENABLED
 #  include "SignalBlendLayer.h"
 #endif
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+#  include "StaleTokenDetector.h"
+#endif
+#ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
+#  include "RegimeDetector.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -920,10 +926,28 @@ int main(int argc, char* argv[]) {
     }
 #endif // LLMQUANT_HOT_RELOAD_ENABLED
 
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+    // Stale-token watchdog: fires if no token arrives for >30 s (configurable).
+    // Declared before process_token lambda so the lambda can capture it by ref.
+    llmquant::StaleTokenDetector stale_detector;
+    stale_detector.reset();
+    stale_detector.set_stale_callback([](int64_t gap_ms) {
+        spdlog::error("[stale_detector] LLM token stream SILENT for {}ms — "
+                      "no tokens received; check upstream API / network",
+                      gap_ms);
+    });
+    stale_detector.set_recovery_callback([]() {
+        spdlog::info("[stale_detector] LLM token stream RECOVERED — tokens flowing again");
+    });
+#endif
+
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+        stale_detector.record_token();
+#endif
 #ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
         spdlog::trace("[trace] token seq={} text={}", seq_id, text);
 #endif
@@ -1048,6 +1072,24 @@ int main(int argc, char* argv[]) {
     // Adaptive cooldown: widens signal cooldown when P99 latency exceeds budget,
     // narrows it again during recovery.  Updated by the stats ticker.
     llmquant::AdaptiveCooldownController adaptive_cooldown;
+#endif
+
+#ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
+    // Regime detector: classifies pipeline as Bull/Bear/Volatile/RiskOff/Neutral.
+    // Updated per signal in the hot-path callback; logged on regime transitions.
+    llmquant::RegimeDetector regime_detector;
+#endif
+
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+    // Stale token watchdog: fires an alert when the LLM stream goes silent.
+    llmquant::StaleTokenDetector stale_detector;
+    stale_detector.set_stale_callback([](int64_t gap_ms) {
+        spdlog::warn("[stale_detector] LLM token stream silent for {}ms — check upstream",
+                     gap_ms);
+    });
+    stale_detector.set_recovery_callback([]() {
+        spdlog::info("[stale_detector] LLM token stream recovered");
+    });
 #endif
 
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
@@ -1322,7 +1364,12 @@ int main(int argc, char* argv[]) {
 #  else
         bool redis_ok = false;
 #  endif
-        bool ok = !cb_open && oms_ok;
+#  ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+        bool stream_stale = stale_detector.is_stale();
+#  else
+        bool stream_stale = false;
+#  endif
+        bool ok = !cb_open && oms_ok && !stream_stale;
         uint64_t blocked = rm_stats.signals_blocked_magnitude.load()
                          + rm_stats.signals_blocked_confidence.load()
                          + rm_stats.signals_blocked_rate.load()
@@ -1334,6 +1381,7 @@ int main(int argc, char* argv[]) {
             ",\"circuit_breaker\":\"%s\""
             ",\"block_rate\":%.4f"
             ",\"oms_connected\":%s"
+            ",\"stream_stale\":%s"
             ",\"p99_latency_us\":%lld"
             ",\"signals_generated\":%llu"
             ",\"signals_blocked\":%llu"
@@ -1344,6 +1392,7 @@ int main(int argc, char* argv[]) {
             cb_name.c_str(),
             blk_rate,
             oms_ok ? "true" : "false",
+            stream_stale ? "true" : "false",
             static_cast<long long>(lc_stats.p99_latency.count()),
             static_cast<unsigned long long>(te_stats.signals_generated.load()),
             static_cast<unsigned long long>(blocked),
@@ -1415,6 +1464,10 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+#endif
+
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+        stale_detector.check();
 #endif
 
         // Colour the P99 value: green < 10μs, yellow < 50μs, red otherwise.
@@ -1704,6 +1757,17 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_circuit_breaker_recoveries_total Times circuit has recovered to CLOSED\n"
                  << "# TYPE llmquant_circuit_breaker_recoveries_total counter\n"
                  << "llmquant_circuit_breaker_recoveries_total " << circuit_breaker.recoveries() << "\n"
+#endif
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+                 << "# HELP llmquant_stream_stale Whether the LLM token stream is currently silent (1=stale)\n"
+                 << "# TYPE llmquant_stream_stale gauge\n"
+                 << "llmquant_stream_stale " << (stale_detector.is_stale() ? 1 : 0) << "\n"
+                 << "# HELP llmquant_stream_stale_events_total Times the token stream went silent\n"
+                 << "# TYPE llmquant_stream_stale_events_total counter\n"
+                 << "llmquant_stream_stale_events_total " << stale_detector.stale_events() << "\n"
+                 << "# HELP llmquant_stream_ms_since_last_token Milliseconds since last token arrived\n"
+                 << "# TYPE llmquant_stream_ms_since_last_token gauge\n"
+                 << "llmquant_stream_ms_since_last_token " << stale_detector.ms_since_last_token() << "\n"
 #endif
                 ;
             // Signal quality histogram — per-bucket counts emitted as a Prometheus histogram.
@@ -2121,6 +2185,11 @@ int main(int argc, char* argv[]) {
               << adaptive_cooldown.get_cooldown_us() << "µs"
               << "  expansions=" << adaptive_cooldown.pressure_expansions()
               << "  recoveries=" << adaptive_cooldown.recoveries() << "\n";
+#endif
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+    std::cout << "  Stream stale evts: " << stale_detector.stale_events()
+              << "  recoveries=" << stale_detector.recovery_events()
+              << "  ms_since_last=" << stale_detector.ms_since_last_token() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
