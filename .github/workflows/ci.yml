@@ -203,7 +203,9 @@ jobs:
             -DLLMQUANT_ENABLE_SIGNAL_DRIFT=OFF \
             -DLLMQUANT_ENABLE_LIFECYCLE_TRACKER=OFF \
             -DLLMQUANT_ENABLE_TOKEN_QUANTISER=OFF \
-            -DLLMQUANT_ENABLE_POSITION_CONCENTRATION=OFF
+            -DLLMQUANT_ENABLE_POSITION_CONCENTRATION=OFF \
+            -DLLMQUANT_ENABLE_AUTOCORR_METER=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_SSI=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -322,6 +324,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_LIFECYCLE_TRACKER
           - flag: LLMQUANT_ENABLE_TOKEN_QUANTISER
           - flag: LLMQUANT_ENABLE_POSITION_CONCENTRATION
+          - flag: LLMQUANT_ENABLE_AUTOCORR_METER
+          - flag: LLMQUANT_ENABLE_SIGNAL_SSI
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

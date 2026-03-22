@@ -264,6 +264,12 @@
 #ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
 #  include "PositionConcentrationGuard.h"
 #endif
+#ifdef LLMQUANT_AUTOCORR_METER_ENABLED
+#  include "SentimentAutocorrelationMeter.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_SSI_ENABLED
+#  include "SignalStrengthIndexer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2326,6 +2332,44 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_AUTOCORR_METER_ENABLED
+    // SentimentAutocorrelationMeter: rolling lag-1..5 AC of bias series.
+    // High lag-1 AC → trending sentiment (use momentum).
+    // Low/negative lag-1 AC → mean reversion (use contrarian).
+    llmquant::SentimentAutocorrelationMeter autocorr_meter;
+    {
+        llmquant::SentimentAutocorrelationMeter::Config ac_cfg;
+        ac_cfg.window             = 50;
+        ac_cfg.max_lag            = 5;
+        ac_cfg.trending_threshold = 0.20;
+        ac_cfg.on_regime_change = [](double lag1_ac, bool trending) {
+            spdlog::info("[autocorr] lag1={:.3f}  {}",
+                         lag1_ac, trending ? "TRENDING" : "mean-reverting");
+        };
+        autocorr_meter.update_config(ac_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_SSI_ENABLED
+    // SignalStrengthIndexer: RSI applied to sentiment bias.
+    // SSI > 70 → overbought (sentiment overextended, reversion likely).
+    // SSI < 30 → oversold (narrative exhaustion, possible bounce).
+    llmquant::SignalStrengthIndexer signal_ssi;
+    {
+        llmquant::SignalStrengthIndexer::Config ssi_cfg;
+        ssi_cfg.period               = 14;
+        ssi_cfg.overbought_threshold = 70.0;
+        ssi_cfg.oversold_threshold   = 30.0;
+        ssi_cfg.on_overbought = [](double ssi_val) {
+            spdlog::warn("[ssi] OVERBOUGHT SSI={:.1f} — sentiment may be exhausted", ssi_val);
+        };
+        ssi_cfg.on_oversold = [](double ssi_val) {
+            spdlog::warn("[ssi] OVERSOLD SSI={:.1f} — narrative recovery possible", ssi_val);
+        };
+        signal_ssi.update_config(ssi_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2864,6 +2908,12 @@ int main(int argc, char* argv[]) {
         concentration_guard.record_signal(narrative_classifier.dominant_topic(), signal.delta_bias_shift);
 #elif defined(LLMQUANT_POSITION_CONCENTRATION_ENABLED)
         concentration_guard.record_signal("default", signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_AUTOCORR_METER_ENABLED
+        autocorr_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_SSI_ENABLED
+        signal_ssi.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4626,6 +4676,20 @@ int main(int argc, char* argv[]) {
               << "  themes=" << concentration_guard.distinct_themes()
               << "  alerts=" << concentration_guard.concentration_events() << "\n";
 #endif
+#ifdef LLMQUANT_AUTOCORR_METER_ENABLED
+    std::cout << "  Autocorrelation  : "
+              << "lag1=" << std::fixed << std::setprecision(3) << autocorr_meter.autocorrelation(1)
+              << "  lag2=" << autocorr_meter.autocorrelation(2)
+              << "  trending=" << (autocorr_meter.is_trending() ? "YES" : "no")
+              << "  obs=" << autocorr_meter.observation_count() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_SSI_ENABLED
+    std::cout << "  Signal SSI       : "
+              << std::fixed << std::setprecision(1) << signal_ssi.ssi()
+              << "  overbought=" << (signal_ssi.is_overbought() ? "YES" : "no")
+              << "  oversold=" << (signal_ssi.is_oversold() ? "YES" : "no")
+              << "  obs=" << signal_ssi.observation_count() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4843,6 +4907,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
         std::cout << "  [json:conc_guard] " << concentration_guard.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_AUTOCORR_METER_ENABLED
+        std::cout << "  [json:autocorr]   " << autocorr_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_SSI_ENABLED
+        std::cout << "  [json:ssi]        " << signal_ssi.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
