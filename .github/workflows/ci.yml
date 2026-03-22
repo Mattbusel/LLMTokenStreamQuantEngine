@@ -1,6 +1,12 @@
 name: CI
 on: [push, pull_request]
 
+# Cancel in-progress runs for the same branch/PR when a new commit is pushed.
+# This prevents stale CI runs from consuming minutes and blocking merges.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -52,6 +58,17 @@ jobs:
             --suppress=missingIncludeSystem \
             -I include \
             src/*.cpp
+
+      - name: clang-tidy (static analysis)
+        if: matrix.compiler == 'clang' && matrix.build_type == 'Release'
+        run: |
+          cmake -B build-tidy \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLMQUANT_ENABLE_CLANG_TIDY=ON \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
+          cmake --build build-tidy --parallel $(nproc) 2>&1 | tee clang-tidy-output.txt
+          ! grep -q "error:" clang-tidy-output.txt
 
   asan:
     runs-on: ubuntu-latest
@@ -112,7 +129,9 @@ jobs:
             -DLLMQUANT_ENABLE_REST_OMS=OFF \
             -DLLMQUANT_ENABLE_DEDUP=OFF \
             -DLLMQUANT_ENABLE_PROFILING=OFF \
-            -DLLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF
+            -DLLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF \
+            -DLLMQUANT_ENABLE_TLS=OFF \
+            -DLLMQUANT_ENABLE_REDIS=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -131,6 +150,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_DEDUP
           - flag: LLMQUANT_ENABLE_PROFILING
           - flag: LLMQUANT_ENABLE_JSON_STATS_SUMMARY
+          - flag: LLMQUANT_ENABLE_TLS
+          - flag: LLMQUANT_ENABLE_REDIS
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 28 — 2026-03-21)
+- **Bug fix**: `export_hot_tokens(5)` was called twice in the session summary
+  ("Top influence" block at line 1515 and "Hot tokens" block at line 1527)
+  producing identical output. Removed the redundant "Top influence" block.
+- **Bug fix**: `--stats-interval` now clamped to [100, 60000] ms — previously
+  only had a floor of 100ms with no ceiling; a typo could set a 10-minute loop.
+- **CI**: `concurrency:` groups added to all three workflow files (`ci.yml`,
+  `sanitizers.yml`, `fuzz.yml`) — GitHub Actions cancels stale in-progress runs
+  on the same branch/PR when a new commit arrives, saving CI minutes.
+- **CI**: clang-tidy step added to the `check` job (runs on `clang`/`Release`
+  matrix cell only). Configures via `-DLLMQUANT_ENABLE_CLANG_TIDY=ON` and
+  fails the job on any `error:` output line.
+
 ### Added (Cycle 27 — 2026-03-21)
 - **Bug fix**: Cycle 26 CHANGELOG claimed `RiskManager::format_gate_blocks()` was
   added, but the identical functionality already existed as
