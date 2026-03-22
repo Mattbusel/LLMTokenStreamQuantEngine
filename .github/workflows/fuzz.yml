@@ -23,6 +23,8 @@ jobs:
       - name: Configure
         run: CC=clang CXX=clang++ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLLMQUANT_ENABLE_FUZZING=ON -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
       - name: Build
-        run: cmake --build build -j$(nproc) --target fuzz_pipeline
-      - name: Smoke test
+        run: cmake --build build -j$(nproc) --target fuzz_pipeline fuzz_deduplicator
+      - name: Smoke test (pipeline)
         run: ./build/fuzz_pipeline -runs=500 -max_total_time=30
+      - name: Smoke test (deduplicator)
+        run: ./build/fuzz_deduplicator -runs=500 -max_total_time=30

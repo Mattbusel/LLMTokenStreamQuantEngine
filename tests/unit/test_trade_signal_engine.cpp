@@ -1736,10 +1736,10 @@ TEST(TradeSignalEngineTest, test_suppression_breakdown_resets_on_reset) {
 // ---------------------------------------------------------------------------
 
 TEST(TradeSignalEngineTest, test_zero_confidence_weight_is_noise_filtered) {
-    // A SemanticWeight with confidence = 0 should never produce a signal
-    // because the resulting signal confidence falls below any positive threshold.
+    // A SemanticWeight with all-zero fields should never produce a signal —
+    // accumulated bias stays at 0 and the min_bias_threshold noise gate fires.
     TradeSignalEngine::Config cfg = make_config();
-    cfg.min_confidence_threshold = 0.01;  // any positive threshold
+    cfg.min_bias_threshold = 0.01;  // any positive threshold
     TradeSignalEngine engine(cfg);
     engine.set_backtest_mode(true);
 
@@ -1748,7 +1748,7 @@ TEST(TradeSignalEngineTest, test_zero_confidence_weight_is_noise_filtered) {
 
     engine.process_semantic_weight({0.0, 0.0, 0.0, 0.0});  // all-zero weight
     EXPECT_EQ(emitted.load(), 0)
-        << "zero-confidence SemanticWeight must not produce a signal";
+        << "all-zero SemanticWeight must not produce a signal";
 }
 
 TEST(TradeSignalEngineTest, test_signals_suppressed_increments_on_noise_filter) {

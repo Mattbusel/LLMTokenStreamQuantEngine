@@ -1063,6 +1063,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_signals_aged_out_total Signals suppressed by the staleness guard\n"
                  << "# TYPE llmquant_signals_aged_out_total counter\n"
                  << "llmquant_signals_aged_out_total " << eng_stats.signals_aged_out.load() << "\n"
+                 << "# HELP llmquant_signals_cooldown_suppressed_total Signals skipped because the signal cooldown had not elapsed\n"
+                 << "# TYPE llmquant_signals_cooldown_suppressed_total counter\n"
+                 << "llmquant_signals_cooldown_suppressed_total " << eng_stats.signals_suppressed_cooldown.load() << "\n"
                  << "# HELP llmquant_accumulator_clamped_total Times the bias accumulator cap was applied\n"
                  << "# TYPE llmquant_accumulator_clamped_total counter\n"
                  << "llmquant_accumulator_clamped_total " << eng_stats.accumulator_clamped.load() << "\n"
@@ -1464,6 +1467,7 @@ int main(int argc, char* argv[]) {
         fblocked = fsat(fblocked, frs.signals_blocked_position.load());
         fblocked = fsat(fblocked, frs.signals_blocked_pnl.load());
         std::cout << "  Signals blocked  : " << fblocked << "\n";
+        std::cout << "  Blocked by gate  : " << risk_mgr.format_blocked_by_gate() << "\n";
     }
     std::cout << "  Most blocked gate: " << risk_mgr.get_most_blocked_gate() << "\n";
     std::cout << "  Memory sink size : " << memory_sink->get_signals().size() << "\n";
@@ -1486,6 +1490,7 @@ int main(int argc, char* argv[]) {
         }
     }
     std::cout << "  Noise filtered   : " << trade_engine.get_stats().noise_filtered.load() << "\n";
+    std::cout << "  Cooldown skip    : " << trade_engine.get_stats().signals_suppressed_cooldown.load() << "\n";
     std::cout << "  Peak bias        : " << std::fixed << std::setprecision(4)
               << trade_engine.get_stats().peak_bias.load() << "\n";
     std::cout << "  SLO breach rate  : " << std::fixed << std::setprecision(2)

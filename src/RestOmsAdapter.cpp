@@ -362,7 +362,11 @@ void RestOmsAdapter::poller_thread() {
             }
         }
 
-        std::this_thread::sleep_for(current_poll_interval_);
+        // Interruptible sleep: check running_ every 100ms so stop() returns
+        // promptly even when the backoff interval is near the 30-second cap.
+        auto deadline = std::chrono::steady_clock::now() + current_poll_interval_;
+        while (running_.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }
 }
 

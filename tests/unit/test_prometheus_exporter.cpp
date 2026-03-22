@@ -302,3 +302,29 @@ TEST(PrometheusExporterTest, test_scrape_count_zero_after_stop_without_scrape) {
     EXPECT_EQ(exporter.scrape_count(), 0u)
         << "scrape_count must be 0 when stopped before any client connected";
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 29: cooldown_suppressed_total counter format
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_counter_cooldown_suppressed_metric_name) {
+    // Verify the counter helper produces the correct metric name and TYPE comment
+    // for the cooldown_suppressed_total metric added in Cycle 29.
+    auto result = PrometheusExporter::format_counter(
+        "llmquant_signals_cooldown_suppressed_total", 42u,
+        "Signals skipped because the signal cooldown had not elapsed");
+    EXPECT_NE(result.find("llmquant_signals_cooldown_suppressed_total 42"), std::string::npos)
+        << "counter must include metric name and value";
+    EXPECT_NE(result.find("# TYPE llmquant_signals_cooldown_suppressed_total counter"), std::string::npos)
+        << "counter must declare TYPE as counter";
+    EXPECT_NE(result.find("# HELP"), std::string::npos)
+        << "counter must include HELP comment when help is non-empty";
+}
+
+TEST(PrometheusExporterTest, test_format_counter_zero_value_emitted) {
+    // A zero-value counter must still appear in the output (not elided).
+    auto result = PrometheusExporter::format_counter(
+        "llmquant_signals_cooldown_suppressed_total", 0u);
+    EXPECT_NE(result.find("llmquant_signals_cooldown_suppressed_total 0"), std::string::npos)
+        << "zero-value counter must still be emitted";
+}

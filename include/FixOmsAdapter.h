@@ -3,10 +3,10 @@
 #include "OmsAdapter.h"
 #include <atomic>
 #include <cstdint>
-#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 namespace llmquant {
 
@@ -166,7 +166,7 @@ private:
     std::string build_resend_request(int begin_seq) const;
     std::string build_sequence_reset(int new_seq_num) const;
 
-    using FixFields = std::map<int, std::string>;
+    using FixFields = std::unordered_map<int, std::string>;
     static FixFields parse_fix(const std::string& raw);
     void handle_message(const FixFields& fields);
     void apply_execution_report(const FixFields& fields);
