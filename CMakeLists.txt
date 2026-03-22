@@ -136,11 +136,9 @@ option(LLMQUANT_ENABLE_WEIGHT_HISTOGRAM             "Build TokenWeightHistogram:
 option(LLMQUANT_ENABLE_SIGNAL_SLOPE                 "Build SignalSlopeMeter: OLS linear regression slope over rolling window of bias values; fires on_trend_acceleration" ON)
 option(LLMQUANT_ENABLE_LATENCY_JITTER               "Build LatencyJitterMonitor: MAD-based latency jitter tracker; fires on_jitter_spike when consistency degrades beyond threshold" ON)
 option(LLMQUANT_ENABLE_HURST_ESTIMATOR              "Build SignalHurstEstimator: R/S rescaled-range Hurst exponent on rolling bias window; H>0.6=trending, H<0.4=mean-reverting" ON)
+option(LLMQUANT_ENABLE_CHANGE_POINT                 "Build BiasChangePointDetector: Page-CUSUM sequential change-point detector for LLM bias mean shifts; fires on_upshift/on_downshift" ON)
 option(LLMQUANT_ENABLE_RUN_LENGTH                   "Build BiasRunLengthEncoder: run-length stats on bias sign sequence (current_run, max_run, avg_run); fires on_long_run callback" ON)
 option(LLMQUANT_ENABLE_COVERAGE_METER               "Build SignalCoverageMeter: rolling min/max of bias values -> coverage fraction of configured range; fires on_range_expansion" ON)
-option(LLMQUANT_ENABLE_BIAS_HYSTERESIS_GATE         "Build BiasHysteresisGate: debounce gate requiring required_ticks consecutive exceedances before opening; exit hysteresis prevents chattering" ON)
-option(LLMQUANT_ENABLE_REALIZED_VOL                 "Build RealizedVolatilityTracker: rolling realized volatility (sqrt mean-squared return) with high/low callbacks" ON)
-option(LLMQUANT_ENABLE_CAUSAL_TRACER                "Build SignalCausalChainTracer: ring buffer of (token, contribution) pairs; trace(n) returns top-N causal tokens; fires on_strong_token" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1304,6 +1302,15 @@ if(LLMQUANT_ENABLE_HURST_ESTIMATOR)
     message(STATUS "Feature: SignalHurstEstimator ENABLED (R/S Hurst: H>0.6 trending, H<0.4 reverting)")
 else()
     message(STATUS "Feature: SignalHurstEstimator DISABLED (LLMQUANT_ENABLE_HURST_ESTIMATOR=OFF)")
+endif()
+
+# BiasChangePointDetector: Page-CUSUM sequential change-point detection.
+if(LLMQUANT_ENABLE_CHANGE_POINT)
+    target_sources(llmquant PRIVATE src/BiasChangePointDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CHANGE_POINT_ENABLED)
+    message(STATUS "Feature: BiasChangePointDetector ENABLED (Page-CUSUM upshift/downshift detection)")
+else()
+    message(STATUS "Feature: BiasChangePointDetector DISABLED (LLMQUANT_ENABLE_CHANGE_POINT=OFF)")
 endif()
 
 # BiasRunLengthEncoder: run-length statistics on bias sign sequence.

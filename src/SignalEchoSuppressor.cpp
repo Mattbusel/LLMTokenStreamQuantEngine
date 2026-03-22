@@ -53,14 +53,22 @@ bool SignalEchoSuppressor::record(double bias) {
         }
         echo_rate_.store(rate_val, std::memory_order_relaxed);
 
-        bool now_echoing = rate_val > cfg_.echo_rate_threshold;
+        // Apply hysteresis to the echoing flag: enter when rate > threshold,
+        // exit only when rate drops below threshold * clear_hysteresis.
+        // This prevents a gap where the flag clears before the clear threshold
+        // is reached, which would leave prev_echoing_=false and block the callback.
+        bool now_echoing;
+        if (prev_echoing_) {
+            now_echoing = (rate_val >= cfg_.echo_rate_threshold * cfg_.clear_hysteresis);
+        } else {
+            now_echoing = (rate_val > cfg_.echo_rate_threshold);
+        }
         echoing_.store(now_echoing, std::memory_order_relaxed);
 
         if (now_echoing && !prev_echoing_) {
             fire_det = true;
             echo_events_.fetch_add(1, std::memory_order_relaxed);
-        } else if (!now_echoing && prev_echoing_ &&
-                   rate_val < cfg_.echo_rate_threshold * cfg_.clear_hysteresis) {
+        } else if (!now_echoing && prev_echoing_) {
             fire_clr = true;
         }
         prev_echoing_ = now_echoing;
@@ -120,6 +128,9 @@ void SignalEchoSuppressor::update_config(const Config& cfg) {
     prev_echoing_ = false;
     echo_rate_.store(0.0, std::memory_order_relaxed);
     echoing_.store(false, std::memory_order_relaxed);
+    total_.store(0, std::memory_order_relaxed);
+    echo_count_.store(0, std::memory_order_relaxed);
+    echo_events_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

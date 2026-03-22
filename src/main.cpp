@@ -288,6 +288,9 @@
 #ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
 #  include "SignalHurstEstimator.h"
 #endif
+#ifdef LLMQUANT_CHANGE_POINT_ENABLED
+#  include "BiasChangePointDetector.h"
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
 #  include "TokenWeightHistogram.h"
 #endif
@@ -2556,6 +2559,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_CHANGE_POINT_ENABLED
+    // BiasChangePointDetector: Page-CUSUM sequential change-point detection.
+    // Fires on_upshift/on_downshift when sustained bias mean shift is detected.
+    llmquant::BiasChangePointDetector change_point_detector;
+    {
+        llmquant::BiasChangePointDetector::Config cpd_cfg;
+        cpd_cfg.reference_mean = 0.0;
+        cpd_cfg.allowance      = 0.05;   // detects shifts > 2×allowance = 0.10
+        cpd_cfg.threshold      = 1.0;
+        cpd_cfg.on_upshift = [](double c) {
+            spdlog::warn("[change_point] upside mean shift detected C+={:.3f} — narrative turning bullish", c);
+        };
+        cpd_cfg.on_downshift = [](double c) {
+            spdlog::warn("[change_point] downside mean shift detected C-={:.3f} — narrative turning bearish", c);
+        };
+        change_point_detector.update_config(cpd_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     // TokenWeightHistogram: 20-bucket histogram of bias values [-1, 1].
     // Tracks mode bucket and entropy; fires on_distribution_shift on mode change.
@@ -3184,6 +3206,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
         // Update Hurst estimate: H>0.6=trending momentum, H<0.4=mean-reverting.
         hurst_estimator.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CHANGE_POINT_ENABLED
+        // CUSUM change-point: detect sustained mean shift in signal bias.
+        change_point_detector.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
         // Update bias histogram — tracks distribution shape over session.
@@ -5021,6 +5047,13 @@ int main(int argc, char* argv[]) {
               << "  t_events=" << hurst_estimator.trend_events()
               << "  r_events=" << hurst_estimator.revert_events() << "\n";
 #endif
+#ifdef LLMQUANT_CHANGE_POINT_ENABLED
+    std::cout << "  Change Point     : "
+              << "C+=" << std::fixed << std::setprecision(3) << change_point_detector.cusum_plus()
+              << "  C-=" << change_point_detector.cusum_minus()
+              << "  upshifts=" << change_point_detector.upshift_count()
+              << "  downshifts=" << change_point_detector.downshift_count() << "\n";
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
               << "mode=" << weight_histogram.mode_bucket()
@@ -5291,6 +5324,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
         std::cout << "  [json:hurst] " << hurst_estimator.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CHANGE_POINT_ENABLED
+        std::cout << "  [json:change_point] " << change_point_detector.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_LATENCY_JITTER_ENABLED
         std::cout << "  [json:latency_jitter] " << latency_jitter.to_stats_json() << "\n";
