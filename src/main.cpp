@@ -153,6 +153,9 @@
 #ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
 #  include "SignalSurpriseIndex.h"
 #endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+#  include "TokenStreamHealthMonitor.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1121,6 +1124,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
         context_budget.consume(1);
 #endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+        stream_health.ping();
+#endif
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
         stale_detector.record_token();
 #endif
@@ -1483,6 +1489,26 @@ int main(int argc, char* argv[]) {
                          score, bias);
         };
         signal_surprise.update_config(ss_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+    // TokenStreamHealthMonitor: watchdog for feed stalls and token floods.
+    llmquant::TokenStreamHealthMonitor stream_health;
+    {
+        llmquant::TokenStreamHealthMonitor::Config sh_cfg;
+        sh_cfg.stall_timeout_ms   = 3000;
+        sh_cfg.max_tokens_per_sec = 1000.0;
+        sh_cfg.on_stall = [](int64_t elapsed_ms) {
+            spdlog::warn("[stream_health] STALL detected — {}ms since last token", elapsed_ms);
+        };
+        sh_cfg.on_flood = [](double rate) {
+            spdlog::warn("[stream_health] FLOOD {:.0f} tok/s — exceeds threshold", rate);
+        };
+        sh_cfg.on_recovery = [] {
+            spdlog::info("[stream_health] stream recovered to Healthy state");
+        };
+        stream_health.update_config(sh_cfg);
     }
 #endif
 
@@ -2228,6 +2254,11 @@ int main(int argc, char* argv[]) {
         }
 #endif
 
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+        // Poll stall watchdog — fires on_stall if no token has arrived within timeout.
+        stream_health.poll();
+#endif
+
 #ifdef LLMQUANT_LATENCY_ENFORCER_ENABLED
         // Feed current P99 to the latency budget enforcer.
         // Callbacks fire on tier transitions; Breaker tier trips the circuit breaker.
@@ -2949,6 +2980,24 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+                      << [&]() -> std::string {
+                            // Stream health: green=healthy, red=stalled/flooded.
+                            bool healthy = stream_health.is_healthy();
+                            auto st = stream_health.status();
+                            std::ostringstream o;
+                            o << "  HLT:";
+                            if (healthy) {
+                                o << C("\033[32m") << "OK";
+                            } else if (st == llmquant::TokenStreamHealthMonitor::Status::Stalled) {
+                                o << C("\033[31m") << "STALL";
+                            } else {
+                                o << C("\033[31m") << "FLOOD";
+                            }
+                            o << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -3231,6 +3280,19 @@ int main(int argc, char* argv[]) {
               << "  high=" << (signal_surprise.is_high_surprise() ? "YES" : "no")
               << "  events=" << signal_surprise.high_surprise_count() << "\n";
 #endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+    {
+        auto st = stream_health.status();
+        const char* st_str = (st == llmquant::TokenStreamHealthMonitor::Status::Healthy) ? "HEALTHY"
+                           : (st == llmquant::TokenStreamHealthMonitor::Status::Stalled) ? "STALLED"
+                           : "FLOODED";
+        std::cout << "  Stream health    : "
+                  << st_str
+                  << "  rate=" << std::fixed << std::setprecision(1) << stream_health.current_rate() << "tok/s"
+                  << "  stalls=" << stream_health.stall_count()
+                  << "  floods=" << stream_health.flood_count() << "\n";
+    }
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3367,6 +3429,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
         std::cout << "  [json:surprise]" << signal_surprise.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+        std::cout << "  [json:health]  " << stream_health.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

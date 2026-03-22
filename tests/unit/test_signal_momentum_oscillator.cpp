@@ -238,11 +238,12 @@ TEST(SignalMomentumOscillator, DirectionFlagsReflectLastCross) {
     cfg.signal_alpha = 0.5;
     SignalMomentumOscillator osc(cfg);
 
-    // Settle at +1, then drive bearish (histogram negative), then bullish
-    // (histogram crosses zero upward → last cross is Bullish).
-    for (int i = 0; i < 60; ++i) osc.record(1.0);
-    for (int i = 0; i < 60; ++i) osc.record(-1.0);
-    for (int i = 0; i < 60; ++i) osc.record(1.0);
+    // Settle at +1.  Use short direction phases (5 records each) to produce
+    // one clean cross per phase without the EMA-convergence recovery cross that
+    // occurs with longer phases once both EMAs fully converge to the target.
+    for (int i = 0; i < 60; ++i) osc.record(1.0);   // settle → MACD≈0
+    for (int i = 0; i <  5; ++i) osc.record(-1.0);  // bearish cross
+    for (int i = 0; i <  5; ++i) osc.record(1.0);   // bullish cross
 
     // After the final bullish phase the last cross should be bullish.
     EXPECT_TRUE(osc.is_bullish());

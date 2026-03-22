@@ -87,6 +87,7 @@ option(LLMQUANT_ENABLE_MUTUAL_INFORMATION           "Build MutualInformationEsti
 option(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT            "Build SignalBlindSpotDetector: time-of-day win-rate tracker to identify low-predictability trading slots" ON)
 option(LLMQUANT_ENABLE_SIGNAL_SURPRISE              "Build SignalSurpriseIndex: Shannon self-information of bias signals relative to their empirical distribution" ON)
 option(LLMQUANT_ENABLE_STREAM_HEALTH                "Build TokenStreamHealthMonitor: watchdog detecting feed stalls and token floods via inter-arrival rate tracking" ON)
+option(LLMQUANT_ENABLE_REGIME_SIZER                 "Build RegimeAwareSizer: integrates Hurst exponent and volatility to dynamically scale trade notional" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -812,6 +813,15 @@ if(LLMQUANT_ENABLE_STREAM_HEALTH)
     message(STATUS "Feature: TokenStreamHealthMonitor ENABLED (stall/flood detection)")
 else()
     message(STATUS "Feature: TokenStreamHealthMonitor DISABLED (LLMQUANT_ENABLE_STREAM_HEALTH=OFF)")
+endif()
+
+# RegimeAwareSizer: integrates Hurst exponent + vol forecast into notional scaling.
+if(LLMQUANT_ENABLE_REGIME_SIZER)
+    target_sources(llmquant PRIVATE src/RegimeAwareSizer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_SIZER_ENABLED)
+    message(STATUS "Feature: RegimeAwareSizer ENABLED (regime + vol position sizing)")
+else()
+    message(STATUS "Feature: RegimeAwareSizer DISABLED (LLMQUANT_ENABLE_REGIME_SIZER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

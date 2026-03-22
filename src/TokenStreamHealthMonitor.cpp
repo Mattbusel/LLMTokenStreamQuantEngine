@@ -12,7 +12,7 @@ TokenStreamHealthMonitor::TokenStreamHealthMonitor(Config config)
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-static int64_t to_ms(TokenStreamHealthMonitor::Clock::duration d) {
+static int64_t to_ms(std::chrono::steady_clock::duration d) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
 }
 
