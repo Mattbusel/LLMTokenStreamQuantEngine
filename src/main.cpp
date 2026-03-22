@@ -410,6 +410,15 @@ int main(int argc, char* argv[]) {
                   << "semantic_weights.confidence_multiplier: " << sw.confidence_multiplier << "\n"
                   << "semantic_weights.volatility_multiplier: " << sw.volatility_multiplier << "\n"
                   << "semantic_weights.bias_multiplier:     " << sw.bias_multiplier << "\n";
+        // Print non-default fields as a diff section for quick operator review.
+        auto diffs = config.diff_from_defaults();
+        if (!diffs.empty()) {
+            std::cout << "\n# Non-default fields (changed from compiled defaults):\n";
+            for (const auto& d : diffs)
+                std::cout << "  " << d << "\n";
+        } else {
+            std::cout << "\n# All fields are at compiled defaults.\n";
+        }
         return 0;
     }
 
