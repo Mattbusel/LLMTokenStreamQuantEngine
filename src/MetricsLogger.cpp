@@ -6,6 +6,34 @@
 
 namespace llmquant {
 
+// Minimal JSON string escaper: handles the characters that break JSON parsing.
+// Used whenever user-controlled strings (tokens, file paths, keys) are embedded
+// in the JSON log output — without this, a token containing '"' or '\' produces
+// malformed JSON.
+static std::string escape_json_string(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (unsigned char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (c < 0x20) {
+                    // Other control characters: emit \uXXXX
+                    char buf[7];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(c);
+                }
+        }
+    }
+    return out;
+}
+
 MetricsLogger::MetricsLogger(const Config& config) : config_(config) {
     initialize_loggers();
     if (config_.format == OutputFormat::CSV) {
@@ -78,7 +106,7 @@ void MetricsLogger::log_token_received(const std::string& token, uint64_t sequen
         if (file_logger_)
             file_logger_->info(
                 R"({{"event":"token_received","token":"{}","sequence_id":{},"timestamp":{}}})",
-                token, sequence_id, timestamp);
+                escape_json_string(token), sequence_id, timestamp);
         if (console_logger_) console_logger_->info("Token received: \"{}\"", token);
     }
 }
@@ -165,7 +193,7 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
         if (file_logger_)
             file_logger_->info(
                 R"({{"event":"risk_rejection","reason":"{}","bias":{:.3f},"confidence":{:.3f},"timestamp":{}}})",
-                reason, bias, confidence, timestamp);
+                escape_json_string(reason), bias, confidence, timestamp);
         if (console_logger_)
             console_logger_->warn("Risk rejection: {} bias={:+.3f} conf={:.3f}", reason, bias, confidence);
     }
@@ -216,7 +244,7 @@ void MetricsLogger::log_config_reload(const std::string& source_path, bool succe
         if (file_logger_)
             file_logger_->info(
                 R"({{"event":"config_reload","status":"{}","source":"{}","timestamp":{}}})",
-                status, source_path, timestamp);
+                status, escape_json_string(source_path), timestamp);
         if (console_logger_)
             console_logger_->info("Config reload {}: {}", status, source_path);
     }
@@ -255,7 +283,7 @@ void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
         if (file_logger_)
             file_logger_->info(
                 R"({{"event":"dedup","kind":"{}","key":"{}","timestamp":{}}})",
-                kind, key, ts);
+                kind, escape_json_string(key), ts);
     }
 }
 

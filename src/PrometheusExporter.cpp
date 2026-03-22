@@ -1,6 +1,7 @@
 #include "PrometheusExporter.h"
 #include <cmath>
 #include <sstream>
+#include <string>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -16,7 +17,6 @@
 
 #include <iostream>
 #include <spdlog/spdlog.h>
-#include <sstream>
 #include <stdexcept>
 #include <cstring>
 
@@ -210,6 +210,23 @@ void PrometheusExporter::server_thread() {
 // Static text-format helpers
 // ---------------------------------------------------------------------------
 
+// Escape a Prometheus label value per the text exposition format spec:
+//   \n  → \\n   (literal backslash-n)
+//   \\  → \\\\  (double backslash)
+//   \"  → \\\"  (backslash-quote)
+// Without this, label values containing these chars produce invalid output.
+static std::string escape_prom_label_value(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if      (c == '\\') out += "\\\\";
+        else if (c == '"')  out += "\\\"";
+        else if (c == '\n') out += "\\n";
+        else                out += c;
+    }
+    return out;
+}
+
 std::string PrometheusExporter::format_gauge(const std::string& name, double value,
                                               const std::string& help) {
     std::ostringstream ss;
@@ -246,7 +263,7 @@ std::string PrometheusExporter::format_info(const std::string& name,
     bool first = true;
     for (const auto& [k, v] : labels) {
         if (!first) ss << ",";
-        ss << k << "=\"" << v << "\"";
+        ss << k << "=\"" << escape_prom_label_value(v) << "\"";
         first = false;
     }
     ss << "} 1\n";
