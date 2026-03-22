@@ -3469,6 +3469,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_STREAM_HEALTH_ENABLED
         std::cout << "  [json:health]  " << stream_health.to_stats_json() << "\n";
 #endif
+#ifdef LLMQUANT_REGIME_SIZER_ENABLED
+        std::cout << "  [json:rsizer]  " << regime_sizer.to_stats_json() << "\n";
+#endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
 
