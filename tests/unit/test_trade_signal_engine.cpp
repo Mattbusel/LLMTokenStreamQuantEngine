@@ -1822,6 +1822,73 @@ TEST(TradeSignalEngineTest, test_set_min_vol_threshold_clamps_negative) {
     EXPECT_DOUBLE_EQ(engine.get_config().min_vol_threshold, 0.0);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 46: bias_reversals counter — momentum zero-crossing detection.
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_bias_reversals_zero_on_same_direction) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight({0.5, 0.8, 0.3, 1.0});
+
+    EXPECT_EQ(engine.get_stats().bias_reversals.load(), 0u)
+        << "bias_reversals must be 0 when all tokens share the same direction";
+}
+
+TEST(TradeSignalEngineTest, test_bias_reversals_increments_on_direction_change) {
+    TradeSignalEngine engine(make_config(2.0, 1.0, 0.1, 0));
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.3, 1.0});
+
+    uint64_t reversals_before = engine.get_stats().bias_reversals.load();
+
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({-0.5, 0.9, 0.3, -1.0});
+
+    EXPECT_GT(engine.get_stats().bias_reversals.load(), reversals_before)
+        << "bias_reversals must increment when accumulated_bias changes sign";
+}
+
+TEST(TradeSignalEngineTest, test_bias_reversals_reset_on_reset) {
+    TradeSignalEngine engine(make_config(2.0, 1.0, 0.1, 0));
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.3, 1.0});
+    for (int i = 0; i < 10; ++i)
+        engine.process_semantic_weight({-0.5, 0.9, 0.3, -1.0});
+
+    ASSERT_GT(engine.get_stats().bias_reversals.load(), 0u);
+    engine.reset();
+
+    EXPECT_EQ(engine.get_stats().bias_reversals.load(), 0u)
+        << "bias_reversals must be zero after reset()";
+
+    // After reset, no reversal should fire on a fresh bullish run.
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight({0.5, 0.9, 0.3, 1.0});
+    EXPECT_EQ(engine.get_stats().bias_reversals.load(), 0u)
+        << "No reversal should be detected immediately after reset";
+}
+
+TEST(TradeSignalEngineTest, test_bias_reversals_format_stats_includes_field) {
+    TradeSignalEngine engine(make_config());
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+    engine.process_semantic_weight({0.5, 0.8, 0.3, 1.0});
+
+    std::string stats = engine.format_stats();
+    EXPECT_NE(stats.find("bias_reversals="), std::string::npos)
+        << "format_stats() must include the bias_reversals field";
+}
+
 } // namespace
 } // namespace llmquant
 
