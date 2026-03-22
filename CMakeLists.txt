@@ -86,6 +86,7 @@ option(LLMQUANT_ENABLE_ADAPTIVE_SAMPLING            "Build AdaptiveSamplingContr
 option(LLMQUANT_ENABLE_MUTUAL_INFORMATION           "Build MutualInformationEstimator: discretized MI between LLM sentiment and returns via 2D joint histogram" ON)
 option(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT            "Build SignalBlindSpotDetector: time-of-day win-rate tracker to identify low-predictability trading slots" ON)
 option(LLMQUANT_ENABLE_SIGNAL_SURPRISE              "Build SignalSurpriseIndex: Shannon self-information of bias signals relative to their empirical distribution" ON)
+option(LLMQUANT_ENABLE_STREAM_HEALTH                "Build TokenStreamHealthMonitor: watchdog detecting feed stalls and token floods via inter-arrival rate tracking" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -802,6 +803,15 @@ if(LLMQUANT_ENABLE_SIGNAL_SURPRISE)
     message(STATUS "Feature: SignalSurpriseIndex ENABLED (surprise / self-information)")
 else()
     message(STATUS "Feature: SignalSurpriseIndex DISABLED (LLMQUANT_ENABLE_SIGNAL_SURPRISE=OFF)")
+endif()
+
+# TokenStreamHealthMonitor: watchdog for feed stalls and token floods.
+if(LLMQUANT_ENABLE_STREAM_HEALTH)
+    target_sources(llmquant PRIVATE src/TokenStreamHealthMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAM_HEALTH_ENABLED)
+    message(STATUS "Feature: TokenStreamHealthMonitor ENABLED (stall/flood detection)")
+else()
+    message(STATUS "Feature: TokenStreamHealthMonitor DISABLED (LLMQUANT_ENABLE_STREAM_HEALTH=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

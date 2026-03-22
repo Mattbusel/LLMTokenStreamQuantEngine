@@ -70,6 +70,7 @@ add_executable(tests
     unit/test_mutual_information_estimator.cpp
     unit/test_signal_blind_spot_detector.cpp
     unit/test_signal_surprise_index.cpp
+    unit/test_token_stream_health_monitor.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
