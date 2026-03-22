@@ -59,7 +59,7 @@ public:
      * @brief Connect to the FIX acceptor and start the reader thread.
      * @return false if already running or the TCP connection fails.
      */
-    bool start() override;
+    [[nodiscard]] bool start() override;
 
     /** @brief Signal the reader thread to stop and block until it exits. */
     void stop() override;
@@ -68,13 +68,13 @@ public:
      * @brief Returns true while the reader thread is active.
      * @return Running state.
      */
-    bool is_running() const override { return running_.load(); }
+    [[nodiscard]] bool is_running() const override { return running_.load(); }
 
     /**
      * @brief Returns a description string containing host, port, and comp IDs.
      * @return Human-readable adapter description.
      */
-    std::string description() const override;
+    [[nodiscard]] std::string description() const override;
 
     /**
      * @brief Return total FIX messages parsed since start().
@@ -92,7 +92,7 @@ public:
      *
      * @return Successful position update count.
      */
-    uint64_t update_count() const noexcept {
+    uint64_t update_count() const noexcept override {
         return update_count_.load(std::memory_order_relaxed);
     }
 
@@ -104,7 +104,7 @@ public:
      *
      * @return Error count.
      */
-    uint64_t error_count() const noexcept {
+    uint64_t error_count() const noexcept override {
         return error_count_.load(std::memory_order_relaxed);
     }
 
@@ -116,8 +116,16 @@ public:
      *
      * @return Reconnect attempt count.
      */
-    uint64_t get_reconnect_count() const noexcept {
+    uint64_t reconnect_count() const noexcept override {
         return reconnect_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Alias for reconnect_count(); kept for backwards compatibility.
+     * @return Reconnect attempt count.
+     */
+    uint64_t get_reconnect_count() const noexcept {
+        return reconnect_count();
     }
 
     /**

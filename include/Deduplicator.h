@@ -550,6 +550,18 @@ public:
      */
     Stats get_stats() const;
 
+    /**
+     * @brief Serialise statistics as a single-line JSON object.
+     *
+     * @return JSON string, e.g. {"novel":42,"duplicates":7,"size":35}
+     */
+    std::string to_stats_json() const {
+        auto s = get_stats();
+        return "{\"novel\":" + std::to_string(s.total_novel)
+             + ",\"duplicates\":" + std::to_string(s.total_duplicates)
+             + ",\"size\":" + std::to_string(s.current_size) + "}";
+    }
+
 private:
     std::shared_ptr<DeduplicatorBackend> backend_;
     std::chrono::milliseconds default_ttl_;

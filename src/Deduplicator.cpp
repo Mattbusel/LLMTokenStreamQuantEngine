@@ -312,11 +312,9 @@ void Deduplicator::purge_expired() { backend_->purge_expired(); }
 
 Deduplicator::Stats Deduplicator::get_stats() const {
     Stats s;
-    s.current_size = backend_->size();
-    if (auto* ip = dynamic_cast<const InProcessDeduplicator*>(backend_.get())) {
-        s.total_novel      = ip->total_novel();
-        s.total_duplicates = ip->total_duplicates();
-    }
+    s.current_size     = backend_->size();
+    s.total_novel      = backend_->total_novel();      // virtual dispatch
+    s.total_duplicates = backend_->total_duplicates(); // virtual dispatch
     return s;
 }
 

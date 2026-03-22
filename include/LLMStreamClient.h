@@ -108,7 +108,7 @@ public:
      * @return true if the socket was opened and the reader thread was started;
      *         false if already running or the connection could not be established.
      */
-    bool connect();
+    [[nodiscard]] bool connect();
 
     /**
      * @brief Signal the background thread to stop and block until it exits.
@@ -122,7 +122,7 @@ public:
      *
      * @return true while the reader thread is running.
      */
-    bool is_running() const { return running_.load(); }
+    [[nodiscard]] bool is_running() const { return running_.load(); }
 
     /**
      * @brief Return the total number of non-empty tokens received since connect().

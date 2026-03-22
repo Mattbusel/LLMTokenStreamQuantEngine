@@ -72,7 +72,7 @@ public:
      *
      * @return false if already running.
      */
-    bool start() override;
+    [[nodiscard]] bool start() override;
 
     /**
      * @brief Signal the poller to stop and block until the thread exits.
@@ -84,28 +84,28 @@ public:
      *
      * @return Running state.
      */
-    bool is_running() const override { return running_.load(); }
+    [[nodiscard]] bool is_running() const override { return running_.load(); }
 
     /**
      * @brief Returns a description string containing host, port, path and interval.
      *
      * @return Human-readable adapter description.
      */
-    std::string description() const override;
+    [[nodiscard]] std::string description() const override;
 
     /**
      * @brief Return the number of successful position updates received since start().
      *
      * @return Update count.
      */
-    uint64_t update_count() const { return update_count_.load(); }
+    uint64_t update_count() const noexcept override { return update_count_.load(); }
 
     /**
      * @brief Return the number of failed HTTP requests since start().
      *
      * @return Error count.
      */
-    uint64_t error_count() const { return error_count_.load(); }
+    uint64_t error_count() const noexcept override { return error_count_.load(); }
 
     /**
      * @brief Return the fraction of all poll requests that resulted in errors, in [0.0, 1.0].

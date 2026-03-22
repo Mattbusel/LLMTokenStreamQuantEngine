@@ -75,7 +75,7 @@ public:
      *
      * @return false if already running.
      */
-    bool start() override;
+    [[nodiscard]] bool start() override;
 
     /**
      * @brief Signal the emitter to stop and block until the thread exits.
@@ -87,21 +87,21 @@ public:
      *
      * @return Running state.
      */
-    bool is_running() const override { return running_.load(); }
+    [[nodiscard]] bool is_running() const override { return running_.load(); }
 
     /**
      * @brief Returns the string "MockOmsAdapter".
      *
      * @return Adapter description.
      */
-    std::string description() const override { return "MockOmsAdapter"; }
+    [[nodiscard]] std::string description() const override { return "MockOmsAdapter"; }
 
     /**
      * @brief Return the number of states emitted so far.
      *
      * @return Emitted state count.
      */
-    uint64_t emitted_count() const { return emitted_.load(); }
+    [[nodiscard]] uint64_t emitted_count() const { return emitted_.load(); }
 
 private:
     /** @brief Main loop executed on the emitter thread. */

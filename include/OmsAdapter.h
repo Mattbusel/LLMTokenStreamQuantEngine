@@ -46,7 +46,7 @@ public:
      *
      * @return false if already running or the connection cannot be established.
      */
-    virtual bool start() = 0;
+    [[nodiscard]] virtual bool start() = 0;
 
     /**
      * @brief Stop the adapter and block until the background thread exits.
@@ -58,14 +58,26 @@ public:
      *
      * @return Running state.
      */
-    virtual bool is_running() const = 0;
+    [[nodiscard]] virtual bool is_running() const = 0;
 
     /**
      * @brief Human-readable description of the adapter type and endpoint.
      *
      * @return Description string.
      */
-    virtual std::string description() const = 0;
+    [[nodiscard]] virtual std::string description() const = 0;
+
+    // -----------------------------------------------------------------------
+    // Optional stats interface — concrete adapters override these.
+    // Default implementations return 0 so callers need not dynamic_cast.
+    // -----------------------------------------------------------------------
+
+    /** @brief Total successful position updates delivered to the callback. */
+    virtual uint64_t update_count()    const noexcept { return 0; }
+    /** @brief Total socket/protocol errors encountered. */
+    virtual uint64_t error_count()     const noexcept { return 0; }
+    /** @brief Total reconnect attempts (FIX) or 0 for adapters without reconnect. */
+    virtual uint64_t reconnect_count() const noexcept { return 0; }
 };
 
 } // namespace llmquant

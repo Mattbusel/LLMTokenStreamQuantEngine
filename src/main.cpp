@@ -1262,39 +1262,13 @@ int main(int argc, char* argv[]) {
                  << "llmquant_tokens_emitted_total " << (!stream_mode ? token_sim.get_stats().tokens_emitted.load() : 0) << "\n"
                  << "# HELP llmquant_oms_update_count_total Total successful OMS position updates\n"
                  << "# TYPE llmquant_oms_update_count_total counter\n"
-                 << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
-#ifdef LLMQUANT_REST_OMS_ENABLED
-                        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
-                            return rest->update_count();
-#endif
-#ifdef LLMQUANT_FIX_OMS_ENABLED
-                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
-                            return fix->update_count();
-#endif
-                        return 0;
-                    }() << "\n"
+                 << "llmquant_oms_update_count_total "    << oms_adapter->update_count()    << "\n"
                  << "# HELP llmquant_oms_error_count_total Total OMS connection errors\n"
                  << "# TYPE llmquant_oms_error_count_total counter\n"
-                 << "llmquant_oms_error_count_total " << [&]() -> uint64_t {
-#ifdef LLMQUANT_REST_OMS_ENABLED
-                        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
-                            return rest->error_count();
-#endif
-#ifdef LLMQUANT_FIX_OMS_ENABLED
-                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
-                            return fix->error_count();
-#endif
-                        return 0;
-                    }() << "\n"
+                 << "llmquant_oms_error_count_total "     << oms_adapter->error_count()     << "\n"
                  << "# HELP llmquant_oms_reconnect_count_total Total FIX session reconnect attempts\n"
                  << "# TYPE llmquant_oms_reconnect_count_total counter\n"
-                 << "llmquant_oms_reconnect_count_total " << [&]() -> uint64_t {
-#ifdef LLMQUANT_FIX_OMS_ENABLED
-                        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
-                            return fix->get_reconnect_count();
-#endif
-                        return 0;
-                    }() << "\n"
+                 << "llmquant_oms_reconnect_count_total " << oms_adapter->reconnect_count() << "\n"
 #ifdef LLMQUANT_DEDUP_ENABLED
                  << "# HELP llmquant_dedup_novel_total Tokens processed as novel (not seen in TTL window)\n"
                  << "# TYPE llmquant_dedup_novel_total counter\n"
@@ -1671,7 +1645,7 @@ int main(int argc, char* argv[]) {
               << (latency_ctrl.get_window_fill_ratio() * 100.0) << "% window filled\n";
 #ifdef LLMQUANT_DEDUP_ENABLED
     {
-        auto ds = dedup_backend->get_stats();
+        auto ds = deduplicator.get_stats();
         uint64_t total_dedup = ds.total_novel + ds.total_duplicates;
         double dup_rate = (total_dedup > 0)
             ? (static_cast<double>(ds.total_duplicates) * 100.0 / static_cast<double>(total_dedup))
@@ -1750,7 +1724,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  [json:adapter] " << llm_adapter.to_stats_json() << "\n";
         std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
 #ifdef LLMQUANT_DEDUP_ENABLED
-        std::cout << "  [json:dedup]   " << dedup_backend->to_stats_json() << "\n";
+        std::cout << "  [json:dedup]   " << deduplicator.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
