@@ -154,8 +154,12 @@ jobs:
             -DLLMQUANT_ENABLE_FRACTAL_DIMENSION=OFF \
             -DLLMQUANT_ENABLE_MARKET_MICROSTRUCTURE=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_MOMENTUM_OSC=OFF \
             -DLLMQUANT_ENABLE_ORDER_BOOK_SIM=OFF \
-            -DLLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF
+            -DLLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF \
+            -DLLMQUANT_ENABLE_CVAR=OFF \
+            -DLLMQUANT_ENABLE_TEMPORAL_PATTERN=OFF \
+            -DLLMQUANT_ENABLE_FEEDBACK_LOOP=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -224,8 +228,12 @@ jobs:
           - flag: LLMQUANT_ENABLE_FRACTAL_DIMENSION
           - flag: LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE
           - flag: LLMQUANT_ENABLE_SIGNAL_ENSEMBLE
+          - flag: LLMQUANT_ENABLE_SIGNAL_MOMENTUM_OSC
           - flag: LLMQUANT_ENABLE_ORDER_BOOK_SIM
           - flag: LLMQUANT_ENABLE_SENTIMENT_HEATMAP
+          - flag: LLMQUANT_ENABLE_CVAR
+          - flag: LLMQUANT_ENABLE_TEMPORAL_PATTERN
+          - flag: LLMQUANT_ENABLE_FEEDBACK_LOOP
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

@@ -126,6 +126,9 @@
 #ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
 #  include "SignalEnsembleLayer.h"
 #endif
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+#  include "SignalMomentumOscillator.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1070,6 +1073,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
     llmquant::SignalDecayEnvelope signal_decay;
 #endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+    llmquant::ContextWindowBudget context_budget;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1080,6 +1086,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
         narrative_detector.record(std::hash<std::string>{}(text));
+#endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+        context_budget.consume(1);
 #endif
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
         stale_detector.record_token();
@@ -1255,6 +1264,85 @@ int main(int argc, char* argv[]) {
     portfolio_heat.set_recovery_callback([](double heat) {
         spdlog::info("[portfolio_heat] heat={:.2f} — recovered to Cool", heat);
     });
+#endif
+
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+    // ContextWindowBudget: configure the instance declared before process_token.
+    {
+        llmquant::ContextWindowBudget::Config cb_cfg;
+        cb_cfg.capacity = 128000;  // Claude 3 / GPT-4 128k context
+        cb_cfg.on_warn = [](uint64_t used, uint64_t cap) {
+            spdlog::warn("[ctx_budget] context warn  used={} / {} ({:.0f}%)",
+                         used, cap, 100.0 * static_cast<double>(used) / cap);
+        };
+        cb_cfg.on_critical = [](uint64_t used, uint64_t cap) {
+            spdlog::error("[ctx_budget] context CRITICAL  used={} / {} ({:.0f}%)",
+                          used, cap, 100.0 * static_cast<double>(used) / cap);
+        };
+        cb_cfg.on_overflow = [](uint64_t used, uint64_t cap) {
+            spdlog::critical("[ctx_budget] context OVERFLOW used={} cap={} — reset required",
+                             used, cap);
+        };
+        context_budget.update_config(cb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+    // FractalDimensionEstimator: tracks Hurst exponent of bias stream (H>0.5=trending).
+    llmquant::FractalDimensionEstimator fractal_dim;
+    {
+        llmquant::FractalDimensionEstimator::Config fd_cfg;
+        fd_cfg.on_regime_change = [](double prev_h, double new_h) {
+            const char* prev_r = (prev_h > 0.55) ? "trending" : (prev_h < 0.45 ? "mean-rev" : "random");
+            const char* new_r  = (new_h  > 0.55) ? "trending" : (new_h  < 0.45 ? "mean-rev" : "random");
+            spdlog::info("[fractal] Hurst {:.3f}→{:.3f}  {} → {}", prev_h, new_h, prev_r, new_r);
+        };
+        fractal_dim.update_config(fd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
+    // MarketMicrostructureFilter: gates signals whose predicted edge < bid-ask + impact cost.
+    llmquant::MarketMicrostructureFilter microstructure_filter;
+#endif
+
+#ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
+    // SignalEnsembleLayer: combines bias/vol/confidence sub-signals with online weight learning.
+    llmquant::SignalEnsembleLayer signal_ensemble;
+    int ens_bias_id = -1, ens_vol_id = -1, ens_conf_id = -1;
+    {
+        ens_bias_id = signal_ensemble.register_source("bias");
+        ens_vol_id  = signal_ensemble.register_source("vol_adj");
+        ens_conf_id = signal_ensemble.register_source("confidence");
+        llmquant::SignalEnsembleLayer::Config ec;
+        ec.on_weight_update = [](const std::vector<double>& w) {
+            if (w.size() >= 3)
+                spdlog::debug("[ensemble] weights  bias={:.3f}  vol={:.3f}  conf={:.3f}",
+                              w[0], w[1], w[2]);
+        };
+        signal_ensemble.update_config(ec);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+    // SignalMomentumOscillator: MACD-style oscillator on the bias stream.
+    // Fires on_cross when the histogram crosses zero (directional momentum shift).
+    llmquant::SignalMomentumOscillator signal_momentum_osc;
+    {
+        llmquant::SignalMomentumOscillator::Config smo_cfg;
+        smo_cfg.divergence_threshold = 0.02;
+        smo_cfg.on_cross = [](llmquant::SignalMomentumOscillator::CrossDirection dir, double hist) {
+            spdlog::info("[smo] histogram zero-cross  dir={}  hist={:.5f}",
+                         (dir == llmquant::SignalMomentumOscillator::CrossDirection::Bullish)
+                             ? "BULLISH" : "BEARISH",
+                         hist);
+        };
+        smo_cfg.on_divergence = [](double macd, double sig, double hist) {
+            spdlog::debug("[smo] divergence  macd={:.5f}  signal={:.5f}  hist={:.5f}",
+                          macd, sig, hist);
+        };
+        signal_momentum_osc.update_config(smo_cfg);
+    }
 #endif
 
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
@@ -1601,6 +1689,19 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
         // Update rolling Sharpe of the bias stream.
         rolling_sharpe.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+        // Update Hurst exponent estimate with each new bias observation.
+        fractal_dim.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
+        // Update ensemble sub-signals and train from outcome (passed = positive reward).
+        if (ens_bias_id >= 0)  signal_ensemble.update_source(ens_bias_id,  signal.delta_bias_shift);
+        if (ens_vol_id  >= 0)  signal_ensemble.update_source(ens_vol_id,   signal.volatility_adjustment);
+        if (ens_conf_id >= 0)  signal_ensemble.update_source(ens_conf_id,  signal.confidence);
+        signal_ensemble.record_outcome(passed ? 1.0 : -1.0);
 #endif
 
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
@@ -2607,6 +2708,32 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+                      << [&]() -> std::string {
+                            // Hurst exponent: >0.55=trending, <0.45=mean-rev, else random.
+                            double h = fractal_dim.hurst();
+                            std::ostringstream o;
+                            o << "  FRC:";
+                            if      (h > 0.55) o << C("\033[36m");   // cyan   = trending
+                            else if (h < 0.45) o << C("\033[35m");   // magenta= mean-rev
+                            else               o << C("\033[90m");   // grey   = random
+                            o << std::fixed << std::setprecision(2) << h << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+                      << [&]() -> std::string {
+                            // Context fill fraction: green=ok, yellow=warn, red=critical.
+                            double f = context_budget.fill_fraction();
+                            std::ostringstream o;
+                            o << "  CTX:";
+                            if      (f >= 0.90) o << C("\033[31m");  // red    = critical
+                            else if (f >= 0.70) o << C("\033[33m");  // yellow = warn
+                            else                o << C("\033[32m");  // green  = normal
+                            o << std::fixed << std::setprecision(0) << (f * 100.0) << "%" << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -2820,6 +2947,32 @@ int main(int argc, char* argv[]) {
               << "  poor=" << (rolling_sharpe.is_poor_quality() ? "Y" : "N")
               << "  n=" << rolling_sharpe.sample_count() << "\n";
 #endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+    std::cout << "  Context budget   : "
+              << "used=" << context_budget.tokens_used()
+              << "  fill=" << std::fixed << std::setprecision(1)
+              << (context_budget.fill_fraction() * 100.0) << "%\n";
+#endif
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+    std::cout << "  Fractal dim      : "
+              << "hurst=" << std::fixed << std::setprecision(3) << fractal_dim.hurst()
+              << "  "
+              << (fractal_dim.is_trending() ? "TRENDING" :
+                  fractal_dim.is_mean_reverting() ? "MEAN-REV" : "RANDOM")
+              << "  n=" << fractal_dim.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
+    std::cout << "  Microstructure   : "
+              << "half_spread=" << std::fixed << std::setprecision(5)
+              << microstructure_filter.estimated_half_spread()
+              << "  blocks=" << microstructure_filter.total_blocked()
+              << "  passes=" << microstructure_filter.total_passed() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
+    std::cout << "  Signal ensemble  : "
+              << "output=" << std::fixed << std::setprecision(4) << signal_ensemble.ensemble_output()
+              << "  outcomes=" << signal_ensemble.total_outcomes() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -2896,6 +3049,18 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_PORTFOLIO_HEAT_ENABLED
         std::cout << "  [json:pheat]   " << portfolio_heat.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+        std::cout << "  [json:ctx]     " << context_budget.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+        std::cout << "  [json:fractal] " << fractal_dim.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
+        std::cout << "  [json:microstr]" << microstructure_filter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
+        std::cout << "  [json:ensemble]" << signal_ensemble.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

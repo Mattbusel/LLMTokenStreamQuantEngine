@@ -67,8 +67,11 @@ TEST(NarrativeChangeDetector, DisjointWindowsLowSimilarity) {
 
     // First window: all "bullish".
     for (int i = 0; i < 16; ++i) ncd.record(H("bullish"));
-    // Second window: all "crash" — completely disjoint.
-    for (int i = 0; i < 16; ++i) ncd.record(H("crash"));
+    // Second window: almost fully replaced with disjoint "crash" tokens.
+    // Use 15 (not 16) to avoid the re-snapshot boundary where window_a_
+    // would be overwritten with window_b_ at exactly the 16th replacement,
+    // which would reset similarity to 1.0.
+    for (int i = 0; i < 15; ++i) ncd.record(H("crash"));
 
     EXPECT_LT(ncd.get_similarity(), 0.1);
 }

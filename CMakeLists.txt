@@ -75,8 +75,12 @@ option(LLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET        "Build ContextWindowBudget: 
 option(LLMQUANT_ENABLE_FRACTAL_DIMENSION            "Build FractalDimensionEstimator: Higuchi fractal dimension of bias series as complexity metric" ON)
 option(LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE        "Build MarketMicrostructureFilter: models bid-ask bounce and short-term mean reversion to clean signals" ON)
 option(LLMQUANT_ENABLE_SIGNAL_ENSEMBLE              "Build SignalEnsembleLayer: model-stacking layer averaging multiple sub-signal generators" ON)
+option(LLMQUANT_ENABLE_SIGNAL_MOMENTUM_OSC          "Build SignalMomentumOscillator: MACD-style fast/slow EMA oscillator with histogram zero-cross signals" ON)
 option(LLMQUANT_ENABLE_ORDER_BOOK_SIM               "Build OrderBookSimulator: sentiment-driven synthetic LOB for slippage-aware fill price estimation" ON)
 option(LLMQUANT_ENABLE_SENTIMENT_HEATMAP            "Build TokenSentimentHeatmap: 2D rolling token×sentiment-bucket histogram for alpha attribution" ON)
+option(LLMQUANT_ENABLE_CVAR                         "Build CVaRCalculator: rolling Conditional Value-at-Risk / Expected Shortfall risk metric" ON)
+option(LLMQUANT_ENABLE_TEMPORAL_PATTERN             "Build TemporalPatternLibrary: trie-based multi-token pattern matcher with pre-computed sentiment boosts" ON)
+option(LLMQUANT_ENABLE_FEEDBACK_LOOP                "Build FeedbackLoopDetector: cross-correlation detector for market-impact reflexivity in the LLM token stream" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -696,6 +700,15 @@ else()
     message(STATUS "Feature: SignalEnsembleLayer DISABLED (LLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF)")
 endif()
 
+# SignalMomentumOscillator: MACD-style fast/slow EMA oscillator on bias stream.
+if(LLMQUANT_ENABLE_SIGNAL_MOMENTUM_OSC)
+    target_sources(llmquant PRIVATE src/SignalMomentumOscillator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED)
+    message(STATUS "Feature: SignalMomentumOscillator ENABLED (MACD oscillator)")
+else()
+    message(STATUS "Feature: SignalMomentumOscillator DISABLED (LLMQUANT_ENABLE_SIGNAL_MOMENTUM_OSC=OFF)")
+endif()
+
 # OrderBookSimulator: sentiment-driven synthetic LOB for slippage-aware sizing.
 if(LLMQUANT_ENABLE_ORDER_BOOK_SIM)
     target_sources(llmquant PRIVATE src/OrderBookSimulator.cpp)
@@ -713,6 +726,34 @@ if(LLMQUANT_ENABLE_SENTIMENT_HEATMAP)
 else()
     message(STATUS "Feature: TokenSentimentHeatmap DISABLED (LLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF)")
 endif()
+
+# CVaRCalculator: rolling Conditional Value-at-Risk / Expected Shortfall.
+if(LLMQUANT_ENABLE_CVAR)
+    target_sources(llmquant PRIVATE src/CVaRCalculator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CVAR_ENABLED)
+    message(STATUS "Feature: CVaRCalculator ENABLED (rolling CVaR / Expected Shortfall)")
+else()
+    message(STATUS "Feature: CVaRCalculator DISABLED (LLMQUANT_ENABLE_CVAR=OFF)")
+endif()
+
+# TemporalPatternLibrary: trie-based multi-token pattern matcher.
+if(LLMQUANT_ENABLE_TEMPORAL_PATTERN)
+    target_sources(llmquant PRIVATE src/TemporalPatternLibrary.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TEMPORAL_PATTERN_ENABLED)
+    message(STATUS "Feature: TemporalPatternLibrary ENABLED (trie pattern matcher)")
+else()
+    message(STATUS "Feature: TemporalPatternLibrary DISABLED (LLMQUANT_ENABLE_TEMPORAL_PATTERN=OFF)")
+endif()
+
+# FeedbackLoopDetector: cross-correlation reflexivity detector.
+if(LLMQUANT_ENABLE_FEEDBACK_LOOP)
+    target_sources(llmquant PRIVATE src/FeedbackLoopDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FEEDBACK_LOOP_ENABLED)
+    message(STATUS "Feature: FeedbackLoopDetector ENABLED (market-impact reflexivity detection)")
+else()
+    message(STATUS "Feature: FeedbackLoopDetector DISABLED (LLMQUANT_ENABLE_FEEDBACK_LOOP=OFF)")
+endif()
+
 
 # ---------------------------------------------------------------------------
 # Main executable
