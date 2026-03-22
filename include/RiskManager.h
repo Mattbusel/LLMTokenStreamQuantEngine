@@ -277,7 +277,7 @@ public:
      *
      * @return true if the rate limit has been hit in the current window.
      */
-    bool is_rate_limited() const;
+    [[nodiscard]] bool is_rate_limited() const;
 
     /**
      * @brief Return elapsed milliseconds since the start of the current rate-limit window.
@@ -382,7 +382,7 @@ public:
      *
      * @return true if no gates are bypassed and all thresholds are met.
      */
-    bool is_healthy() const;
+    [[nodiscard]] bool is_healthy() const;
 
     /**
      * @brief Convenience setter to update the position and PnL limits without

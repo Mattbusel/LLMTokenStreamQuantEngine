@@ -223,7 +223,7 @@ public:
      *
      * @return A copy of the current SystemConfig.
      */
-    SystemConfig get_config() const {
+    [[nodiscard]] SystemConfig get_config() const {
         std::lock_guard<std::mutex> lk(config_mutex_);
         return config_;
     }
@@ -360,7 +360,7 @@ public:
      *
      * @return Vector of human-readable error messages; empty if the config is valid.
      */
-    std::vector<std::string> validate() const;
+    [[nodiscard]] std::vector<std::string> validate() const;
 
     /**
      * @brief Return true if the current configuration passes all validation checks.
@@ -372,7 +372,7 @@ public:
      *
      * @return true if validate() returns an empty vector.
      */
-    bool is_valid() const { return validate().empty(); }
+    [[nodiscard]] bool is_valid() const { return validate().empty(); }
 
 private:
     SystemConfig config_;

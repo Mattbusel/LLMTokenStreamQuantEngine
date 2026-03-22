@@ -1140,9 +1140,6 @@ TEST(LatencyControllerTest, test_to_stats_json_empty_controller_shows_zero) {
     EXPECT_NE(json.find("\"measurements\":0"), std::string::npos);
 }
 
-} // namespace
-} // namespace llmquant
-
 // ---------------------------------------------------------------------------
 // Test: get_slo_breach_rate() returns value in [0, 1].
 // ---------------------------------------------------------------------------
@@ -1194,3 +1191,6 @@ TEST(LatencyControllerTest, test_percentile_accessors_consistent_with_get_stats)
     EXPECT_GE(lc.get_p99_us(), lc.get_p95_us()) << "p99 >= p95";
     EXPECT_GE(lc.get_p95_us(), lc.get_p50_us()) << "p95 >= p50";
 }
+
+} // namespace
+} // namespace llmquant

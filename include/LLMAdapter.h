@@ -63,7 +63,7 @@ public:
      * @return The registered SemanticWeight, or a neutral weight
      *         {0.0, 0.5, 0.1, 0.0} if the token is not in the dictionary.
      */
-    SemanticWeight map_token_to_weight(const std::string& token) const;
+    [[nodiscard]] SemanticWeight map_token_to_weight(const std::string& token) const;
 
     /**
      * @brief Compute a confidence-weighted aggregate SemanticWeight for a token sequence.
@@ -74,7 +74,7 @@ public:
      * @param tokens Ordered list of raw token strings.
      * @return Aggregated SemanticWeight, or a zero weight if tokens is empty.
      */
-    SemanticWeight map_sequence_to_weight(const std::vector<std::string>& tokens) const;
+    [[nodiscard]] SemanticWeight map_sequence_to_weight(const std::vector<std::string>& tokens) const;
 
     /**
      * @brief Load additional token-to-weight mappings from a whitespace-delimited file.
@@ -107,7 +107,7 @@ public:
      * @param tokens Tokens to score; may be empty (returns zero weight).
      * @return Confidence-weighted average SemanticWeight computed via SSE2.
      */
-    SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
+    [[nodiscard]] SemanticWeight map_sequence_simd(const std::vector<std::string>& tokens) const;
 
     /**
      * @brief Map a list of tokens to their individual SemanticWeights in one call.
@@ -151,25 +151,25 @@ public:
      *
      * @return Vector of normalised token strings.
      */
-    std::vector<std::string> get_all_token_keys() const;
+    [[nodiscard]] std::vector<std::string> get_all_token_keys() const;
 
     /**
      * @brief Count tokens with positive sentiment_score (> 0).
      * @return Number of bullish tokens in the dictionary.
      */
-    size_t count_bullish_tokens() const;
+    [[nodiscard]] size_t count_bullish_tokens() const;
 
     /**
      * @brief Count tokens with negative sentiment_score (< 0).
      * @return Number of bearish tokens in the dictionary.
      */
-    size_t count_bearish_tokens() const;
+    [[nodiscard]] size_t count_bearish_tokens() const;
 
     /**
      * @brief Count tokens with sentiment_score == 0.0 (neutral).
      * @return Number of neutral tokens in the dictionary.
      */
-    size_t count_neutral_tokens() const;
+    [[nodiscard]] size_t count_neutral_tokens() const;
 
     /**
      * @brief Return the mean confidence_score across all tokens in the dictionary.
@@ -178,7 +178,7 @@ public:
      *
      * @return Average confidence_score in [0.0, 1.0].
      */
-    double get_avg_confidence() const;
+    [[nodiscard]] double get_avg_confidence() const;
 
     /**
      * @brief Return the minimum confidence_score across all dictionary tokens.
@@ -187,7 +187,7 @@ public:
      *
      * @return Minimum confidence_score in [0.0, 1.0].
      */
-    double get_min_confidence() const;
+    [[nodiscard]] double get_min_confidence() const;
 
     /**
      * @brief Return the maximum confidence_score across all dictionary tokens.
@@ -196,7 +196,7 @@ public:
      *
      * @return Maximum confidence_score in [0.0, 1.0].
      */
-    double get_max_confidence() const;
+    [[nodiscard]] double get_max_confidence() const;
 
     /**
      * @brief Return the spread between the highest and lowest confidence_score in the dictionary.
@@ -206,7 +206,7 @@ public:
      *
      * @return Confidence range (always >= 0).
      */
-    double get_confidence_range() const;
+    [[nodiscard]] double get_confidence_range() const;
 
     /**
      * @brief Return the mean sentiment_score across all tokens in the dictionary.
@@ -215,7 +215,7 @@ public:
      *
      * @return Average sentiment_score in [-1.0, 1.0].
      */
-    double get_avg_sentiment() const;
+    [[nodiscard]] double get_avg_sentiment() const;
 
     /**
      * @brief Return the mean volatility_score across all tokens in the dictionary.
@@ -224,7 +224,7 @@ public:
      *
      * @return Average volatility_score in [0.0, 1.0].
      */
-    double get_avg_volatility() const;
+    [[nodiscard]] double get_avg_volatility() const;
 
     /**
      * @brief Return the mean directional_bias across all tokens in the dictionary.
@@ -235,7 +235,7 @@ public:
      *
      * @return Average directional_bias in [-1.0, 1.0].
      */
-    double get_avg_directional_bias() const;
+    [[nodiscard]] double get_avg_directional_bias() const;
 
     /**
      * @brief Count tokens with volatility_score strictly above @p threshold.
