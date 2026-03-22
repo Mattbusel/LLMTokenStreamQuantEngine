@@ -112,7 +112,8 @@ jobs:
             -DLLMQUANT_ENABLE_SIMD=OFF \
             -DLLMQUANT_ENABLE_MOCK_OMS=OFF \
             -DLLMQUANT_ENABLE_AUDIT_LOG=OFF \
-            -DLLMQUANT_ENABLE_SENTIMENT_TRAJECTORY=OFF
+            -DLLMQUANT_ENABLE_SENTIMENT_TRAJECTORY=OFF \
+            -DLLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -140,6 +141,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_MOCK_OMS
           - flag: LLMQUANT_ENABLE_AUDIT_LOG
           - flag: LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY
+          - flag: LLMQUANT_ENABLE_CIRCUIT_BREAKER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

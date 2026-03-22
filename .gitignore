@@ -18,3 +18,4 @@ out/
 *.swp
 *.swo
 *~
+build-ninja/

@@ -1530,6 +1530,20 @@ int main(int argc, char* argv[]) {
                         return o.str();
                     }()
 #endif
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+                 << "# HELP llmquant_circuit_breaker_state Circuit breaker state: 0=closed 1=open 2=half_open\n"
+                 << "# TYPE llmquant_circuit_breaker_state gauge\n"
+                 << "llmquant_circuit_breaker_state " << static_cast<int>(circuit_breaker.state()) << "\n"
+                 << "# HELP llmquant_circuit_breaker_block_rate EMA block rate observed by circuit breaker [0,1]\n"
+                 << "# TYPE llmquant_circuit_breaker_block_rate gauge\n"
+                 << "llmquant_circuit_breaker_block_rate " << std::setprecision(4) << circuit_breaker.block_rate() << "\n"
+                 << "# HELP llmquant_circuit_breaker_trips_total Times circuit has tripped to OPEN\n"
+                 << "# TYPE llmquant_circuit_breaker_trips_total counter\n"
+                 << "llmquant_circuit_breaker_trips_total " << circuit_breaker.trips() << "\n"
+                 << "# HELP llmquant_circuit_breaker_recoveries_total Times circuit has recovered to CLOSED\n"
+                 << "# TYPE llmquant_circuit_breaker_recoveries_total counter\n"
+                 << "llmquant_circuit_breaker_recoveries_total " << circuit_breaker.recoveries() << "\n"
+#endif
                 ;
             // Signal quality histogram — per-bucket counts emitted as a Prometheus histogram.
             {
@@ -1823,6 +1837,13 @@ int main(int argc, char* argv[]) {
                   << "  rot=" << audit_log->rotations() << ")\n";
         std::cout << "  Audit log file   : " << audit_log_path << "\n";
     }
+#endif
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+    std::cout << "  Circuit breaker  : " << circuit_breaker.state_name()
+              << "  trips=" << circuit_breaker.trips()
+              << "  recoveries=" << circuit_breaker.recoveries()
+              << "  block_rate=" << std::fixed << std::setprecision(1)
+              << (circuit_breaker.block_rate() * 100.0) << "%\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
