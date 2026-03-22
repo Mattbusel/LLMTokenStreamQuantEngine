@@ -7395,6 +7395,47 @@ int main(int argc, char* argv[]) {
               << "  xy_ev=" << granger.xy_causality_events()
               << "  rec=" << granger.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_MACD_HISTOGRAM_ENABLED
+    std::cout << "  MACD Histogram   : "
+              << "macd=" << std::fixed << std::setprecision(6) << macd_hist.macd()
+              << "  sig=" << macd_hist.signal_line()
+              << "  hist=" << macd_hist.histogram()
+              << "  x=" << macd_hist.zero_cross_events()
+              << "  div=" << macd_hist.divergence_events()
+              << "  rec=" << macd_hist.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_MARKOV_ENABLED
+    std::cout << "  Regime Markov    : "
+              << "state=" << regime_markov.current_state()
+              << "  changes=" << regime_markov.regime_change_events()
+              << "  rec=" << regime_markov.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CONCENTRATION_RISK_ENABLED
+    std::cout << "  Concentration HHI: "
+              << "hhi=" << std::fixed << std::setprecision(4) << conc_risk.hhi()
+              << "  conc_ev=" << conc_risk.concentration_events()
+              << "  disp_ev=" << conc_risk.dispersed_events()
+              << "  rec=" << conc_risk.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_WILLIAMS_R_ENABLED
+    std::cout << "  Williams %%R      : "
+              << "wr=" << std::fixed << std::setprecision(1) << williams_r.williams_r()
+              << "  ob=" << (williams_r.is_overbought() ? "Y" : "N")
+              << "  os=" << (williams_r.is_oversold() ? "Y" : "N")
+              << "  ob_ev=" << williams_r.overbought_events()
+              << "  os_ev=" << williams_r.oversold_events()
+              << "  rec=" << williams_r.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
+    std::cout << "  Influence Decay  : "
+              << "pos=" << std::fixed << std::setprecision(4) << influence_decay.pos_influence()
+              << "  neg=" << influence_decay.neg_influence()
+              << "  net=" << influence_decay.net_influence()
+              << "  +dom=" << (influence_decay.is_positive_dominant() ? "Y" : "N")
+              << "  +ev=" << influence_decay.positive_dominant_events()
+              << "  -ev=" << influence_decay.negative_dominant_events()
+              << "  rec=" << influence_decay.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -8022,6 +8063,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
         std::cout << "  [json:granger]    " << granger.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MACD_HISTOGRAM_ENABLED
+        std::cout << "  [json:macd]       " << macd_hist.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_MARKOV_ENABLED
+        std::cout << "  [json:regime_mkv] " << regime_markov.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONCENTRATION_RISK_ENABLED
+        std::cout << "  [json:conc_risk]  " << conc_risk.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_WILLIAMS_R_ENABLED
+        std::cout << "  [json:williams_r] " << williams_r.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
+        std::cout << "  [json:inf_decay]  " << influence_decay.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";
