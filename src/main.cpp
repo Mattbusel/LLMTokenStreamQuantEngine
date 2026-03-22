@@ -949,6 +949,7 @@ int main(int argc, char* argv[]) {
         // Update Prometheus snapshot (read once per second from the monitoring
         // thread; the scrape callback returns this cached string without
         // acquiring any latency-path locks).
+#ifdef LLMQUANT_PROMETHEUS_ENABLED
         {
             std::ostringstream snap;
             snap << "# HELP llmquant_signals_generated_total Total trade signals generated\n"
@@ -1245,6 +1246,7 @@ int main(int argc, char* argv[]) {
             std::lock_guard<std::mutex> lk(prom_snapshot_mutex);
             prom_snapshot = snap.str();
         }
+#endif // LLMQUANT_PROMETHEUS_ENABLED
 
         // Cache hit rate for LLMAdapter dictionary efficiency.
         auto adapter_stats = llm_adapter.get_stats();
@@ -1312,7 +1314,9 @@ int main(int argc, char* argv[]) {
     token_sim.stop();
     if (stream_client) stream_client->stop();
     oms_adapter->stop();
+#ifdef LLMQUANT_PROMETHEUS_ENABLED
     prom_exporter.stop();
+#endif
     // Flush all output sinks (CSV/JSON) before printing the session summary
     // so any buffered writes are visible if a crash follows.
     trade_engine.flush_sinks();
