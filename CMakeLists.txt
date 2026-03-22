@@ -1465,6 +1465,42 @@ else()
     message(STATUS "Feature: AdaptivePositionSizer DISABLED (LLMQUANT_ENABLE_ADAPTIVE_SIZER=OFF)")
 endif()
 
+# BiasClipMonitor: tracks fraction of bias values hitting clipping bounds.
+if(LLMQUANT_ENABLE_CLIP_MONITOR)
+    target_sources(llmquant PRIVATE src/BiasClipMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CLIP_MONITOR_ENABLED)
+    message(STATUS "Feature: BiasClipMonitor ENABLED (clipping fraction, on_excessive_clipping callback)")
+else()
+    message(STATUS "Feature: BiasClipMonitor DISABLED (LLMQUANT_ENABLE_CLIP_MONITOR=OFF)")
+endif()
+
+# NarrativeIntensityRamp: detects sustained upward or downward ramp in bias magnitude.
+if(LLMQUANT_ENABLE_INTENSITY_RAMP)
+    target_sources(llmquant PRIVATE src/NarrativeIntensityRamp.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_INTENSITY_RAMP_ENABLED)
+    message(STATUS "Feature: NarrativeIntensityRamp ENABLED (ramp detection, on_ramp_start/stop callbacks)")
+else()
+    message(STATUS "Feature: NarrativeIntensityRamp DISABLED (LLMQUANT_ENABLE_INTENSITY_RAMP=OFF)")
+endif()
+
+# SentimentZScoreTracker: rolling Z-score of bias for extreme sentiment detection.
+if(LLMQUANT_ENABLE_ZSCORE_TRACKER)
+    target_sources(llmquant PRIVATE src/SentimentZScoreTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ZSCORE_TRACKER_ENABLED)
+    message(STATUS "Feature: SentimentZScoreTracker ENABLED (rolling Z-score, on_extreme_zscore callback)")
+else()
+    message(STATUS "Feature: SentimentZScoreTracker DISABLED (LLMQUANT_ENABLE_ZSCORE_TRACKER=OFF)")
+endif()
+
+# SignalConfluenceDetector: detects when multiple signal dimensions agree simultaneously.
+if(LLMQUANT_ENABLE_CONFLUENCE_DETECTOR)
+    target_sources(llmquant PRIVATE src/SignalConfluenceDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONFLUENCE_DETECTOR_ENABLED)
+    message(STATUS "Feature: SignalConfluenceDetector ENABLED (multi-dimension confluence, on_confluence callback)")
+else()
+    message(STATUS "Feature: SignalConfluenceDetector DISABLED (LLMQUANT_ENABLE_CONFLUENCE_DETECTOR=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
