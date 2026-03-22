@@ -19,7 +19,6 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
-#include <numeric>
 #include <spdlog/spdlog.h>
 #include <sstream>
 
@@ -400,7 +399,8 @@ void FixOmsAdapter::emit_position() {
 bool FixOmsAdapter::reconnect_with_backoff() {
     reconnect_count_.fetch_add(1, std::memory_order_relaxed);
     close_socket();
-    int backoff_s = std::min(1 << reconnect_attempts_, kMaxReconnectBackoffSeconds);
+    // Clamp before shifting to avoid undefined behaviour when reconnect_attempts_ >= 31.
+    int backoff_s = std::min(1 << std::min(reconnect_attempts_, 30), kMaxReconnectBackoffSeconds);
     spdlog::info("[FixOmsAdapter] reconnecting in {} seconds", backoff_s);
     for (int i = 0; i < backoff_s * 10 && running_.load(); ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -531,11 +531,16 @@ void FixOmsAdapter::reader_thread() {
         buf.append(chunk, static_cast<size_t>(n));
 
         // A FIX message ends with the checksum tag (10=NNN\x01).
-        // Scan the accumulated buffer for complete messages.
+        // Search for SOH+"10=" to avoid false-matching "10=" inside a field
+        // value (e.g. a Text tag containing "ratio=10=5").  The checksum
+        // field is never the first field in a message, so it always has a
+        // preceding SOH that we can use as a boundary anchor.
+        static const std::string kChecksumTag{SOH, '1', '0', '='};
         size_t start = 0;
         while (true) {
-            size_t cs = buf.find("10=", start);
-            if (cs == std::string::npos) break;
+            size_t cs_soh = buf.find(kChecksumTag, start);
+            if (cs_soh == std::string::npos) break;
+            size_t cs      = cs_soh + 1;   // point past SOH to '1' of "10="
             size_t end_soh = buf.find(SOH, cs);
             if (end_soh == std::string::npos) break;
 
