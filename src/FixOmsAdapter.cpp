@@ -266,6 +266,15 @@ FixOmsAdapter::FixFields FixOmsAdapter::parse_fix(const std::string& raw) {
 void FixOmsAdapter::handle_message(const FixFields& fields) {
     messages_parsed_++;
 
+    // Peek at message type before sequence-number gating so that a
+    // SequenceReset (35=4, GapFillFlag=N) is never discarded as a
+    // duplicate.  Per FIX 4.2 spec, a hard SequenceReset may arrive
+    // with ANY sequence number and MUST be processed regardless of
+    // the current expected_inbound_seq_.
+    auto it = fields.find(35);
+    if (it == fields.end()) return;
+    const std::string& msg_type = it->second;
+
     // --- Sequence number tracking ---
     auto seq_it = fields.find(34);  // MsgSeqNum
     if (seq_it != fields.end()) {
@@ -280,16 +289,13 @@ void FixOmsAdapter::handle_message(const FixFields& fields) {
                 expected_inbound_seq_ = received_seq + 1;
             } else if (received_seq == expected_inbound_seq_) {
                 expected_inbound_seq_++;
+            } else {
+                // received_seq < expected_inbound_seq_: duplicate.
+                // SequenceReset (35=4) is exempt: a hard reset can carry any seq num.
+                if (msg_type != "4") return;
             }
-            // received_seq < expected_inbound_seq_: duplicate — skip content processing below.
-            else { return; }
         } catch (...) {}
     }
-
-    auto it = fields.find(35);
-    if (it == fields.end()) return;
-
-    const std::string& msg_type = it->second;
     if (msg_type == "8") {
         apply_execution_report(fields);
     } else if (msg_type == "AP") {

@@ -16,6 +16,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
 
+### Fixed (Cycle 38 — 2026-03-21)
+- **Bug fix** `FixOmsAdapter::handle_message`: FIX SequenceReset (35=4) with
+  `GapFillFlag=N` (hard reset) may legally arrive with a lower sequence number
+  than `expected_inbound_seq_`. The previous code applied the duplicate-detection
+  early `return` before reading tag 35, so hard resets were silently discarded
+  and the session looped forever sending ResendRequests. Fixed by reading
+  MsgType (tag 35) first; the duplicate guard now exempts msg_type "4".
+  Per FIX 4.2 spec §4.3.2.
+
 ### Fixed (Cycle 37 — 2026-03-21)
 - **Bug fix / security** `FixOmsAdapter` receive buffer: no cap existed on the
   accumulation buffer. A misbehaving FIX counterparty that never sent a valid

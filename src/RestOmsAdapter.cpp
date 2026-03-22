@@ -315,6 +315,8 @@ void RestOmsAdapter::poller_thread() {
             }
 
             // Receive full response until the server closes the connection.
+            // Cap at 4 MB to guard against a rogue server exhausting memory.
+            static constexpr size_t kMaxResponseBytes = 4u * 1024u * 1024u;
             std::string response;
             if (send_ok) {
                 char buf[4096];
@@ -323,6 +325,12 @@ void RestOmsAdapter::poller_thread() {
                                      static_cast<int>(sizeof(buf) - 1), 0);
                     if (n <= 0) break;
                     buf[n] = '\0';
+                    if (response.size() + static_cast<size_t>(n) > kMaxResponseBytes) {
+                        spdlog::warn("RestOmsAdapter: response exceeds {}MB limit, discarding",
+                                     kMaxResponseBytes / (1024 * 1024));
+                        response.clear();
+                        break;
+                    }
                     response.append(buf, static_cast<size_t>(n));
                 }
             }

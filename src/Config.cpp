@@ -597,6 +597,12 @@ std::vector<std::string> Config::validate() const {
         errors.emplace_back("semantic_weights.volatility_multiplier must be a finite number");
     if (!std::isfinite(sw.bias_multiplier))
         errors.emplace_back("semantic_weights.bias_multiplier must be a finite number");
+    // Validate logging format string — only "CSV" and "JSON" are supported.
+    if (log.format != "CSV" && log.format != "JSON")
+        errors.emplace_back("logging.format must be \"CSV\" or \"JSON\"; got \"" + log.format + "\"");
+    // dedup_ttl_ms == 0 means auto (10× token_interval_ms); negative is invalid.
+    if (ts.dedup_ttl_ms < 0)
+        errors.emplace_back("token_stream.dedup_ttl_ms must be >= 0 (0 = auto)");
     return errors;
 }
 

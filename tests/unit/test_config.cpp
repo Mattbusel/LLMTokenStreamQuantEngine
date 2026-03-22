@@ -1207,5 +1207,49 @@ TEST(ConfigTest, test_set_token_interval_ms_ignores_negative) {
         << "set_token_interval_ms(-1) must be a no-op";
 }
 
+// ---------------------------------------------------------------------------
+// validate(): missing or invalid enum values
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_validate_rejects_invalid_logging_format) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("logging:\n  format: XML\n");
+    auto errs = cfg.validate();
+    bool found = false;
+    for (const auto& e : errs)
+        if (e.find("logging.format") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found)
+        << "validate() must reject logging.format=XML; errors: "
+        << (errs.empty() ? "(none)" : errs[0]);
+}
+
+TEST(ConfigTest, test_validate_accepts_csv_format) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("logging:\n  format: CSV\n");
+    auto errs = cfg.validate();
+    bool format_err = false;
+    for (const auto& e : errs)
+        if (e.find("logging.format") != std::string::npos) { format_err = true; break; }
+    EXPECT_FALSE(format_err) << "validate() must accept logging.format=CSV";
+}
+
+TEST(ConfigTest, test_validate_rejects_negative_dedup_ttl) {
+    Config cfg;
+    // Load a valid base config and then set dedup_ttl_ms to a negative value.
+    ASSERT_TRUE(cfg.load_from_yaml_string(kValidYaml));
+    // Inject negative dedup_ttl_ms via env var (Config::load_from_env parses it).
+    setenv("LLMQUANT_DEDUP_TTL_MS", "-1", 1);
+    cfg.load_from_env();
+    unsetenv("LLMQUANT_DEDUP_TTL_MS");
+    // Alternatively: YAML path for dedup_ttl_ms
+    // (it should be caught even if load_from_env doesn't set it)
+    (void)cfg.load_from_yaml_string("token_stream:\n  dedup_ttl_ms: -5\n");
+    auto errs = cfg.validate();
+    bool found = false;
+    for (const auto& e : errs)
+        if (e.find("dedup_ttl_ms") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found) << "validate() must reject dedup_ttl_ms < 0";
+}
+
 } // namespace
 } // namespace llmquant
