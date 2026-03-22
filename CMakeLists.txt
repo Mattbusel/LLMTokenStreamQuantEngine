@@ -89,6 +89,7 @@ option(LLMQUANT_ENABLE_SIGNAL_SURPRISE              "Build SignalSurpriseIndex: 
 option(LLMQUANT_ENABLE_STREAM_HEALTH                "Build TokenStreamHealthMonitor: watchdog detecting feed stalls and token floods via inter-arrival rate tracking" ON)
 option(LLMQUANT_ENABLE_REGIME_SIZER                 "Build RegimeAwareSizer: integrates Hurst exponent and volatility to dynamically scale trade notional" ON)
 option(LLMQUANT_ENABLE_CONFIDENCE_DECAY             "Build ConfidenceDecayTracker: fits exponential decay model to confidence series to estimate signal half-life" ON)
+option(LLMQUANT_ENABLE_CROSS_ASSET_CORR             "Build CrossAssetCorrelationMonitor: rolling Pearson correlation between sentiment signals across asset symbols" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -832,6 +833,15 @@ if(LLMQUANT_ENABLE_CONFIDENCE_DECAY)
     message(STATUS "Feature: ConfidenceDecayTracker ENABLED (signal confidence half-life)")
 else()
     message(STATUS "Feature: ConfidenceDecayTracker DISABLED (LLMQUANT_ENABLE_CONFIDENCE_DECAY=OFF)")
+endif()
+
+# CrossAssetCorrelationMonitor: rolling Pearson correlation across asset pairs.
+if(LLMQUANT_ENABLE_CROSS_ASSET_CORR)
+    target_sources(llmquant PRIVATE src/CrossAssetCorrelationMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CROSS_ASSET_CORR_ENABLED)
+    message(STATUS "Feature: CrossAssetCorrelationMonitor ENABLED (multi-asset signal correlation)")
+else()
+    message(STATUS "Feature: CrossAssetCorrelationMonitor DISABLED (LLMQUANT_ENABLE_CROSS_ASSET_CORR=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

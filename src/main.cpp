@@ -159,6 +159,9 @@
 #ifdef LLMQUANT_REGIME_SIZER_ENABLED
 #  include "RegimeAwareSizer.h"
 #endif
+#ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
+#  include "ConfidenceDecayTracker.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1109,6 +1112,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
     llmquant::TemporalPatternLibrary tpl;
 #endif
+#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
+    llmquant::TokenStreamHealthMonitor stream_health;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1495,9 +1501,7 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
-#ifdef LLMQUANT_STREAM_HEALTH_ENABLED
     // TokenStreamHealthMonitor: watchdog for feed stalls and token floods.
-    llmquant::TokenStreamHealthMonitor stream_health;
     {
         llmquant::TokenStreamHealthMonitor::Config sh_cfg;
         sh_cfg.stall_timeout_ms   = 3000;
@@ -1526,6 +1530,20 @@ int main(int argc, char* argv[]) {
             spdlog::info("[regime_sizer] multiplier {:.3f}→{:.3f}", old, nw);
         };
         regime_sizer.update_config(rs_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
+    // ConfidenceDecayTracker: fits exponential decay to signal.confidence over time.
+    // Slow decay → news-driven; fast decay → noise spike.
+    llmquant::ConfidenceDecayTracker conf_decay;
+    {
+        llmquant::ConfidenceDecayTracker::Config cd_cfg;
+        cd_cfg.fast_decay_threshold_ms = 500.0;
+        cd_cfg.on_decay_change = [](double nw, double old) {
+            spdlog::info("[conf_decay] half-life {:.0f}ms→{:.0f}ms", old, nw);
+        };
+        conf_decay.update_config(std::move(cd_cfg));
     }
 #endif
 
@@ -1941,6 +1959,11 @@ int main(int argc, char* argv[]) {
 #  ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
         regime_sizer.update_vol(vol_forecaster.annualised_vol());
 #  endif
+#endif
+
+#ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
+        // Track how quickly signal confidence decays over time.
+        conf_decay.record(signal.confidence);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3329,6 +3352,13 @@ int main(int argc, char* argv[]) {
               << "  vol_f=" << regime_sizer.vol_factor()
               << "  changes=" << regime_sizer.change_events() << "\n";
 #endif
+#ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
+    std::cout << "  Conf decay       : "
+              << "half_life=" << std::fixed << std::setprecision(0) << conf_decay.half_life_ms() << "ms"
+              << "  lambda=" << std::setprecision(5) << conf_decay.lambda()
+              << "  fast=" << (conf_decay.is_fast_decay() ? "YES" : "no")
+              << "  n=" << conf_decay.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3471,6 +3501,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_REGIME_SIZER_ENABLED
         std::cout << "  [json:rsizer]  " << regime_sizer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
+        std::cout << "  [json:cdecay]  " << conf_decay.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 
 #ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
 
@@ -71,10 +71,12 @@ TEST(MutualInformationEstimator, IndependentInputsLowNmi) {
     cfg.min_samples = 50;
     MutualInformationEstimator est(cfg);
 
-    // Two independent cycling sequences
+    // Two independent cycling sequences with coprime periods (7 and 11).
+    // lcm(7,11)=77; over 200 samples each (s,r) pair is approximately equally
+    // likely, so p(s,r)≈p(s)*p(r) and MI is near zero.
     for (int i = 0; i < 200; ++i) {
-        double s = ((i * 7) % 5) * 0.4 - 0.8;
-        double r = ((i * 3) % 5) * 0.04 - 0.08;
+        double s = (i % 7) * (2.0 / 6.0) - 1.0;     // period 7, range [-1, 1]
+        double r = (i % 11) * (0.2 / 10.0) - 0.1;   // period 11, range [-0.1, 0.1]
         est.record(s, r);
     }
 

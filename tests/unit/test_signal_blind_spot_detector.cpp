@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 
 #ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
 
@@ -85,7 +85,9 @@ TEST(SignalBlindSpotDetector, BlindSpotDetectedAfterMinSamples) {
 
 TEST(SignalBlindSpotDetector, SlotRecoverAfterWins) {
     SignalBlindSpotDetector::Config cfg;
-    cfg.min_samples          = 5;
+    // ema_count with forgetting=0.8 converges to 1/(1-0.8)=5 but never reaches it exactly.
+    // Use min_samples=3 so the EMA count crosses the threshold quickly.
+    cfg.min_samples          = 3;
     cfg.blind_spot_threshold = 0.3;
     cfg.forgetting           = 0.8;  // faster forgetting for test speed
     SignalBlindSpotDetector det(cfg);

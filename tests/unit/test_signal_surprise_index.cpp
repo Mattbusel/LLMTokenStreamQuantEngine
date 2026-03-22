@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+﻿#include <gtest/gtest.h>
 
 #ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
 
@@ -206,9 +206,9 @@ TEST(SignalSurpriseIndex, UniformDistributionModerateSurprise) {
             idx.record(0.05 + b * 0.1);
 
     // Uniform distribution: each bin has p≈0.1 → -log2(0.1)≈3.32 bits.
-    // Normalized by log2(10)≈3.32 → normalized ≈ 1.0.
-    // But after warm-up many bins are visited so surprise should be < 1.
-    EXPECT_LT(idx.mean_surprise(), 1.0);
+    // Normalized by log2(n_bins)≈3.32 → normalized ≈ 1.0 (maximum entropy).
+    // For a uniform distribution every sample is equally surprising — surprise ≈ 1.0.
+    EXPECT_NEAR(idx.mean_surprise(), 1.0, 0.1);
 }
 
 } // namespace
