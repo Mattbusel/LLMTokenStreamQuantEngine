@@ -1329,6 +1329,15 @@ int main(int argc, char* argv[]) {
             token_clock.record_token(tcr_ns);
         }
 #endif
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+        // Record token weight with current timestamp for time-weighted decay.
+        {
+            auto tds_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            decay_scheduler.record(text, weight.directional_bias, tds_ns);
+        }
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -2659,6 +2668,10 @@ int main(int argc, char* argv[]) {
         // Raw signal → shadow portfolio (unconstrained); actual execution → live portfolio.
         shadow_portfolio.record_signal(signal.delta_bias_shift, signal.confidence);
         shadow_portfolio.record_live_signal(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
+        // Feed signal bias into the Kalman filter; bands auto-narrow/widen.
+        confidence_band.update(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4330,6 +4343,29 @@ int main(int argc, char* argv[]) {
               << "  live_pnl=" << shadow_portfolio.live_pnl()
               << "  drag=" << shadow_portfolio.constraint_drag()
               << "  drag_alerts=" << shadow_portfolio.drag_alert_count() << "\n";
+#endif
+#ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
+    std::cout << "  Kalman band      : "
+              << std::fixed << std::setprecision(4)
+              << "[" << confidence_band.lower() << ", "
+              << confidence_band.center() << ", "
+              << confidence_band.upper() << "]"
+              << "  hw=" << confidence_band.half_width()
+              << "  obs=" << confidence_band.observation_count()
+              << "  band_changes=" << confidence_band.band_change_count() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+    {
+        auto tds_now = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        std::cout << "  Decay scheduler  : "
+                  << "eff_sent=" << std::fixed << std::setprecision(4)
+                  << decay_scheduler.effective_sentiment(tds_now)
+                  << "  entries=" << decay_scheduler.entry_count()
+                  << "  evictions=" << decay_scheduler.eviction_count()
+                  << "  flips=" << decay_scheduler.flip_count() << "\n";
+    }
 #endif
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
     std::cout << "  Causal impact    : "
