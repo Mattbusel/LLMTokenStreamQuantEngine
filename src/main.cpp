@@ -3388,6 +3388,15 @@ int main(int argc, char* argv[]) {
               << "  fast=" << (conf_decay.is_fast_decay() ? "YES" : "no")
               << "  n=" << conf_decay.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
+    std::cout << "  Cross-asset corr : "
+              << "assets=" << cross_asset_corr.asset_count()
+              << "  bias~vol=" << std::fixed << std::setprecision(3)
+              << cross_asset_corr.correlation("bias", "vol")
+              << "  bias~conf=" << cross_asset_corr.correlation("bias", "confidence")
+              << "  high_events=" << cross_asset_corr.high_corr_events()
+              << "  low_events=" << cross_asset_corr.low_corr_events() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3533,6 +3542,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
         std::cout << "  [json:cdecay]  " << conf_decay.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
+        std::cout << "  [json:xcorr]   " << cross_asset_corr.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

@@ -9,6 +9,50 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 37 — 2026-03-21)
+- **`SignalDecayEnvelope`**: `last_reported_sign_` was not declared `mutable`
+  so MSVC could optimize away the `const_cast` write inside `decayed_bias()`,
+  leaving the zero-cross callback permanently suppressed.  Declared `mutable`;
+  removed `const_cast`.  `ZeroCrossCallbackFiredOnSignChange` now passes.
+- **`AnomalyDetector` tests**: four tests fed a constant-zero background
+  (stddev=0), making z-scores always 0 and callbacks silent.  Updated to use
+  an alternating ±1 background (mean=0, stddev=1) so z-scores are computable.
+- **`SignalMomentumOscillator` tests**: three cross-detection tests seeded both
+  EMAs to the same value, keeping MACD=0 and histogram=0 permanently.
+  Rearranged phases so the histogram passes through zero (negative→positive for
+  Bullish, positive→negative for Bearish).
+- **`MarketMicrostructureFilter`**: `should_trade()` is `const` but called
+  `fetch_add` on non-mutable atomics.  Declared `total_fills_`,
+  `total_blocked_`, `total_passed_` as `mutable`.  Added `(void)` casts to
+  two `should_trade()` calls in the test that discarded `[[nodiscard]]`.
+- **`TokenStreamHealthMonitor`**: `to_ms()` helper referenced private
+  `TokenStreamHealthMonitor::Clock::duration`; changed to
+  `std::chrono::steady_clock::duration`.
+- **`SentimentCycleDetector` test**: `M_PI` not defined on MSVC without
+  `_USE_MATH_DEFINES`; added `#ifndef M_PI` guard.
+- **`main.cpp` variable ordering**: `context_budget` and `tpl`
+  (TemporalPatternLibrary) were declared *after* the `process_token` lambda
+  that captured them by reference, causing C2065.  Moved both declarations
+  before the lambda.
+- **`main.cpp` wrong API names** (hook-generated): fixed
+  `FractalDimensionEstimator::set_regime_callback` → `on_regime_change` in
+  Config; `SignalEnsembleLayer::add_source` → `register_source`;
+  `MarketMicrostructureFilter::total_blocks/passes` →
+  `total_blocked/total_passed`.
+
+### Added (Cycle 37 — 2026-03-21)
+- **Wired `SentimentMomentumFilter`** into `main.cpp`: each processed token
+  feeds `record_sample(weight.sentiment_score)` to the filter; every emitted
+  signal passes through `filter_signal()` before Kelly sizing and risk gating,
+  blocking signals that contradict the macro sentiment trajectory.
+- **Wired `PositionTracker`** into `main.cpp`: open a tracked position for
+  every signal that passes all gates; auto-feeds closed-trade P&L back into the
+  Kelly sizer.  Feature flag: `LLMQUANT_ENABLE_POSITION_TRACKER`.
+- **Wired `SignalDecayEnvelope`** into `main.cpp`: each token reinforces the
+  decay envelope with its directional bias; the attenuation factor is applied
+  to `delta_bias_shift` before Kelly sizing, so stale conviction fades without
+  an explicit reset.  Feature flag: `LLMQUANT_ENABLE_SIGNAL_DECAY`.
+
 ### Added (Cycle 35 — 2026-03-21)
 - **New module `KellyPositionSizer`** (`include/KellyPositionSizer.h`,
   `src/KellyPositionSizer.cpp`): adaptive position sizing using the Kelly
