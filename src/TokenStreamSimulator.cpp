@@ -79,9 +79,12 @@ void TokenStreamSimulator::stream_worker() {
                     }
                 }
             }
-            // 3. Still empty after refill: back-off sleep only, then retry loop.
+            // 3. Still empty after refill: interruptible back-off sleep, then retry loop.
             if (!ring_buffer_.try_pop(token_text)) {
-                std::this_thread::sleep_for(config_.token_interval);
+                auto deadline = std::chrono::steady_clock::now() + config_.token_interval;
+                const auto slice = std::chrono::milliseconds{50};
+                while (running_.load() && std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::sleep_for(slice);
                 continue;  // Do NOT fall through to the dispatch sleep.
             }
         }
@@ -106,7 +109,14 @@ void TokenStreamSimulator::stream_worker() {
         }
 
         stats_.tokens_emitted++;
-        std::this_thread::sleep_for(config_.token_interval);  // Normal cadence: only after dispatch.
+        // Interruptible cadence sleep: break into 50ms slices so stop() returns
+        // promptly even when token_interval is in the seconds range.
+        {
+            auto deadline = std::chrono::steady_clock::now() + config_.token_interval;
+            const auto slice = std::chrono::milliseconds{50};
+            while (running_.load() && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(slice);
+        }
     }
 }
 

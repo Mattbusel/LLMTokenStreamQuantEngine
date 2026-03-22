@@ -800,12 +800,18 @@ int main(int argc, char* argv[]) {
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
+#ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
+        spdlog::trace("[trace] token seq={} text={}", seq_id, text);
+#endif
 #ifdef LLMQUANT_DEDUP_ENABLED
         // Skip duplicate tokens within the dedup window (unless --no-dedup).
         if (!no_dedup) {
             auto dedup_result = deduplicator.check(text);
             logger.log_dedup_event(text, dedup_result == llmquant::DedupResult::Duplicate);
             if (dedup_result == llmquant::DedupResult::Duplicate) {
+#ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
+                spdlog::trace("[trace] token seq={} DEDUP_SKIP", seq_id);
+#endif
                 return;
             }
         }

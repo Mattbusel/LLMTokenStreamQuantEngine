@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 30 — 2026-03-21)
+- **Bug fix** `TokenStreamSimulator::stream_worker`: both the normal cadence
+  sleep and the back-off-empty sleep were blocking `sleep_for(token_interval)`.
+  When `token_interval` is set to seconds (e.g. `--token-interval 5000`),
+  `stop()` could block for up to 5 s. Both are now interruptible 50ms-slice
+  loops — matching the `RestOmsAdapter` and `Config.cpp` watcher fixes.
+- **Feature** `LLMQUANT_ENABLE_SIGNAL_TRACE` (compile-time, default OFF):
+  `process_token` now emits `spdlog::trace` lines (`[trace] token seq= text=`
+  and `[trace] token seq= DEDUP_SKIP`) when compiled with
+  `-DLLMQUANT_ENABLE_SIGNAL_TRACE=ON`. Zero overhead when OFF (preprocessor
+  eliminates the calls entirely). Useful for dictionary-hit debugging and
+  integration testing.
+
 ### Added (Cycle 29 — 2026-03-21)
 - **Docs**: README badge updated 895 → 904; CLAUDE.md test table updated with
   accurate per-file counts.
