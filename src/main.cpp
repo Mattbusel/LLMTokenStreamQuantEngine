@@ -1226,6 +1226,18 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_IB_ENABLED
     llmquant::TokenInformationBottleneck token_ib;
 #endif
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+    llmquant::NarrativeTopicClassifier narrative_classifier;
+#endif
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+    llmquant::TokenClockRecalibrator token_clock;
+#endif
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+    llmquant::TokenImportanceDecayScheduler decay_scheduler;
+#endif
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+    llmquant::TokenStreamDifferencer stream_differencer;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
