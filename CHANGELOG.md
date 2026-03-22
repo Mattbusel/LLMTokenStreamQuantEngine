@@ -9,6 +9,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added/Fixed (Cycle 33 — 2026-03-21)
+- **`[[nodiscard]]` sweep**: Added `[[nodiscard]]` to all bool/result-returning
+  public methods: `OmsAdapter::start()`/`is_running()`/`description()` and all
+  concrete overrides (`MockOmsAdapter`, `RestOmsAdapter`, `FixOmsAdapter`),
+  `LLMStreamClient::connect()`/`is_running()`, `Config::start_watching()`, and
+  `DeduplicatorBackend::check_and_register()` + both concrete overrides.
+  Compiler now warns on silently discarded return values.
+- **Bug fix** `MockOmsAdapter::emitter_thread`: replaced blocking
+  `sleep_for(emit_interval)` with an interruptible 10 ms-slice loop. Previously
+  `stop()` could block for the full `emit_interval` (potentially seconds) before
+  the thread checked `running_`. Now `stop()` returns within ~10 ms regardless
+  of `emit_interval`.
+- **Tests** (2 new in `test_oms_adapter.cpp`):
+  `test_stop_returns_promptly_with_large_emit_interval` and
+  `test_stop_before_emission_completes_returns_promptly` verify that `stop()`
+  exits within 500 ms even with a 2–5 second `emit_interval`.
+- **Docs**: README test badge updated 914 → 933.
+
 ### Added (Cycle 44 — 2026-03-21)
 - **Feature flag** `LLMQUANT_ENABLE_MOCK_OMS` (default ON): gates
   `MockOmsAdapter.cpp` out of the production binary when set OFF.

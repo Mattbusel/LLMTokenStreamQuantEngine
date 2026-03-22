@@ -207,13 +207,13 @@ TEST(ChaosIntegration, test_chaos_token_simulator_restart_under_load) {
     });
 
     // Phase 1: run for 100 ms.
-    sim.start();
+    (void)sim.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     sim.stop();
 
     // Phase 2: restart immediately.
     phase2_active = true;
-    sim.start();
+    (void)sim.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     sim.stop();
 

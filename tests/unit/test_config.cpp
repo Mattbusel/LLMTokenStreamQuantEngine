@@ -197,7 +197,7 @@ TEST(ConfigTest, test_config_hot_reload_detects_file_change) {
     std::atomic<bool> callback_fired{false};
     std::atomic<int>  reloaded_interval{0};
 
-    cfg.start_watching(tmp_path,
+    (void)cfg.start_watching(tmp_path,
         [&](const SystemConfig& sc) {
             reloaded_interval = sc.token_stream.token_interval_ms;
             callback_fired    = true;
@@ -344,7 +344,7 @@ TEST(ConfigTest, test_config_concurrent_hot_reload_and_get_config_is_safe) {
 
     Config cfg;
     ASSERT_TRUE(cfg.load_from_file(tmp_path));
-    cfg.start_watching(tmp_path, [](const SystemConfig&) {}, /*poll_interval_ms=*/50);
+    (void)cfg.start_watching(tmp_path, [](const SystemConfig&) {}, /*poll_interval_ms=*/50);
 
     std::atomic<bool> stop_readers{false};
 

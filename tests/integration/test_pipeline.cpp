@@ -61,7 +61,7 @@ TEST(PipelineIntegration, test_pipeline_end_to_end_tokens_produce_signals) {
         engine.process_semantic_weight(w);
     });
 
-    sim.start();
+    (void)sim.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{300});
     sim.stop();
 

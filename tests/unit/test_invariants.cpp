@@ -371,8 +371,8 @@ TEST(Invariants, test_invariant_dedup_reset_restores_identity) {
     };
 
     // Phase 1: register each token once (all novel), then again (all duplicate).
-    for (const auto& t : tokens) dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
-    for (const auto& t : tokens) dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
+    for (const auto& t : tokens) (void)dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
+    for (const auto& t : tokens) (void)dedup.check_and_register(DedupKey::from_token(t), std::chrono::milliseconds{5000});
 
     uint64_t pre_novel = dedup.total_novel();
     uint64_t pre_dups  = dedup.total_duplicates();

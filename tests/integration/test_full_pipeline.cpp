@@ -349,7 +349,7 @@ TEST(FullPipeline5Stage, EndToEnd_BackgroundStreamProducesSignalsThroughAllStage
         p.push(tok.text);
     });
 
-    sim.start();
+    (void)sim.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{200});
     sim.stop();
 

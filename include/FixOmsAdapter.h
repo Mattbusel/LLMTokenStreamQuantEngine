@@ -161,6 +161,18 @@ protected:
      */
     std::string fix_message(const std::string& body) const;
 
+    /**
+     * @brief Parse a raw SOH-delimited FIX message into a tag→value map.
+     *
+     * Exposed as protected so test subclasses and fuzz targets can drive the
+     * parser directly without a live FIX session.
+     *
+     * @param raw Raw FIX wire bytes (may be partial or malformed).
+     * @return Map of tag integers to their string values.
+     */
+    using FixFields = std::unordered_map<int, std::string>;
+    static FixFields parse_fix(const std::string& raw);
+
 private:
     void reader_thread();
     bool reconnect_with_backoff();
@@ -173,9 +185,6 @@ private:
     std::string build_heartbeat() const;
     std::string build_resend_request(int begin_seq) const;
     std::string build_sequence_reset(int new_seq_num) const;
-
-    using FixFields = std::unordered_map<int, std::string>;
-    static FixFields parse_fix(const std::string& raw);
     void handle_message(const FixFields& fields);
     void apply_execution_report(const FixFields& fields);
     void apply_position_report(const FixFields& fields);

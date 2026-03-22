@@ -52,14 +52,14 @@ TEST(DeduplicatorTest, test_in_process_dedup_novel_on_first_call) {
 TEST(DeduplicatorTest, test_in_process_dedup_duplicate_on_second_call_within_ttl) {
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("surge");
-    dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
     EXPECT_EQ(dedup.check_and_register(key, ms{5000}), DedupResult::Duplicate);
 }
 
 TEST(DeduplicatorTest, test_in_process_dedup_novel_after_ttl_expiry) {
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("volatile");
-    dedup.check_and_register(key, ms{1});
+    (void)dedup.check_and_register(key, ms{1});
     // Sleep longer than the TTL to ensure expiry.
     std::this_thread::sleep_for(ms{10});
     EXPECT_EQ(dedup.check_and_register(key, ms{500}), DedupResult::Novel);
@@ -68,7 +68,7 @@ TEST(DeduplicatorTest, test_in_process_dedup_novel_after_ttl_expiry) {
 TEST(DeduplicatorTest, test_in_process_dedup_evict_allows_reregistration) {
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("panic");
-    dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
     dedup.evict(key);
     EXPECT_EQ(dedup.check_and_register(key, ms{5000}), DedupResult::Novel);
 }
@@ -76,16 +76,16 @@ TEST(DeduplicatorTest, test_in_process_dedup_evict_allows_reregistration) {
 TEST(DeduplicatorTest, test_in_process_dedup_size_tracks_entries) {
     InProcessDeduplicator dedup;
     EXPECT_EQ(dedup.size(), 0u);
-    dedup.check_and_register(DedupKey::from_token("a"), ms{5000});
+    (void)dedup.check_and_register(DedupKey::from_token("a"), ms{5000});
     EXPECT_EQ(dedup.size(), 1u);
-    dedup.check_and_register(DedupKey::from_token("b"), ms{5000});
+    (void)dedup.check_and_register(DedupKey::from_token("b"), ms{5000});
     EXPECT_EQ(dedup.size(), 2u);
 }
 
 TEST(DeduplicatorTest, test_in_process_dedup_purge_expired_removes_stale_entries) {
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("plunge");
-    dedup.check_and_register(key, ms{1});
+    (void)dedup.check_and_register(key, ms{1});
     EXPECT_EQ(dedup.size(), 1u);
     std::this_thread::sleep_for(ms{10});
     dedup.purge_expired();
@@ -140,7 +140,7 @@ TEST(DeduplicatorTest, test_redis_stub_stores_redis_url) {
 TEST(DeduplicatorTest, test_redis_stub_evict_allows_reregistration) {
     RedisDeduplicator redis("redis://127.0.0.1:6379/0");
     auto key = DedupKey::from_token("breakout");
-    redis.check_and_register(key, ms{5000});
+    (void)redis.check_and_register(key, ms{5000});
     redis.evict(key);
     EXPECT_EQ(redis.check_and_register(key, ms{5000}), DedupResult::Novel);
 }
@@ -227,9 +227,9 @@ TEST(DeduplicatorTest, test_in_process_dedup_reset_clears_table_and_stats) {
     auto k1 = DedupKey::from_token("bullish");
     auto k2 = DedupKey::from_token("bearish");
 
-    dedup.check_and_register(k1, ms{5000});
-    dedup.check_and_register(k2, ms{5000});
-    dedup.check_and_register(k1, ms{5000});  // duplicate
+    (void)dedup.check_and_register(k1, ms{5000});
+    (void)dedup.check_and_register(k2, ms{5000});
+    (void)dedup.check_and_register(k1, ms{5000});  // duplicate
 
     ASSERT_EQ(dedup.size(), 2u);
     ASSERT_EQ(dedup.total_novel(), 2u);
@@ -249,7 +249,7 @@ TEST(DeduplicatorTest, test_in_process_dedup_reset_makes_previous_tokens_novel_a
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("crash");
 
-    dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
     ASSERT_EQ(dedup.check_and_register(key, ms{5000}), DedupResult::Duplicate);
 
     dedup.reset();
@@ -279,9 +279,9 @@ TEST(DeduplicatorTest, test_in_process_dedup_get_stats_tracks_novel_and_duplicat
     auto k1 = DedupKey::from_token("alpha");
     auto k2 = DedupKey::from_token("beta");
 
-    dedup.check_and_register(k1, ms{5000});  // novel
-    dedup.check_and_register(k2, ms{5000});  // novel
-    dedup.check_and_register(k1, ms{5000});  // duplicate
+    (void)dedup.check_and_register(k1, ms{5000});  // novel
+    (void)dedup.check_and_register(k2, ms{5000});  // novel
+    (void)dedup.check_and_register(k1, ms{5000});  // duplicate
 
     auto stats = dedup.get_stats();
     EXPECT_EQ(stats.total_novel,      uint64_t{2}) << "Two novel registrations expected";
@@ -293,8 +293,8 @@ TEST(DeduplicatorTest, test_in_process_dedup_get_stats_reset_reflects_cleared_st
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("gamma");
 
-    dedup.check_and_register(key, ms{5000});
-    dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
 
     auto before = dedup.get_stats();
     EXPECT_EQ(before.total_novel,      uint64_t{1});
@@ -316,9 +316,9 @@ TEST(DeduplicatorTest, test_get_duplicate_rate_correct_after_mixed_checks) {
     using ms = std::chrono::milliseconds;
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("alpha");
-    dedup.check_and_register(key, ms{5000}); // novel
-    dedup.check_and_register(key, ms{5000}); // dup
-    dedup.check_and_register(key, ms{5000}); // dup
+    (void)dedup.check_and_register(key, ms{5000}); // novel
+    (void)dedup.check_and_register(key, ms{5000}); // dup
+    (void)dedup.check_and_register(key, ms{5000}); // dup
     double rate = dedup.get_duplicate_rate();
     EXPECT_DOUBLE_EQ(rate, 2.0 / 3.0);
 }
@@ -328,9 +328,9 @@ TEST(DeduplicatorTest, test_get_novel_rate_plus_duplicate_rate_equals_one) {
     InProcessDeduplicator dedup;
     auto k1 = DedupKey::from_token("x");
     auto k2 = DedupKey::from_token("y");
-    dedup.check_and_register(k1, ms{5000});
-    dedup.check_and_register(k2, ms{5000});
-    dedup.check_and_register(k1, ms{5000});
+    (void)dedup.check_and_register(k1, ms{5000});
+    (void)dedup.check_and_register(k2, ms{5000});
+    (void)dedup.check_and_register(k1, ms{5000});
     double sum = dedup.get_duplicate_rate() + dedup.get_novel_rate();
     EXPECT_NEAR(sum, 1.0, 1e-12);
 }
@@ -339,8 +339,8 @@ TEST(DeduplicatorTest, test_total_checked_equals_novel_plus_duplicates) {
     using ms = std::chrono::milliseconds;
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("beta");
-    dedup.check_and_register(key, ms{5000});
-    dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
+    (void)dedup.check_and_register(key, ms{5000});
     EXPECT_EQ(dedup.total_checked(), dedup.total_novel() + dedup.total_duplicates());
 }
 
@@ -353,9 +353,9 @@ TEST(DeduplicatorTest, test_to_stats_json_returns_valid_json_with_fields) {
     InProcessDeduplicator dedup;
     auto k1 = DedupKey::from_token("tok_a");
     auto k2 = DedupKey::from_token("tok_b");
-    dedup.check_and_register(k1, ms{5000});
-    dedup.check_and_register(k1, ms{5000}); // duplicate
-    dedup.check_and_register(k2, ms{5000});
+    (void)dedup.check_and_register(k1, ms{5000});
+    (void)dedup.check_and_register(k1, ms{5000}); // duplicate
+    (void)dedup.check_and_register(k2, ms{5000});
 
     std::string json = dedup.to_stats_json();
     ASSERT_FALSE(json.empty());

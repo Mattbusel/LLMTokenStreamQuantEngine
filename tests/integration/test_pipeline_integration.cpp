@@ -141,9 +141,9 @@ struct FullPipeline {
         simulator.load_tokens_from_memory(tokens);
         if (!oms_states.empty()) {
             oms.load_states(oms_states);
-            oms.start();
+            (void)oms.start();
         }
-        simulator.start();
+        (void)simulator.start();
         std::this_thread::sleep_for(drain_ms);
         simulator.stop();
         if (oms.is_running()) oms.stop();
