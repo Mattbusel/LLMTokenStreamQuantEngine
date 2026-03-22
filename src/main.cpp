@@ -1347,6 +1347,10 @@ int main(int argc, char* argv[]) {
             decay_scheduler.record(text, weight.directional_bias, tds_ns);
         }
 #endif
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+        // Track velocity/acceleration/jerk of the token weight series.
+        stream_differencer.record(weight.directional_bias);
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -2769,6 +2773,14 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
         // Feed signal bias into the Kalman filter; bands auto-narrow/widen.
         confidence_band.update(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REGIME_ROUTER_ENABLED
+        // Use delta_bias_shift as a proxy for period return for vol/momentum estimation.
+        regime_router.record_return(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+        // Track W1 distribution drift between recent and baseline bias-shift windows.
+        signal_drift_monitor.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4494,6 +4506,28 @@ int main(int argc, char* argv[]) {
                   << "  events=" << options_flow_bridge.divergence_count() << "\n";
     }
 #endif
+#ifdef LLMQUANT_REGIME_ROUTER_ENABLED
+    std::cout << "  Regime router    : "
+              << "regime=" << regime_router.regime_name()
+              << "  vol=" << std::fixed << std::setprecision(4) << regime_router.smoothed_volatility()
+              << "  mom=" << regime_router.smoothed_momentum()
+              << "  changes=" << regime_router.regime_change_count() << "\n";
+#endif
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+    std::cout << "  Stream differ.   : "
+              << "vel=" << std::fixed << std::setprecision(4) << stream_differencer.velocity_ema()
+              << "  acc=" << stream_differencer.acceleration_ema()
+              << "  jerk=" << stream_differencer.jerk_ema()
+              << "  spikes=" << stream_differencer.jerk_spike_count()
+              << "  obs=" << stream_differencer.observation_count() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+    std::cout << "  Signal drift     : "
+              << "W1=" << std::fixed << std::setprecision(4) << signal_drift_monitor.last_w1()
+              << "  drifting=" << (signal_drift_monitor.is_drifting() ? "YES" : "no")
+              << "  events=" << signal_drift_monitor.drift_events()
+              << "  obs=" << signal_drift_monitor.total_records() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4696,6 +4730,15 @@ int main(int argc, char* argv[]) {
                     std::chrono::steady_clock::now().time_since_epoch()).count());
             std::cout << "  [json:decay]      " << decay_scheduler.to_stats_json(tds_now2) << "\n";
         }
+#endif
+#ifdef LLMQUANT_REGIME_ROUTER_ENABLED
+        std::cout << "  [json:regime_rtr] " << regime_router.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+        std::cout << "  [json:differencer]" << stream_differencer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+        std::cout << "  [json:drift]      " << signal_drift_monitor.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
