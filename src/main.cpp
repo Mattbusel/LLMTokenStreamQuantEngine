@@ -150,6 +150,9 @@
 #ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
 #  include "SignalBlindSpotDetector.h"
 #endif
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+#  include "SignalSurpriseIndex.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1464,6 +1467,22 @@ int main(int argc, char* argv[]) {
             spdlog::warn("[blind_spot] hour {} flagged — win_rate={:.2f}", slot, wr);
         };
         blind_spot.update_config(bs_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+    // SignalSurpriseIndex: flags signals that are statistically anomalous
+    // relative to the engine's own learned distribution (self-information).
+    llmquant::SignalSurpriseIndex signal_surprise;
+    {
+        llmquant::SignalSurpriseIndex::Config ss_cfg;
+        ss_cfg.min_samples             = 50;
+        ss_cfg.high_surprise_threshold = 0.80;
+        ss_cfg.on_high_surprise = [](double bias, double score) {
+            spdlog::warn("[surprise] HIGH I(x)={:.3f}  bias={:.5f} — anomalous signal",
+                         score, bias);
+        };
+        signal_surprise.update_config(ss_cfg);
     }
 #endif
 

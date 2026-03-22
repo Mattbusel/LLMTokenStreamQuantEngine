@@ -163,7 +163,8 @@ jobs:
             -DLLMQUANT_ENABLE_SENTIMENT_CYCLE=OFF \
             -DLLMQUANT_ENABLE_ADAPTIVE_SAMPLING=OFF \
             -DLLMQUANT_ENABLE_MUTUAL_INFORMATION=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_SURPRISE=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -242,6 +243,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_ADAPTIVE_SAMPLING
           - flag: LLMQUANT_ENABLE_MUTUAL_INFORMATION
           - flag: LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT
+          - flag: LLMQUANT_ENABLE_SIGNAL_SURPRISE
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
