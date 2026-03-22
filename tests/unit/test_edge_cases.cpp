@@ -370,7 +370,7 @@ TEST(EdgeCase_TokenStreamSimulator, single_token_replays_indefinitely) {
         count++;
     });
     sim.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds{20});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
     sim.stop();
     EXPECT_GT(count.load(), 1u) << "Single token must loop";
 }

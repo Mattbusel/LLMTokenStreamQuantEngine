@@ -45,6 +45,7 @@
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iomanip>
