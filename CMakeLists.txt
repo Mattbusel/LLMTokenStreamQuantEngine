@@ -43,6 +43,7 @@ option(LLMQUANT_ENABLE_SIGNAL_BLEND      "Build SignalBlendLayer: multi-source c
 option(LLMQUANT_ENABLE_STALE_DETECTOR    "Build StaleTokenDetector: watchdog that fires alerts when the LLM token stream goes silent" ON)
 option(LLMQUANT_ENABLE_REGIME_DETECTOR   "Build RegimeDetector: EMA-based regime classifier (Bull/Bear/Volatile/RiskOff/Neutral)" ON)
 option(LLMQUANT_ENABLE_TOKEN_REPLAY      "Build TokenReplayRecorder: binary token stream recorder and deterministic replay engine" ON)
+option(LLMQUANT_ENABLE_PARAMETER_SWEEP   "Build ParameterSweep: grid-search optimiser over BacktestRunner configurations (requires BACKTEST)" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -263,6 +264,17 @@ else()
     message(STATUS "Feature: StaleTokenDetector DISABLED (LLMQUANT_ENABLE_STALE_DETECTOR=OFF)")
 endif()
 
+# ParameterSweep: grid-search optimiser over BacktestRunner configs.
+if(LLMQUANT_ENABLE_PARAMETER_SWEEP AND LLMQUANT_ENABLE_BACKTEST)
+    target_sources(llmquant PRIVATE src/ParameterSweep.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PARAMETER_SWEEP_ENABLED)
+    message(STATUS "Feature: ParameterSweep ENABLED (grid-search over BacktestRunner)")
+elseif(LLMQUANT_ENABLE_PARAMETER_SWEEP AND NOT LLMQUANT_ENABLE_BACKTEST)
+    message(STATUS "Feature: ParameterSweep SKIPPED (requires LLMQUANT_ENABLE_BACKTEST=ON)")
+else()
+    message(STATUS "Feature: ParameterSweep DISABLED (LLMQUANT_ENABLE_PARAMETER_SWEEP=OFF)")
+endif()
+
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).
 # Disable for production builds to strip the test double from the binary.
 if(LLMQUANT_ENABLE_MOCK_OMS)
@@ -389,6 +401,20 @@ if(NOT LLMQUANT_ENABLE_SIMD)
     message(STATUS "Feature: SSE2 SIMD batch processing DISABLED (LLMQUANT_ENABLE_SIMD=OFF)")
 else()
     message(STATUS "Feature: SSE2 SIMD batch processing ENABLED (hardware-conditional)")
+endif()
+if(LLMQUANT_ENABLE_ALERT_DISPATCHER)
+    target_sources(llmquant PRIVATE src/AlertDispatcher.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ALERT_DISPATCHER_ENABLED)
+    message(STATUS "Feature: AlertDispatcher ENABLED (async alert delivery)")
+else()
+    message(STATUS "Feature: AlertDispatcher DISABLED (LLMQUANT_ENABLE_ALERT_DISPATCHER=OFF)")
+endif()
+if(LLMQUANT_ENABLE_PARAMETER_SWEEP)
+    target_sources(llmquant PRIVATE src/ParameterSweep.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PARAMETER_SWEEP_ENABLED)
+    message(STATUS "Feature: ParameterSweep ENABLED (backtest grid-search optimizer)")
+else()
+    message(STATUS "Feature: ParameterSweep DISABLED (LLMQUANT_ENABLE_PARAMETER_SWEEP=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

@@ -862,12 +862,41 @@ int main(int argc, char* argv[]) {
     spdlog::info("Config hot-reload watcher compiled out (LLMQUANT_ENABLE_HOT_RELOAD=OFF)");
     if (false) {
 #else
+    // prev_hot_config: snapshot of the last-seen config used to diff-log what changed on reload.
+    llmquant::SystemConfig prev_hot_config = sys_config;
     if (no_hot_reload) {
         spdlog::info("--no-hot-reload: config file watcher disabled");
     } else if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &token_sim,
                                               &logger, &config_file,
                                               &sem_mult_sentiment, &sem_mult_confidence,
-                                              &sem_mult_volatility, &sem_mult_bias](const llmquant::SystemConfig& updated) {
+                                              &sem_mult_volatility, &sem_mult_bias,
+                                              &prev_hot_config](const llmquant::SystemConfig& updated) {
+        // Config diff: log only fields that changed so operators can see exactly what hot-reload applied.
+        {
+            const auto& o = prev_hot_config;
+            const auto& n = updated;
+            auto log_ch = [](const char* key, auto ov, auto nv) {
+                if (ov != nv) spdlog::info("[config_diff] {}: {} → {}", key, ov, nv);
+            };
+            log_ch("trading.bias_sensitivity",       o.trading.bias_sensitivity,       n.trading.bias_sensitivity);
+            log_ch("trading.volatility_sensitivity", o.trading.volatility_sensitivity, n.trading.volatility_sensitivity);
+            log_ch("trading.signal_decay_rate",      o.trading.signal_decay_rate,      n.trading.signal_decay_rate);
+            log_ch("trading.signal_cooldown_us",     o.trading.signal_cooldown_us,     n.trading.signal_cooldown_us);
+            log_ch("trading.min_bias_threshold",     o.trading.min_bias_threshold,     n.trading.min_bias_threshold);
+            log_ch("trading.min_vol_threshold",      o.trading.min_vol_threshold,      n.trading.min_vol_threshold);
+            log_ch("trading.max_accumulated_bias",   o.trading.max_accumulated_bias,   n.trading.max_accumulated_bias);
+            log_ch("risk.max_bias_magnitude",        o.risk_thresholds.max_bias_magnitude,       n.risk_thresholds.max_bias_magnitude);
+            log_ch("risk.max_volatility_magnitude",  o.risk_thresholds.max_volatility_magnitude, n.risk_thresholds.max_volatility_magnitude);
+            log_ch("risk.min_confidence",            o.risk_thresholds.min_confidence,           n.risk_thresholds.min_confidence);
+            log_ch("risk.max_signals_per_second",    o.risk_thresholds.max_signals_per_second,   n.risk_thresholds.max_signals_per_second);
+            log_ch("risk.max_drawdown",              o.risk_thresholds.max_drawdown,             n.risk_thresholds.max_drawdown);
+            log_ch("semantic.sentiment_multiplier",  o.semantic_weights.sentiment_multiplier,    n.semantic_weights.sentiment_multiplier);
+            log_ch("semantic.confidence_multiplier", o.semantic_weights.confidence_multiplier,   n.semantic_weights.confidence_multiplier);
+            log_ch("semantic.volatility_multiplier", o.semantic_weights.volatility_multiplier,   n.semantic_weights.volatility_multiplier);
+            log_ch("semantic.bias_multiplier",       o.semantic_weights.bias_multiplier,         n.semantic_weights.bias_multiplier);
+            log_ch("latency.target_latency_us",      o.latency.target_latency_us,                n.latency.target_latency_us);
+            prev_hot_config = updated;
+        }
         const auto& u = updated.risk_thresholds;
         llmquant::RiskManager::Config new_risk_cfg;
         new_risk_cfg.max_bias_magnitude       = u.max_bias_magnitude;

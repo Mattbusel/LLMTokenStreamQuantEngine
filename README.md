@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-1034%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1108%20passing-brightgreen.svg)](tests/)
 [![Coverage](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/actions/workflows/coverage.yml/badge.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/actions/workflows/coverage.yml)
 [![Dictionary](https://img.shields.io/badge/token%20dictionary-~130%20entries-blue.svg)](src/LLMAdapter.cpp)
 [![Download](https://img.shields.io/badge/download-v1.1.0%20Windows%20x64-brightgreen.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0)
