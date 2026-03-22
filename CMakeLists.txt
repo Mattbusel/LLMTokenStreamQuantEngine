@@ -62,6 +62,9 @@ option(LLMQUANT_ENABLE_MULTI_TIMEFRAME              "Build MultiTimeframeAggrega
 option(LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL      "Build RegimeTransitionModel: online Markov-chain learner for regime transition probabilities" ON)
 option(LLMQUANT_ENABLE_SIGNAL_THROTTLE              "Build SignalThrottle: token-bucket rate limiter for signal emission to prevent OMS flooding" ON)
 option(LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR        "Build ConfidenceCalibrator: Platt-scaling online calibration of confidence from trade outcomes" ON)
+option(LLMQUANT_ENABLE_VOLATILITY_FORECASTER        "Build VolatilityForecaster: EWMA-based realized-vol forecast with regime-adaptive decay" ON)
+option(LLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER       "Build BayesianSignalFilter: Bayesian online update of signal prior from observed trade outcomes" ON)
+option(LLMQUANT_ENABLE_ANOMALY_DETECTOR             "Build AnomalyDetector: z-score based spike detector for bias/confidence/volatility streams" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -562,6 +565,33 @@ if(LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR)
     message(STATUS "Feature: ConfidenceCalibrator ENABLED (Platt-scaling online confidence calibration)")
 else()
     message(STATUS "Feature: ConfidenceCalibrator DISABLED (LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR=OFF)")
+endif()
+
+# VolatilityForecaster: EWMA-based realized-vol forecast.
+if(LLMQUANT_ENABLE_VOLATILITY_FORECASTER)
+    target_sources(llmquant PRIVATE src/VolatilityForecaster.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VOLATILITY_FORECASTER_ENABLED)
+    message(STATUS "Feature: VolatilityForecaster ENABLED (EWMA realized-vol forecast)")
+else()
+    message(STATUS "Feature: VolatilityForecaster DISABLED (LLMQUANT_ENABLE_VOLATILITY_FORECASTER=OFF)")
+endif()
+
+# BayesianSignalFilter: Bayesian online prior update from trade outcomes.
+if(LLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER)
+    target_sources(llmquant PRIVATE src/BayesianSignalFilter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BAYESIAN_FILTER_ENABLED)
+    message(STATUS "Feature: BayesianSignalFilter ENABLED (Bayesian online confidence update)")
+else()
+    message(STATUS "Feature: BayesianSignalFilter DISABLED (LLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER=OFF)")
+endif()
+
+# AnomalyDetector: z-score spike detector across signal streams.
+if(LLMQUANT_ENABLE_ANOMALY_DETECTOR)
+    target_sources(llmquant PRIVATE src/AnomalyDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ANOMALY_DETECTOR_ENABLED)
+    message(STATUS "Feature: AnomalyDetector ENABLED (z-score spike detection)")
+else()
+    message(STATUS "Feature: AnomalyDetector DISABLED (LLMQUANT_ENABLE_ANOMALY_DETECTOR=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

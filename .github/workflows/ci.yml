@@ -140,7 +140,10 @@ jobs:
             -DLLMQUANT_ENABLE_MULTI_TIMEFRAME=OFF \
             -DLLMQUANT_ENABLE_REGIME_TRANSITION_MODEL=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_THROTTLE=OFF \
-            -DLLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR=OFF
+            -DLLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR=OFF \
+            -DLLMQUANT_ENABLE_VOLATILITY_FORECASTER=OFF \
+            -DLLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER=OFF \
+            -DLLMQUANT_ENABLE_ANOMALY_DETECTOR=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -196,6 +199,9 @@ jobs:
           - flag: LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL
           - flag: LLMQUANT_ENABLE_SIGNAL_THROTTLE
           - flag: LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR
+          - flag: LLMQUANT_ENABLE_VOLATILITY_FORECASTER
+          - flag: LLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER
+          - flag: LLMQUANT_ENABLE_ANOMALY_DETECTOR
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

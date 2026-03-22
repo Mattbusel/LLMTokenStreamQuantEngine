@@ -69,6 +69,15 @@
 #ifdef LLMQUANT_MULTI_TIMEFRAME_ENABLED
 #  include "MultiTimeframeAggregator.h"
 #endif
+#ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
+#  include "VolatilityForecaster.h"
+#endif
+#ifdef LLMQUANT_BAYESIAN_FILTER_ENABLED
+#  include "BayesianSignalFilter.h"
+#endif
+#ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
+#  include "AnomalyDetector.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1221,6 +1230,47 @@ int main(int argc, char* argv[]) {
 
 // stale_detector already declared above (before the process_token lambda).
 
+#ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
+    // VolatilityForecaster: tracks GARCH(1,1) conditional variance of sentiment stream.
+    llmquant::VolatilityForecaster vol_forecaster;
+    {
+        llmquant::VolatilityForecaster::Config vf_cfg;
+        vf_cfg.on_high_vol = [](double vol, double /*var*/) {
+            spdlog::warn("[vol_fcst] HIGH conditional vol={:.4f}", vol);
+        };
+        vol_forecaster.update_config(vf_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BAYESIAN_FILTER_ENABLED
+    // BayesianSignalFilter: Beta-Bernoulli posterior confidence per direction.
+    llmquant::BayesianSignalFilter bayes_filter;
+    {
+        llmquant::BayesianSignalFilter::Config bf_cfg;
+        bf_cfg.on_low_confidence = [](bool bullish, double post) {
+            spdlog::warn("[bayes] low posterior={:.3f} dir={}", post,
+                         bullish ? "BULL" : "BEAR");
+        };
+        bayes_filter.update_config(bf_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
+    // AnomalyDetector: online Z-score anomaly detection on the bias stream.
+    llmquant::AnomalyDetector anomaly_detector;
+    {
+        llmquant::AnomalyDetector::Config ad_cfg;
+        ad_cfg.name = "bias";
+        ad_cfg.soft_cb = [](const llmquant::AnomalyDetector::AnomalyEvent& e) {
+            spdlog::info("[anomaly] soft z={:.2f} val={:.6f}", e.z_score, e.value);
+        };
+        ad_cfg.hard_cb = [](const llmquant::AnomalyDetector::AnomalyEvent& e) {
+            spdlog::warn("[anomaly] HARD z={:.2f} val={:.6f}", e.z_score, e.value);
+        };
+        anomaly_detector.update_config(ad_cfg);
+    }
+#endif
+
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
     std::array<double, kSparkSlots> spark_ring{};
@@ -1293,6 +1343,21 @@ int main(int argc, char* argv[]) {
             // Use a simple proxy: bias * 0.001 as a per-signal PnL estimate.
             drawdown_protector.record_pnl(signal.delta_bias_shift * 0.001);
         }
+#endif
+
+#ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
+        // Update GARCH(1,1) volatility estimate from the raw bias value.
+        vol_forecaster.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_BAYESIAN_FILTER_ENABLED
+        // Record signal direction; outcomes would be fed by a live P&L feed.
+        bayes_filter.record_signal(signal.delta_bias_shift > 0.0);
+#endif
+
+#ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
+        // Check for statistical anomalies in the bias stream.
+        anomaly_detector.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -2428,6 +2493,26 @@ int main(int argc, char* argv[]) {
               << "  spread=" << multi_tf.timeframe_spread()
               << "  diverging=" << (multi_tf.is_diverging() ? "Y" : "N")
               << "  records=" << multi_tf.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
+    std::cout << "  Vol forecast     : "
+              << "cond_vol=" << std::fixed << std::setprecision(4) << vol_forecaster.conditional_vol()
+              << "  high_vol=" << (vol_forecaster.is_high_vol() ? "Y" : "N")
+              << "  events=" << vol_forecaster.high_vol_events() << "\n";
+#endif
+#ifdef LLMQUANT_BAYESIAN_FILTER_ENABLED
+    std::cout << "  Bayes filter     : "
+              << "bull=" << std::fixed << std::setprecision(3)
+              << bayes_filter.posterior_confidence(true)
+              << "  bear=" << bayes_filter.posterior_confidence(false)
+              << "  signals=" << bayes_filter.total_signals() << "\n";
+#endif
+#ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
+    std::cout << "  Anomaly detect   : "
+              << "soft=" << anomaly_detector.soft_anomalies()
+              << "  hard=" << anomaly_detector.hard_anomalies()
+              << "  last_z=" << std::fixed << std::setprecision(2)
+              << anomaly_detector.last_z_score() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
