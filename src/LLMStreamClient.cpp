@@ -407,6 +407,17 @@ void LLMStreamClient::reader_thread() {
             chunk[n] = '\0';
             buf.append(chunk, static_cast<size_t>(n));
 
+            // Guard against unbounded buffer growth: a server that never sends
+            // a header-end sequence (\r\n\r\n) or a line boundary (\n) would
+            // fill memory until the recv timeout fires.  Cap at 4 MB and reconnect.
+            static constexpr size_t kMaxBufBytes = 4u << 20;  // 4 MB
+            if (buf.size() > kMaxBufBytes) {
+                spdlog::warn("[llm_client] receive buffer exceeded {}B without a "
+                             "parseable boundary — reconnecting", kMaxBufBytes);
+                close_socket();
+                continue;
+            }
+
             if (config_.debug_raw) {
                 // debug_raw intentionally writes raw bytes to stderr for diagnostic use.
                 // This is the only acceptable stderr use in library code: it is

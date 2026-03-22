@@ -530,6 +530,20 @@ void FixOmsAdapter::reader_thread() {
         chunk[n] = '\0';
         buf.append(chunk, static_cast<size_t>(n));
 
+        // Guard against unbounded buffer growth: a peer that never sends a
+        // valid checksum boundary would otherwise accumulate data until the
+        // 30-second recv timeout fires.  Cap at 1 MB and reconnect.
+        static constexpr size_t kMaxBufBytes = 1u << 20;  // 1 MB
+        if (buf.size() > kMaxBufBytes) {
+            spdlog::warn("[FixOmsAdapter] receive buffer exceeded {}B without a "
+                         "complete FIX message — reconnecting", kMaxBufBytes);
+            if (reconnect_with_backoff()) {
+                buf.clear();
+                continue;
+            }
+            break;
+        }
+
         // A FIX message ends with the checksum tag (10=NNN\x01).
         // Search for SOH+"10=" to avoid false-matching "10=" inside a field
         // value (e.g. a Text tag containing "ratio=10=5").  The checksum

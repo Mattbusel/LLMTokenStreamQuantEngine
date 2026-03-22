@@ -9,6 +9,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 37 — 2026-03-21)
+- **Bug fix / security** `FixOmsAdapter` receive buffer: no cap existed on the
+  accumulation buffer. A misbehaving FIX counterparty that never sent a valid
+  checksum boundary (`SOH 10=`) would cause unbounded memory growth until the
+  30-second recv timeout fired. Added a 1 MB cap; on breach the adapter logs a
+  warning, clears the buffer, and reconnects.
+- **Bug fix / security** `LLMStreamClient` receive buffer: same class of
+  unbounded-growth issue for the pre-parse body accumulation buffer. A server
+  that never emits `\r\n\r\n` (headers) or `\n` (line boundaries) would fill
+  memory until the socket timeout. Added a 4 MB cap with reconnect.
+
 ### Fixed (Cycle 36 — 2026-03-21)
 - **Bug fix** `Deduplicator.cpp`: Redis key buffer was `[35]` bytes but the
   formatted key `"llmq:" + 16 hex + 16 hex + null` requires 38 bytes. With the
