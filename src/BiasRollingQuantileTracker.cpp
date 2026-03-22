@@ -143,6 +143,14 @@ void BiasRollingQuantileTracker::update_config(const Config& cfg) {
     seeded_   = false;
     prev_p50_ = 0.0;
     prev_skew_= 1.0;
+    p10_.store(0.0, std::memory_order_relaxed);
+    p25_.store(0.0, std::memory_order_relaxed);
+    p50_.store(0.0, std::memory_order_relaxed);
+    p75_.store(0.0, std::memory_order_relaxed);
+    p90_.store(0.0, std::memory_order_relaxed);
+    skew_.store(1.0, std::memory_order_relaxed);
+    median_events_.store(0, std::memory_order_relaxed);
+    total_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

@@ -35,15 +35,21 @@ bool BiasVelocityBreaker::record(double bias) {
         vel_val = velocity_ema_;
         velocity_.store(vel_val, std::memory_order_relaxed);
 
-        bool now_tripped = vel_val > cfg_.max_velocity;
+        // Hysteresis state machine: trip on exceed, clear only after dropping
+        // below max_velocity * clear_hysteresis.
+        bool now_tripped;
+        if (prev_tripped_) {
+            now_tripped = vel_val >= cfg_.max_velocity * cfg_.clear_hysteresis;
+        } else {
+            now_tripped = vel_val > cfg_.max_velocity;
+        }
         tripped_.store(now_tripped, std::memory_order_relaxed);
         tripped_now = now_tripped;
 
         if (now_tripped && !prev_tripped_) {
             fire_trip = true;
             trip_count_.fetch_add(1, std::memory_order_relaxed);
-        } else if (!now_tripped && prev_tripped_ &&
-                   vel_val < cfg_.max_velocity * cfg_.clear_hysteresis) {
+        } else if (!now_tripped && prev_tripped_) {
             fire_clear = true;
         }
         prev_tripped_ = now_tripped;

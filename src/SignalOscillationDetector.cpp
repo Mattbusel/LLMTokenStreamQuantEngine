@@ -54,14 +54,20 @@ void SignalOscillationDetector::record(double bias) {
                 zcr_val = (n > 1) ? static_cast<double>(crossings) / (n - 1) : 0.0;
                 zcr_.store(zcr_val, std::memory_order_relaxed);
 
-                bool now_osc = zcr_val > cfg_.oscillation_threshold;
+                // Hysteresis state machine: oscillating until zcr drops
+                // below oscillation_threshold * clear_hysteresis.
+                bool now_osc;
+                if (prev_oscillating_) {
+                    now_osc = zcr_val >= cfg_.oscillation_threshold * cfg_.clear_hysteresis;
+                } else {
+                    now_osc = zcr_val > cfg_.oscillation_threshold;
+                }
                 oscillating_.store(now_osc, std::memory_order_relaxed);
 
                 if (now_osc && !prev_oscillating_) {
                     fire_osc = true;
                     events_.fetch_add(1, std::memory_order_relaxed);
-                } else if (!now_osc && prev_oscillating_ &&
-                           zcr_val < cfg_.oscillation_threshold * cfg_.clear_hysteresis) {
+                } else if (!now_osc && prev_oscillating_) {
                     fire_stab = true;
                 }
                 prev_oscillating_ = now_osc;

@@ -136,6 +136,9 @@ void SignalCompressor::update_config(const Config& cfg) {
     win_buf_.assign(static_cast<std::size_t>(w), 0);
     win_head_ = win_fill_ = 0;
     prev_lz_norm_ = -1.0;
+    lz_raw_.store(0, std::memory_order_relaxed);
+    lz_norm_.store(0.0, std::memory_order_relaxed);
+    total_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

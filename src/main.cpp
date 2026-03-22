@@ -318,11 +318,104 @@
 #ifdef LLMQUANT_COVERAGE_METER_ENABLED
 #  include "SignalCoverageMeter.h"
 #endif
+#ifdef LLMQUANT_BIAS_HYSTERESIS_ENABLED
+#  include "BiasHysteresisGate.h"
+#endif
+#ifdef LLMQUANT_REALIZED_VOL_ENABLED
+#  include "RealizedVolatilityTracker.h"
+#endif
+#ifdef LLMQUANT_CAUSAL_TRACER_ENABLED
+#  include "SignalCausalChainTracer.h"
+#endif
+#ifdef LLMQUANT_DEPENDENCY_MAPPER_ENABLED
+#  include "TokenDependencyMapper.h"
+#endif
+#ifdef LLMQUANT_FREQ_ANALYSER_ENABLED
+#  include "BiasFrequencyAnalyser.h"
+#endif
+#ifdef LLMQUANT_ENTROPY_RATCHET_ENABLED
+#  include "SignalEntropyRatchet.h"
+#endif
+#ifdef LLMQUANT_COHERENCE_SCORER_ENABLED
+#  include "NarrativeCoherenceScorer.h"
+#endif
+#ifdef LLMQUANT_CROSS_TOKEN_CORR_ENABLED
+#  include "CrossTokenCorrelationMatrix.h"
+#endif
+#ifdef LLMQUANT_ADAPTIVE_SIZER_ENABLED
+#  include "AdaptivePositionSizer.h"
+#endif
+#ifdef LLMQUANT_CLIP_MONITOR_ENABLED
+#  include "BiasClipMonitor.h"
+#endif
+#ifdef LLMQUANT_INTENSITY_RAMP_ENABLED
+#  include "NarrativeIntensityRamp.h"
+#endif
+#ifdef LLMQUANT_ZSCORE_TRACKER_ENABLED
+#  include "SentimentZScoreTracker.h"
+#endif
+#ifdef LLMQUANT_CONFLUENCE_DETECTOR_ENABLED
+#  include "SignalConfluenceDetector.h"
+#endif
 #ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
 #  include "MultiFeedSignalAggregator.h"
 #endif
 #ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
 #  include "SignalCUSUMController.h"
+#endif
+#ifdef LLMQUANT_MOMENTUM_INDEX_ENABLED
+#  include "BiasMomentumIndex.h"
+#endif
+#ifdef LLMQUANT_GAIN_LOSS_RATIO_ENABLED
+#  include "SignalGainLossRatio.h"
+#endif
+#ifdef LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED
+#  include "BiasRegimeTransitionMatrix.h"
+#endif
+#ifdef LLMQUANT_REVERSAL_DETECTOR_ENABLED
+#  include "SignalReversalDetector.h"
+#endif
+#ifdef LLMQUANT_TSMI_ENABLED
+#  include "TokenSentimentMomentumIndex.h"
+#endif
+#ifdef LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED
+#  include "AdaptiveThresholdController.h"
+#endif
+#ifdef LLMQUANT_CONDITIONAL_DIST_ENABLED
+#  include "BiasConditionalDistribution.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_COMPRESSOR_ENABLED
+#  include "SignalCompressor.h"
+#endif
+#ifdef LLMQUANT_ROLLING_QUANTILE_ENABLED
+#  include "BiasRollingQuantileTracker.h"
+#endif
+#ifdef LLMQUANT_AUTOREGRESSOR_ENABLED
+#  include "SignalAutoregressor.h"
+#endif
+#ifdef LLMQUANT_PHASE_SPACE_ENABLED
+#  include "TokenBiasPhaseSpace.h"
+#endif
+#ifdef LLMQUANT_TOPOLOGY_MAPPER_ENABLED
+#  include "SentimentTopologyMapper.h"
+#endif
+#ifdef LLMQUANT_INFORMATION_GAIN_ENABLED
+#  include "BiasInformationGain.h"
+#endif
+#ifdef LLMQUANT_NARRATIVE_DRIFT_ENABLED
+#  include "NarrativeDriftDetector.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
+#  include "TokenSentimentGraphBuilder.h"
+#endif
+#ifdef LLMQUANT_KALMAN_FILTER_ENABLED
+#  include "BiasKalmanFilter.h"
+#endif
+#ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
+#  include "SignalSpectralEntropy.h"
+#endif
+#ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
+#  include "BiasBootstrapCI.h"
 #endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
@@ -2602,7 +2695,7 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
     // BiasVelocityBreaker: trips when EMA of |Δbias| exceeds max_velocity.
     // Prevents trading on whipsaw signals between consecutive tokens.
-    llmquant::BiasVelocityBreaker velocity_breaker;
+    llmquant::BiasVelocityBreaker bias_vbreaker;
     {
         llmquant::BiasVelocityBreaker::Config vb_cfg;
         vb_cfg.ema_alpha        = 0.2;
@@ -2614,7 +2707,7 @@ int main(int argc, char* argv[]) {
         vb_cfg.on_clear = [](double v) {
             spdlog::info("[velocity_breaker] cleared velocity={:.4f}", v);
         };
-        velocity_breaker.update_config(vb_cfg);
+        bias_vbreaker.update_config(vb_cfg);
     }
 #endif
 
@@ -2675,6 +2768,325 @@ int main(int argc, char* argv[]) {
             spdlog::info("[oscillation] stabilized ZCR={:.3f}", zcr);
         };
         oscillation_detector.update_config(od_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_MOMENTUM_INDEX_ENABLED
+    // BiasMomentumIndex: MACD-style dual-EMA crossover for bias momentum.
+    // Positive histogram = bullish momentum; negative = bearish.
+    llmquant::BiasMomentumIndex momentum_index;
+    {
+        llmquant::BiasMomentumIndex::Config mi_cfg;
+        mi_cfg.fast_alpha  = 0.222;   // ~9-period EMA
+        mi_cfg.slow_alpha  = 0.0909;  // ~21-period EMA
+        mi_cfg.signal_alpha = 0.2;    // ~9-period signal line
+        mi_cfg.on_bullish_crossover = [](double hist) {
+            spdlog::info("[momentum] BULLISH crossover histogram={:.4f}", hist);
+        };
+        mi_cfg.on_bearish_crossover = [](double hist) {
+            spdlog::warn("[momentum] BEARISH crossover histogram={:.4f}", hist);
+        };
+        momentum_index.update_config(mi_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_GAIN_LOSS_RATIO_ENABLED
+    // SignalGainLossRatio: rolling G/L ratio over a fixed window.
+    // Ratio > high_gain_threshold = consistent directional edge.
+    llmquant::SignalGainLossRatio gain_loss_ratio;
+    {
+        llmquant::SignalGainLossRatio::Config gl_cfg;
+        gl_cfg.window             = 32;
+        gl_cfg.min_samples        = 4;
+        gl_cfg.high_gain_threshold = 1.5;
+        gl_cfg.high_loss_threshold = 0.67;
+        gl_cfg.max_ratio          = 10.0;
+        gl_cfg.on_high_gain = [](double r) {
+            spdlog::info("[gain_loss] high gain edge ratio={:.3f}", r);
+        };
+        gl_cfg.on_high_loss = [](double r) {
+            spdlog::warn("[gain_loss] high loss regime ratio={:.3f}", r);
+        };
+        gain_loss_ratio.update_config(gl_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED
+    // BiasRegimeTransitionMatrix: empirical Markov P(next|current) over rolling window.
+    // Fires when most-probable next regime changes with high probability.
+    llmquant::BiasRegimeTransitionMatrix regime_transition;
+    {
+        llmquant::BiasRegimeTransitionMatrix::Config rt_cfg;
+        rt_cfg.n_regimes   = 5;
+        rt_cfg.window      = 100;
+        rt_cfg.range_min   = -1.0;
+        rt_cfg.range_max   =  1.0;
+        rt_cfg.alert_prob  = 0.6;
+        rt_cfg.on_likely_transition = [](int from, int to, double prob) {
+            spdlog::info("[regime_matrix] transition {} → {} prob={:.3f}", from, to, prob);
+        };
+        regime_transition.update_config(rt_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REVERSAL_DETECTOR_ENABLED
+    // SignalReversalDetector: price-action thrust+counter-move pattern in bias stream.
+    // Fires when counter-move exceeds reversal_fraction of prior thrust.
+    llmquant::SignalReversalDetector reversal_detector;
+    {
+        llmquant::SignalReversalDetector::Config rd_cfg;
+        rd_cfg.reversal_fraction = 0.5;
+        rd_cfg.min_thrust        = 0.05;
+        rd_cfg.on_bullish_reversal = [](double bias) {
+            spdlog::info("[reversal] BULLISH reversal at bias={:.4f}", bias);
+        };
+        rd_cfg.on_bearish_reversal = [](double bias) {
+            spdlog::warn("[reversal] BEARISH reversal at bias={:.4f}", bias);
+        };
+        reversal_detector.update_config(rd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TSMI_ENABLED
+    // TokenSentimentMomentumIndex: composite ROC+acceleration+SSI momentum in [-1,1].
+    // Fires on_momentum_shift when TSMI crosses zero (directional flip).
+    llmquant::TokenSentimentMomentumIndex tsmi;
+    {
+        llmquant::TokenSentimentMomentumIndex::Config tsmi_cfg;
+        tsmi_cfg.w_roc      = 0.4;
+        tsmi_cfg.w_acc      = 0.3;
+        tsmi_cfg.w_str      = 0.3;
+        tsmi_cfg.roc_scale  = 0.1;
+        tsmi_cfg.acc_scale  = 0.05;
+        tsmi_cfg.on_momentum_shift = [](double old_v, double new_v) {
+            spdlog::info("[tsmi] momentum flip {:.3f} → {:.3f}", old_v, new_v);
+        };
+        tsmi.update_config(tsmi_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED
+    // AdaptiveThresholdController: vol-adaptive OB/OS thresholds via rolling |Δbias| EMA.
+    llmquant::AdaptiveThresholdController adaptive_threshold;
+    {
+        llmquant::AdaptiveThresholdController::Config at_cfg;
+        at_cfg.period           = 20;
+        at_cfg.base_overbought  = 70.0;
+        at_cfg.base_oversold    = 30.0;
+        at_cfg.k_sigma          = 50.0;
+        at_cfg.clamp_lo         = 55.0;
+        at_cfg.clamp_hi         = 95.0;
+        at_cfg.change_threshold = 1.0;
+        at_cfg.on_threshold_change = [](double ob, double os) {
+            spdlog::info("[adaptive_thresh] OB={:.1f} OS={:.1f} — vol-adjusted thresholds updated", ob, os);
+        };
+        adaptive_threshold.update_config(at_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONDITIONAL_DIST_ENABLED
+    // BiasConditionalDistribution: P(bias|prev_dir) asymmetry for momentum/mean-rev detection.
+    llmquant::BiasConditionalDistribution conditional_dist;
+    {
+        llmquant::BiasConditionalDistribution::Config cd_cfg;
+        cd_cfg.window               = 50;
+        cd_cfg.n_bins               = 8;
+        cd_cfg.range_min            = -1.0;
+        cd_cfg.range_max            =  1.0;
+        cd_cfg.asymmetry_threshold  = 0.3;
+        cd_cfg.on_asymmetry_detected = [](double tv) {
+            spdlog::warn("[cond_dist] ASYMMETRIC tv={:.3f} — momentum/mean-rev regime active", tv);
+        };
+        cd_cfg.on_symmetry_restored = [](double tv) {
+            spdlog::info("[cond_dist] symmetry restored tv={:.3f}", tv);
+        };
+        conditional_dist.update_config(cd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_COMPRESSOR_ENABLED
+    // SignalCompressor: LZ76 normalised complexity for trend (low) vs noise (high) regime.
+    llmquant::SignalCompressor signal_compressor;
+    {
+        llmquant::SignalCompressor::Config sc_cfg;
+        sc_cfg.window           = 64;
+        sc_cfg.n_symbols        = 4;
+        sc_cfg.range_min        = -1.0;
+        sc_cfg.range_max        =  1.0;
+        sc_cfg.change_threshold = 0.1;
+        sc_cfg.min_samples      = 16;
+        sc_cfg.on_complexity_change = [](double old_lzc, double new_lzc) {
+            spdlog::info("[compressor] LZC {:.3f} → {:.3f} — {} regime",
+                         old_lzc, new_lzc,
+                         new_lzc < 0.7 ? "structured/trend" : "noise");
+        };
+        signal_compressor.update_config(sc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ROLLING_QUANTILE_ENABLED
+    // BiasRollingQuantileTracker: rolling P10-P90 percentiles with IQR and skew.
+    llmquant::BiasRollingQuantileTracker rolling_quantile;
+    {
+        llmquant::BiasRollingQuantileTracker::Config rq_cfg;
+        rq_cfg.window                  = 64;
+        rq_cfg.min_samples             = 8;
+        rq_cfg.median_change_threshold = 0.05;
+        rq_cfg.skew_threshold          = 0.3;
+        rq_cfg.on_median_shift = [](double old_p50, double new_p50) {
+            spdlog::info("[quantile] median shift {:.3f} → {:.3f}", old_p50, new_p50);
+        };
+        rq_cfg.on_skew_change = [](double skew) {
+            spdlog::info("[quantile] skew changed ratio={:.3f}", skew);
+        };
+        rolling_quantile.update_config(rq_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_AUTOREGRESSOR_ENABLED
+    // SignalAutoregressor: RLS AR(p) online model fit with prediction-error spike detection.
+    llmquant::SignalAutoregressor signal_ar;
+    {
+        llmquant::SignalAutoregressor::Config ar_cfg;
+        ar_cfg.order           = 4;
+        ar_cfg.lambda          = 0.97;
+        ar_cfg.error_threshold = 0.2;
+        ar_cfg.on_prediction_error_spike = [](double err) {
+            spdlog::warn("[ar] SPIKE |err|={:.4f} — regime break or structural shift", err);
+        };
+        signal_ar.update_config(ar_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_PHASE_SPACE_ENABLED
+    // TokenBiasPhaseSpace: 2D (bias_t, bias_{t-1}) delay-embedding attractor tracking.
+    llmquant::TokenBiasPhaseSpace phase_space;
+    {
+        llmquant::TokenBiasPhaseSpace::Config ps_cfg;
+        ps_cfg.grid_size = 8;
+        ps_cfg.range_min = -1.0;
+        ps_cfg.range_max =  1.0;
+        ps_cfg.on_attractor_shift = [](llmquant::TokenBiasPhaseSpace::CellId old_c,
+                                       llmquant::TokenBiasPhaseSpace::CellId new_c) {
+            spdlog::info("[phase] attractor shift ({},{})→({},{})",
+                         old_c.row, old_c.col, new_c.row, new_c.col);
+        };
+        phase_space.update_config(ps_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TOPOLOGY_MAPPER_ENABLED
+    // SentimentTopologyMapper: persistent-homology Betti-0 count for bias stream.
+    // Counts structurally distinct sentiment "islands" at each threshold level.
+    llmquant::SentimentTopologyMapper topology_mapper;
+    {
+        llmquant::SentimentTopologyMapper::Config tm_cfg;
+        tm_cfg.window           = 64;
+        tm_cfg.min_persistence  = 0.05;
+        tm_cfg.on_topology_change = [](int old_c, int new_c) {
+            spdlog::info("[topo] topology shift: {} → {} sentiment components",
+                         old_c, new_c);
+        };
+        topology_mapper.update_config(tm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_INFORMATION_GAIN_ENABLED
+    // BiasInformationGain: normalised mutual information between consecutive bias bins.
+    // High NMI → bias has predictable sequential structure; low → near-random.
+    llmquant::BiasInformationGain info_gain;
+    {
+        llmquant::BiasInformationGain::Config ig_cfg;
+        ig_cfg.n_bins   = 6;
+        ig_cfg.window   = 100;
+        ig_cfg.on_mi_change = [](double old_nmi, double new_nmi) {
+            spdlog::info("[info_gain] NMI change {:.3f} → {:.3f}", old_nmi, new_nmi);
+        };
+        info_gain.update_config(ig_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_NARRATIVE_DRIFT_ENABLED
+    // NarrativeDriftDetector: Page-Hinkley sequential change-point detector.
+    // Fires upward/downward drift alarms when accumulated bias shift exceeds λ.
+    llmquant::NarrativeDriftDetector narrative_drift;
+    {
+        llmquant::NarrativeDriftDetector::Config nd_cfg;
+        nd_cfg.delta  = 0.02;
+        nd_cfg.lambda = 0.5;
+        nd_cfg.on_upward_drift = [](double mag) {
+            spdlog::warn("[narrative_drift] UPWARD drift U={:.4f}", mag);
+        };
+        nd_cfg.on_downward_drift = [](double mag) {
+            spdlog::warn("[narrative_drift] DOWNWARD drift D={:.4f}", mag);
+        };
+        narrative_drift.update_config(nd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
+    // TokenSentimentGraphBuilder: directed token-to-token influence graph.
+    // Edge w(a→b) = conditional mean bias contribution from a to b.
+    llmquant::TokenSentimentGraphBuilder sentiment_graph;
+    {
+        llmquant::TokenSentimentGraphBuilder::Config sg_cfg;
+        sg_cfg.hub_threshold = 0.5;
+        sg_cfg.on_hub_detected = [](int tok_id, double in_w) {
+            spdlog::info("[sent_graph] HUB token_id={} in_weight={:.3f}",
+                         tok_id, in_w);
+        };
+        sentiment_graph.update_config(sg_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_KALMAN_FILTER_ENABLED
+    // BiasKalmanFilter: 1-D random-walk Kalman filter for bias smoothing.
+    // NIS > 3.84 fires on_model_mismatch signalling regime change or fat-tail event.
+    llmquant::BiasKalmanFilter kalman_filter;
+    {
+        llmquant::BiasKalmanFilter::Config kf_cfg;
+        kf_cfg.Q = 0.001;
+        kf_cfg.R = 0.1;
+        kf_cfg.estimate_R = true;
+        kf_cfg.on_model_mismatch = [](double nis) {
+            spdlog::warn("[kalman] model mismatch NIS={:.2f} — regime change or tail event", nis);
+        };
+        kalman_filter.update_config(kf_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
+    // SignalSpectralEntropy: DCT-II power spectral density entropy of rolling bias window.
+    // Low entropy → periodic/trending regime; high → white-noise/random regime.
+    llmquant::SignalSpectralEntropy spectral_entropy;
+    {
+        llmquant::SignalSpectralEntropy::Config se_cfg;
+        se_cfg.window            = 64;
+        se_cfg.change_threshold  = 0.2;
+        se_cfg.on_entropy_change = [](double old_hs, double new_hs) {
+            spdlog::info("[spectral] entropy shift {:.3f} → {:.3f}", old_hs, new_hs);
+        };
+        spectral_entropy.update_config(se_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
+    // BiasBootstrapCI: model-free 95% CI for rolling mean via bootstrap resampling.
+    // Wide CI → noisy/unreliable signal; narrow CI → high-confidence regime.
+    llmquant::BiasBootstrapCI bootstrap_ci;
+    {
+        llmquant::BiasBootstrapCI::Config bc_cfg;
+        bc_cfg.window              = 64;
+        bc_cfg.n_bootstrap         = 200;
+        bc_cfg.recompute_interval  = 10;
+        bc_cfg.width_threshold     = 0.3;
+        bc_cfg.on_ci_wide = [](double lo, double hi) {
+            spdlog::warn("[bootstrap_ci] WIDE CI [{:.3f}, {:.3f}] — signal unreliable", lo, hi);
+        };
+        bc_cfg.on_ci_narrow = [](double lo, double hi) {
+            spdlog::info("[bootstrap_ci] narrow CI [{:.3f}, {:.3f}] — signal reliable", lo, hi);
+        };
+        bootstrap_ci.update_config(bc_cfg);
     }
 #endif
 
@@ -2739,6 +3151,219 @@ int main(int argc, char* argv[]) {
             spdlog::info("[coverage] range expanded coverage={:.3f} — full dynamic range in use", cov);
         };
         coverage_meter.update_config(cm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BIAS_HYSTERESIS_ENABLED
+    // BiasHysteresisGate: N-tick debounce on bias crossings to prevent whipsaw signals.
+    llmquant::BiasHysteresisGate hysteresis_gate;
+    {
+        llmquant::BiasHysteresisGate::Config hg_cfg;
+        hg_cfg.enter_threshold = 0.10;
+        hg_cfg.exit_threshold  = 0.05;
+        hg_cfg.required_ticks  = 3;
+        hg_cfg.on_gate_open  = [](double bias) {
+            spdlog::info("[hysteresis] GATE OPEN bias={:.4f} — sustained above threshold", bias);
+        };
+        hg_cfg.on_gate_close = [](double bias) {
+            spdlog::info("[hysteresis] gate closed bias={:.4f}", bias);
+        };
+        hysteresis_gate.update_config(hg_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REALIZED_VOL_ENABLED
+    // RealizedVolatilityTracker: rolling sqrt(mean squared return) for dynamic sizing.
+    llmquant::RealizedVolatilityTracker realized_vol;
+    {
+        llmquant::RealizedVolatilityTracker::Config rv_cfg;
+        rv_cfg.window           = 30;
+        rv_cfg.alert_threshold  = 0.5;
+        rv_cfg.clear_hysteresis = 0.7;
+        rv_cfg.on_high_volatility = [](double rv) {
+            spdlog::warn("[realized_vol] HIGH VOL rv={:.4f} — consider position de-sizing", rv);
+        };
+        rv_cfg.on_low_volatility = [](double rv) {
+            spdlog::info("[realized_vol] vol cleared rv={:.4f}", rv);
+        };
+        realized_vol.update_config(rv_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CAUSAL_TRACER_ENABLED
+    // SignalCausalChainTracer: rolling ring of top-N tokens by signal contribution.
+    llmquant::SignalCausalChainTracer causal_tracer;
+    {
+        llmquant::SignalCausalChainTracer::Config ct_cfg;
+        ct_cfg.window            = 16;
+        ct_cfg.strong_threshold  = 0.05;
+        ct_cfg.on_strong_token   = [](const std::string& tok, double contrib) {
+            spdlog::info("[causal] strong token='{}' contrib={:.4f}", tok, contrib);
+        };
+        causal_tracer.update_config(ct_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_DEPENDENCY_MAPPER_ENABLED
+    // TokenDependencyMapper: sliding-window co-occurrence matrix with cluster detection.
+    llmquant::TokenDependencyMapper dep_mapper;
+    {
+        llmquant::TokenDependencyMapper::Config dm_cfg;
+        dm_cfg.window             = 32;
+        dm_cfg.min_count          = 4;
+        dm_cfg.min_cluster_size   = 3;
+        dm_cfg.recompute_interval = 16;
+        dm_cfg.on_cluster_detected = [](const std::vector<int>& ids) {
+            spdlog::info("[dep_mapper] cluster detected size={}", ids.size());
+        };
+        dep_mapper.update_config(dm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_FREQ_ANALYSER_ENABLED
+    // BiasFrequencyAnalyser: DCT-II dominant oscillation frequency extractor.
+    llmquant::BiasFrequencyAnalyser freq_analyser;
+    {
+        llmquant::BiasFrequencyAnalyser::Config fa_cfg;
+        fa_cfg.window    = 32;
+        fa_cfg.on_dominant_frequency_change = [](int old_k, int k, double power) {
+            spdlog::info("[freq] dominant k changed {}→{} power={:.4f}", old_k, k, power);
+        };
+        freq_analyser.update_config(fa_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ENTROPY_RATCHET_ENABLED
+    // SignalEntropyRatchet: one-way ratchet on Shannon entropy of the bias distribution.
+    llmquant::SignalEntropyRatchet entropy_ratchet;
+    {
+        llmquant::SignalEntropyRatchet::Config er_cfg;
+        er_cfg.n_buckets       = 10;
+        er_cfg.spike_threshold = 2.5;
+        er_cfg.on_entropy_spike = [](double h) {
+            spdlog::warn("[entropy] SPIKE h={:.4f} — unusually high bias diversity", h);
+        };
+        er_cfg.on_floor_drop = [](double floor) {
+            spdlog::info("[entropy] floor dropped new_floor={:.4f}", floor);
+        };
+        entropy_ratchet.update_config(er_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_COHERENCE_SCORER_ENABLED
+    // NarrativeCoherenceScorer: |μ|/σ signal-to-noise coherence on rolling bias window.
+    llmquant::NarrativeCoherenceScorer coherence_scorer;
+    {
+        llmquant::NarrativeCoherenceScorer::Config cs_cfg;
+        cs_cfg.window           = 30;
+        cs_cfg.low_threshold    = 0.5;
+        cs_cfg.recover_threshold= 1.0;
+        cs_cfg.on_coherence_drop = [](double score) {
+            spdlog::warn("[coherence] DROP score={:.3f} — noisy/incoherent narrative", score);
+        };
+        cs_cfg.on_coherence_recover = [](double score) {
+            spdlog::info("[coherence] recovered score={:.3f}", score);
+        };
+        coherence_scorer.update_config(cs_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CROSS_TOKEN_CORR_ENABLED
+    // CrossTokenCorrelationMatrix: rolling Pearson correlation across N bias channels.
+    llmquant::CrossTokenCorrelationMatrix cross_corr;
+    {
+        llmquant::CrossTokenCorrelationMatrix::Config cc_cfg;
+        cc_cfg.n_channels            = 2;
+        cc_cfg.window                = 30;
+        cc_cfg.divergence_threshold  = 0.3;
+        cc_cfg.convergence_threshold = 0.7;
+        cc_cfg.on_divergence = [](int i, int j, double r) {
+            spdlog::warn("[cross_corr] DIVERGED ch{}↔ch{} r={:.3f}", i, j, r);
+        };
+        cc_cfg.on_convergence = [](int i, int j, double r) {
+            spdlog::info("[cross_corr] converged ch{}↔ch{} r={:.3f}", i, j, r);
+        };
+        cross_corr.update_config(cc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ADAPTIVE_SIZER_ENABLED
+    // AdaptivePositionSizer: multi-factor [0,1] multiplier for dynamic position sizing.
+    llmquant::AdaptivePositionSizer pos_sizer;
+    {
+        llmquant::AdaptivePositionSizer::Config as_cfg;
+        as_cfg.coherence_weight  = 0.25;
+        as_cfg.confidence_weight = 0.25;
+        as_cfg.vol_weight        = 0.25;
+        as_cfg.regime_weight     = 0.25;
+        as_cfg.rv_max            = 0.5;
+        as_cfg.min_multiplier    = 0.05;
+        as_cfg.change_threshold  = 0.05;
+        as_cfg.on_size_change = [](double old_m, double new_m) {
+            spdlog::info("[pos_sizer] mult {:.3f} → {:.3f}", old_m, new_m);
+        };
+        pos_sizer.update_config(as_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CLIP_MONITOR_ENABLED
+    // BiasClipMonitor: rolling clip-rate tracker; high rate = saturated/adversarial input.
+    llmquant::BiasClipMonitor clip_monitor;
+    {
+        llmquant::BiasClipMonitor::Config bcm_cfg;
+        bcm_cfg.clip_threshold  = 0.7;
+        bcm_cfg.window          = 50;
+        bcm_cfg.spike_threshold = 0.3;
+        bcm_cfg.on_clip_spike = [](double rate) {
+            spdlog::warn("[clip] SPIKE rate={:.3f} — high-saturation bias stream", rate);
+        };
+        clip_monitor.update_config(bcm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_INTENSITY_RAMP_ENABLED
+    // NarrativeIntensityRamp: EMA(|bias|) first derivative for emerging-narrative detection.
+    llmquant::NarrativeIntensityRamp intensity_ramp;
+    {
+        llmquant::NarrativeIntensityRamp::Config ir_cfg;
+        ir_cfg.ema_alpha       = 0.15;
+        ir_cfg.surge_threshold = 0.02;
+        ir_cfg.saturation_ramp = 0.05;
+        ir_cfg.on_surge = [](double ramp) {
+            spdlog::info("[intensity] SURGE ramp={:.4f} — narrative intensity building", ramp);
+        };
+        ir_cfg.on_fade = [](double ramp) {
+            spdlog::info("[intensity] FADE ramp={:.4f} — narrative exhaustion", ramp);
+        };
+        intensity_ramp.update_config(ir_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ZSCORE_TRACKER_ENABLED
+    // SentimentZScoreTracker: rolling z-score normalization of bias; session-invariant extremes.
+    llmquant::SentimentZScoreTracker zscore_tracker;
+    {
+        llmquant::SentimentZScoreTracker::Config zt_cfg;
+        zt_cfg.window            = 50;
+        zt_cfg.extreme_threshold = 2.0;
+        zt_cfg.on_extreme = [](double z) {
+            spdlog::warn("[zscore] EXTREME z={:.3f} — bias far outside recent norm", z);
+        };
+        zscore_tracker.update_config(zt_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONFLUENCE_DETECTOR_ENABLED
+    // SignalConfluenceDetector: window-based directional agreement score for trend confirmation.
+    llmquant::SignalConfluenceDetector confluence;
+    {
+        llmquant::SignalConfluenceDetector::Config cd_cfg;
+        cd_cfg.window    = 10;
+        cd_cfg.threshold = 0.6;
+        cd_cfg.on_confluence = [](double score, int dir) {
+            spdlog::info("[confluence] score={:.3f} dir={} — signals aligned", score, dir);
+        };
+        confluence.update_config(cd_cfg);
     }
 #endif
 
@@ -3352,7 +3977,7 @@ int main(int argc, char* argv[]) {
         change_point_detector.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
-        velocity_breaker.record(signal.delta_bias_shift);
+        bias_vbreaker.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_IR_TRACKER_ENABLED
         ir_tracker.record(signal.delta_bias_shift);
@@ -3379,6 +4004,46 @@ int main(int argc, char* argv[]) {
         // Update rolling bias range coverage.
         coverage_meter.record(signal.delta_bias_shift);
 #endif
+#ifdef LLMQUANT_BIAS_HYSTERESIS_ENABLED
+        hysteresis_gate.evaluate(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REALIZED_VOL_ENABLED
+        realized_vol.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CAUSAL_TRACER_ENABLED
+        causal_tracer.record_token("<signal>", signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_DEPENDENCY_MAPPER_ENABLED
+        dep_mapper.record_token(static_cast<int>(signal.timestamp_ns & 0xFFFFFFu));
+#endif
+#ifdef LLMQUANT_FREQ_ANALYSER_ENABLED
+        freq_analyser.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ENTROPY_RATCHET_ENABLED
+        entropy_ratchet.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_COHERENCE_SCORER_ENABLED
+        coherence_scorer.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CROSS_TOKEN_CORR_ENABLED
+        cross_corr.record(0, signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ADAPTIVE_SIZER_ENABLED
+        pos_sizer.set_confidence(signal.confidence);
+        pos_sizer.set_coherence(std::abs(signal.delta_bias_shift));
+#endif
+#ifdef LLMQUANT_CLIP_MONITOR_ENABLED
+        clip_monitor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_INTENSITY_RAMP_ENABLED
+        intensity_ramp.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ZSCORE_TRACKER_ENABLED
+        zscore_tracker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CONFLUENCE_DETECTOR_ENABLED
+        confluence.record(signal.delta_bias_shift);
+#endif
 #ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
         // Update CUSUM accumulators for step-change detection.
         signal_cusum.update(signal.delta_bias_shift);
@@ -3386,6 +4051,64 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
         // Feed primary signal into multi-feed aggregator (single-feed mode by default).
         multi_feed_agg.record("primary", signal.delta_bias_shift, signal.confidence);
+#endif
+#ifdef LLMQUANT_MOMENTUM_INDEX_ENABLED
+        momentum_index.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_GAIN_LOSS_RATIO_ENABLED
+        gain_loss_ratio.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED
+        regime_transition.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REVERSAL_DETECTOR_ENABLED
+        reversal_detector.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_TSMI_ENABLED
+        tsmi.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED
+        adaptive_threshold.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CONDITIONAL_DIST_ENABLED
+        conditional_dist.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_COMPRESSOR_ENABLED
+        signal_compressor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ROLLING_QUANTILE_ENABLED
+        rolling_quantile.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_AUTOREGRESSOR_ENABLED
+        signal_ar.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_PHASE_SPACE_ENABLED
+        phase_space.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_TOPOLOGY_MAPPER_ENABLED
+        topology_mapper.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_INFORMATION_GAIN_ENABLED
+        info_gain.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_NARRATIVE_DRIFT_ENABLED
+        narrative_drift.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
+        {
+            int tok_id = static_cast<int>(
+                std::hash<std::string>{}(text) & 0xFFu); // modulo kMaxTokens=256
+            sentiment_graph.record(tok_id, signal.delta_bias_shift);
+        }
+#endif
+#ifdef LLMQUANT_KALMAN_FILTER_ENABLED
+        kalman_filter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
+        spectral_entropy.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
+        bootstrap_ci.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -5216,9 +5939,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
     std::cout << "  Velocity Breaker : "
-              << std::fixed << std::setprecision(4) << velocity_breaker.velocity()
-              << "  tripped=" << (velocity_breaker.is_tripped() ? "YES" : "no")
-              << "  trips=" << velocity_breaker.trip_count() << "\n";
+              << std::fixed << std::setprecision(4) << bias_vbreaker.velocity()
+              << "  tripped=" << (bias_vbreaker.is_tripped() ? "YES" : "no")
+              << "  trips=" << bias_vbreaker.trip_count() << "\n";
 #endif
 #ifdef LLMQUANT_IR_TRACKER_ENABLED
     std::cout << "  Info Ratio       : "
@@ -5239,6 +5962,145 @@ int main(int argc, char* argv[]) {
               << "zcr=" << std::fixed << std::setprecision(3) << oscillation_detector.zcr()
               << "  osc=" << (oscillation_detector.is_oscillating() ? "YES" : "no")
               << "  events=" << oscillation_detector.oscillation_events() << "\n";
+#endif
+#ifdef LLMQUANT_MOMENTUM_INDEX_ENABLED
+    std::cout << "  Momentum (MACD)  : "
+              << "hist=" << std::fixed << std::setprecision(4) << momentum_index.histogram()
+              << "  macd=" << momentum_index.macd_line()
+              << "  bull=" << (momentum_index.is_bullish() ? "YES" : "no")
+              << "  cross_b=" << momentum_index.bullish_crossovers()
+              << "  cross_e=" << momentum_index.bearish_crossovers() << "\n";
+#endif
+#ifdef LLMQUANT_GAIN_LOSS_RATIO_ENABLED
+    std::cout << "  Gain/Loss        : "
+              << "ratio=" << std::fixed << std::setprecision(3) << gain_loss_ratio.ratio()
+              << "  gain=" << gain_loss_ratio.gain_sum()
+              << "  loss=" << gain_loss_ratio.loss_sum()
+              << "  rec=" << gain_loss_ratio.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED
+    std::cout << "  Regime Matrix    : "
+              << "cur=" << regime_transition.current_regime()
+              << "  likely_next=" << regime_transition.most_likely_next()
+              << "  prob=" << std::fixed << std::setprecision(3) << regime_transition.most_likely_prob()
+              << "  rec=" << regime_transition.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_REVERSAL_DETECTOR_ENABLED
+    std::cout << "  Reversal         : "
+              << "last=" << reversal_detector.last_reversal_direction()
+              << "  bull=" << reversal_detector.bullish_reversals()
+              << "  bear=" << reversal_detector.bearish_reversals()
+              << "  rec=" << reversal_detector.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_TSMI_ENABLED
+    std::cout << "  TSMI             : "
+              << std::fixed << std::setprecision(4) << tsmi.tsmi()
+              << "  vel=" << tsmi.velocity()
+              << "  acc=" << tsmi.acceleration()
+              << "  ssi=" << std::setprecision(1) << tsmi.signal_strength()
+              << "  rec=" << tsmi.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED
+    std::cout << "  Adaptive Thresh  : "
+              << "OB=" << std::fixed << std::setprecision(1) << adaptive_threshold.overbought_threshold()
+              << "  OS=" << adaptive_threshold.oversold_threshold()
+              << "  sigma=" << std::setprecision(4) << adaptive_threshold.rolling_sigma()
+              << "  changes=" << adaptive_threshold.change_events()
+              << "  obs=" << adaptive_threshold.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CONDITIONAL_DIST_ENABLED
+    std::cout << "  Cond Dist        : "
+              << "tv=" << std::fixed << std::setprecision(3) << conditional_dist.tv_distance()
+              << "  asym=" << (conditional_dist.is_asymmetric() ? "YES" : "no")
+              << "  obs=" << conditional_dist.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_COMPRESSOR_ENABLED
+    std::cout << "  LZ Compressor    : "
+              << "lzc=" << signal_compressor.lz_complexity()
+              << "  norm=" << std::fixed << std::setprecision(3) << signal_compressor.normalised_complexity()
+              << "  obs=" << signal_compressor.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ROLLING_QUANTILE_ENABLED
+    std::cout << "  Rolling Quantile : "
+              << "P10=" << std::fixed << std::setprecision(3) << rolling_quantile.p10()
+              << "  P50=" << rolling_quantile.p50()
+              << "  P90=" << rolling_quantile.p90()
+              << "  IQR=" << rolling_quantile.iqr()
+              << "  skew=" << std::setprecision(3) << rolling_quantile.skew_ratio()
+              << "  obs=" << rolling_quantile.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_AUTOREGRESSOR_ENABLED
+    std::cout << "  AR Model         : "
+              << "pred=" << std::fixed << std::setprecision(4) << signal_ar.last_prediction()
+              << "  err=" << std::setprecision(4) << signal_ar.last_prediction_error()
+              << "  spikes=" << signal_ar.spike_events()
+              << "  obs=" << signal_ar.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_PHASE_SPACE_ENABLED
+    {
+        auto dom = phase_space.dominant_cell();
+        std::cout << "  Phase Space      : "
+                  << "dom=(" << dom.row << "," << dom.col << ")"
+                  << "  entropy=" << std::fixed << std::setprecision(3) << phase_space.occupancy_entropy()
+                  << "  shifts=" << phase_space.shift_events()
+                  << "  obs=" << phase_space.total_records() << "\n";
+    }
+#endif
+#ifdef LLMQUANT_TOPOLOGY_MAPPER_ENABLED
+    std::cout << "  Topology         : "
+              << "components=" << topology_mapper.component_count()
+              << "  total_pers=" << std::fixed << std::setprecision(3) << topology_mapper.total_persistence()
+              << "  changes=" << topology_mapper.topology_events()
+              << "  obs=" << topology_mapper.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_INFORMATION_GAIN_ENABLED
+    std::cout << "  Info Gain        : "
+              << "MI=" << std::fixed << std::setprecision(4) << info_gain.mutual_information()
+              << "  NMI=" << std::setprecision(3) << info_gain.normalised_mi()
+              << "  changes=" << info_gain.mi_change_events()
+              << "  obs=" << info_gain.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_DRIFT_ENABLED
+    std::cout << "  Narrative Drift  : "
+              << "U=" << std::fixed << std::setprecision(4) << narrative_drift.upward_stat()
+              << "  D=" << std::setprecision(4) << narrative_drift.downward_stat()
+              << "  mean=" << narrative_drift.running_mean()
+              << "  up_alarms=" << narrative_drift.upward_alarms()
+              << "  dn_alarms=" << narrative_drift.downward_alarms()
+              << "  obs=" << narrative_drift.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
+    {
+        auto hubs = sentiment_graph.top_hubs();
+        std::cout << "  Sent Graph       : "
+                  << "hubs=[" << hubs[0] << "," << hubs[1] << "," << hubs[2] << "]"
+                  << "  obs=" << sentiment_graph.total_records() << "\n";
+    }
+#endif
+#ifdef LLMQUANT_KALMAN_FILTER_ENABLED
+    std::cout << "  Kalman Filter    : "
+              << "x_hat=" << std::fixed << std::setprecision(4) << kalman_filter.filtered_bias()
+              << "  innov=" << kalman_filter.innovation()
+              << "  NIS=" << std::setprecision(3) << kalman_filter.nis()
+              << "  K=" << kalman_filter.kalman_gain()
+              << "  mismatches=" << kalman_filter.mismatch_events()
+              << "  obs=" << kalman_filter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
+    std::cout << "  Spectral Entropy : "
+              << "H_s=" << std::fixed << std::setprecision(4) << spectral_entropy.spectral_entropy()
+              << "  norm=" << std::setprecision(3) << spectral_entropy.normalised_entropy()
+              << "  changes=" << spectral_entropy.change_events()
+              << "  obs=" << spectral_entropy.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
+    std::cout << "  Bootstrap CI     : "
+              << "[" << std::fixed << std::setprecision(3) << bootstrap_ci.ci_lo()
+              << ", " << bootstrap_ci.ci_hi() << "]"
+              << "  width=" << bootstrap_ci.ci_width()
+              << "  mean=" << bootstrap_ci.rolling_mean()
+              << "  wide_events=" << bootstrap_ci.wide_events()
+              << "  obs=" << bootstrap_ci.total_records() << "\n";
 #endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
@@ -5268,6 +6130,95 @@ int main(int argc, char* argv[]) {
               << "  min=" << coverage_meter.rolling_min()
               << "  max=" << coverage_meter.rolling_max()
               << "  expanded=" << (coverage_meter.is_expanded() ? "YES" : "no") << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_HYSTERESIS_ENABLED
+    std::cout << "  Hysteresis Gate  : "
+              << "open=" << (hysteresis_gate.is_open() ? "YES" : "no")
+              << "  ticks=" << hysteresis_gate.consecutive_ticks()
+              << "  opens=" << hysteresis_gate.gate_open_events()
+              << "  closes=" << hysteresis_gate.gate_close_events()
+              << "  evals=" << hysteresis_gate.total_evaluated() << "\n";
+#endif
+#ifdef LLMQUANT_REALIZED_VOL_ENABLED
+    std::cout << "  Realized Vol     : "
+              << std::fixed << std::setprecision(4) << realized_vol.realized_vol()
+              << "  high=" << (realized_vol.is_high_volatility() ? "YES" : "no")
+              << "  alerts=" << realized_vol.alert_events()
+              << "  obs=" << realized_vol.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CAUSAL_TRACER_ENABLED
+    std::cout << "  Causal Tracer    : "
+              << "max_contrib=" << std::fixed << std::setprecision(4) << causal_tracer.max_contribution()
+              << "  strong=" << causal_tracer.strong_token_events()
+              << "  tokens=" << causal_tracer.total_tokens() << "\n";
+#endif
+#ifdef LLMQUANT_DEPENDENCY_MAPPER_ENABLED
+    std::cout << "  Dep Mapper       : "
+              << "total_tok=" << dep_mapper.total_tokens()
+              << "  clusters=" << dep_mapper.cluster_events() << "\n";
+#endif
+#ifdef LLMQUANT_FREQ_ANALYSER_ENABLED
+    std::cout << "  Freq Analyser    : "
+              << "dom_k=" << freq_analyser.dominant_k()
+              << "  freq=" << std::fixed << std::setprecision(4) << freq_analyser.dominant_frequency()
+              << "  power=" << std::setprecision(4) << freq_analyser.dominant_power()
+              << "  obs=" << freq_analyser.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ENTROPY_RATCHET_ENABLED
+    std::cout << "  Entropy Ratchet  : "
+              << "h=" << std::fixed << std::setprecision(4) << entropy_ratchet.entropy()
+              << "  floor=" << std::setprecision(4) << entropy_ratchet.entropy_floor()
+              << "  spiked=" << (entropy_ratchet.is_spiked() ? "YES" : "no")
+              << "  spikes=" << entropy_ratchet.spike_events()
+              << "  obs=" << entropy_ratchet.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_COHERENCE_SCORER_ENABLED
+    std::cout << "  Coherence Scorer : "
+              << std::fixed << std::setprecision(3) << coherence_scorer.coherence()
+              << "  incoherent=" << (coherence_scorer.is_incoherent() ? "YES" : "no")
+              << "  mu=" << std::setprecision(4) << coherence_scorer.rolling_mean()
+              << "  sigma=" << std::setprecision(4) << coherence_scorer.rolling_stddev()
+              << "  obs=" << coherence_scorer.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_TOKEN_CORR_ENABLED
+    std::cout << "  Cross Corr       : "
+              << "r(0,1)=" << std::fixed << std::setprecision(3) << cross_corr.correlation(0, 1)
+              << "  obs=" << cross_corr.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_SIZER_ENABLED
+    std::cout << "  Adaptive Sizer   : "
+              << "mult=" << std::fixed << std::setprecision(3) << pos_sizer.multiplier()
+              << "  changes=" << pos_sizer.change_events() << "\n";
+#endif
+#ifdef LLMQUANT_CLIP_MONITOR_ENABLED
+    std::cout << "  Clip Monitor     : "
+              << "rate=" << std::fixed << std::setprecision(3) << clip_monitor.clip_rate()
+              << "  clips=" << clip_monitor.clip_count()
+              << "  spiking=" << (clip_monitor.is_spiking() ? "YES" : "no")
+              << "  obs=" << clip_monitor.observation_count() << "\n";
+#endif
+#ifdef LLMQUANT_INTENSITY_RAMP_ENABLED
+    std::cout << "  Intensity Ramp   : "
+              << "intensity=" << std::fixed << std::setprecision(4) << intensity_ramp.intensity()
+              << "  ramp=" << std::setprecision(4) << intensity_ramp.ramp()
+              << "  score=" << std::setprecision(3) << intensity_ramp.ramp_score()
+              << "  surging=" << (intensity_ramp.is_surging() ? "YES" : "no")
+              << "  fading=" << (intensity_ramp.is_fading() ? "YES" : "no") << "\n";
+#endif
+#ifdef LLMQUANT_ZSCORE_TRACKER_ENABLED
+    std::cout << "  Z-Score Tracker  : "
+              << "z=" << std::fixed << std::setprecision(3) << zscore_tracker.z_score()
+              << "  mu=" << std::setprecision(4) << zscore_tracker.rolling_mean()
+              << "  sigma=" << std::setprecision(4) << zscore_tracker.rolling_sigma()
+              << "  extreme=" << (zscore_tracker.is_extreme() ? "YES" : "no")
+              << "  obs=" << zscore_tracker.observation_count() << "\n";
+#endif
+#ifdef LLMQUANT_CONFLUENCE_DETECTOR_ENABLED
+    std::cout << "  Confluence       : "
+              << "score=" << std::fixed << std::setprecision(3) << confluence.confluence_score()
+              << "  dir=" << confluence.dominant_direction()
+              << "  confluent=" << (confluence.is_confluent() ? "YES" : "no")
+              << "  obs=" << confluence.observation_count() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
@@ -5515,7 +6466,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  [json:change_point] " << change_point_detector.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
-        std::cout << "  [json:velocity_breaker] " << velocity_breaker.to_stats_json() << "\n";
+        std::cout << "  [json:velocity_breaker] " << bias_vbreaker.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_IR_TRACKER_ENABLED
         std::cout << "  [json:ir_tracker] " << ir_tracker.to_stats_json() << "\n";
@@ -5541,11 +6492,104 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_COVERAGE_METER_ENABLED
         std::cout << "  [json:coverage]   " << coverage_meter.to_stats_json() << "\n";
 #endif
+#ifdef LLMQUANT_BIAS_HYSTERESIS_ENABLED
+        std::cout << "  [json:hysteresis] " << hysteresis_gate.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REALIZED_VOL_ENABLED
+        std::cout << "  [json:realized_vol] " << realized_vol.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CAUSAL_TRACER_ENABLED
+        std::cout << "  [json:causal]     " << causal_tracer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_DEPENDENCY_MAPPER_ENABLED
+        std::cout << "  [json:dep_mapper] " << dep_mapper.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_FREQ_ANALYSER_ENABLED
+        std::cout << "  [json:freq]       " << freq_analyser.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ENTROPY_RATCHET_ENABLED
+        std::cout << "  [json:entropy]    " << entropy_ratchet.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_COHERENCE_SCORER_ENABLED
+        std::cout << "  [json:coherence]  " << coherence_scorer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_TOKEN_CORR_ENABLED
+        std::cout << "  [json:cross_corr] " << cross_corr.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_SIZER_ENABLED
+        std::cout << "  [json:pos_sizer]  " << pos_sizer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CLIP_MONITOR_ENABLED
+        std::cout << "  [json:clip]       " << clip_monitor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_INTENSITY_RAMP_ENABLED
+        std::cout << "  [json:intensity]  " << intensity_ramp.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ZSCORE_TRACKER_ENABLED
+        std::cout << "  [json:zscore]     " << zscore_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONFLUENCE_DETECTOR_ENABLED
+        std::cout << "  [json:confluence] " << confluence.to_stats_json() << "\n";
+#endif
 #ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
         std::cout << "  [json:multi_feed] " << multi_feed_agg.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
         std::cout << "  [json:cusum]      " << signal_cusum.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MOMENTUM_INDEX_ENABLED
+        std::cout << "  [json:momentum]   " << momentum_index.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_GAIN_LOSS_RATIO_ENABLED
+        std::cout << "  [json:gain_loss]  " << gain_loss_ratio.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED
+        std::cout << "  [json:regime_mat] " << regime_transition.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REVERSAL_DETECTOR_ENABLED
+        std::cout << "  [json:reversal]   " << reversal_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TSMI_ENABLED
+        std::cout << "  [json:tsmi]       " << tsmi.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED
+        std::cout << "  [json:adapt_thr]  " << adaptive_threshold.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONDITIONAL_DIST_ENABLED
+        std::cout << "  [json:cond_dist]  " << conditional_dist.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_COMPRESSOR_ENABLED
+        std::cout << "  [json:compressor] " << signal_compressor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ROLLING_QUANTILE_ENABLED
+        std::cout << "  [json:quantile]   " << rolling_quantile.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_AUTOREGRESSOR_ENABLED
+        std::cout << "  [json:ar_model]   " << signal_ar.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PHASE_SPACE_ENABLED
+        std::cout << "  [json:phase_space]" << phase_space.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOPOLOGY_MAPPER_ENABLED
+        std::cout << "  [json:topology]   " << topology_mapper.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_INFORMATION_GAIN_ENABLED
+        std::cout << "  [json:info_gain]  " << info_gain.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_DRIFT_ENABLED
+        std::cout << "  [json:narr_drift] " << narrative_drift.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
+        std::cout << "  [json:sent_graph] " << sentiment_graph.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_KALMAN_FILTER_ENABLED
+        std::cout << "  [json:kalman]     " << kalman_filter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
+        std::cout << "  [json:spectral]   " << spectral_entropy.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
+        std::cout << "  [json:bootstrap]  " << bootstrap_ci.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

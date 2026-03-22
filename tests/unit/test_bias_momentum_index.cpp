@@ -65,8 +65,10 @@ TEST(BiasMomentumIndex, BearishCrossoverCallback) {
     std::atomic<int> fires{0};
     cfg.on_bearish_crossover = [&](double) { ++fires; };
     BiasMomentumIndex m(cfg);
-    for (int i = 0; i < 30; ++i) m.record(0.5);
-    for (int i = 0; i < 30; ++i) m.record(-static_cast<double>(i) * 0.03);
+    // Build bullish state: fast EMA rises faster than slow EMA.
+    for (int i = 0; i < 60; ++i) m.record(static_cast<double>(i) * 0.02);
+    // Reverse sharply: fast EMA falls faster, MACD crosses below signal line.
+    for (int i = 0; i < 60; ++i) m.record(1.0 - static_cast<double>(i) * 0.05);
     EXPECT_GE(fires.load(), 1);
 }
 

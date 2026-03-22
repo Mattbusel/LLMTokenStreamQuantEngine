@@ -146,6 +146,9 @@ void BiasConditionalDistribution::update_config(const Config& cfg) {
     neg_head_ = neg_fill_ = 0;
     seeded_ = false;
     prev_asymmetric_ = false;
+    tv_.store(0.0, std::memory_order_relaxed);
+    asymmetric_.store(false, std::memory_order_relaxed);
+    total_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

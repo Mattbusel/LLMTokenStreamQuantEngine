@@ -159,9 +159,13 @@ void TokenBiasPhaseSpace::update_config(const Config& cfg) {
     ring_.assign(static_cast<std::size_t>(w), 0);
     grid_.assign(static_cast<std::size_t>(g * g), 0);
     ring_head_ = ring_fill_ = 0;
-    seeded_       = false;
-    prev_dominant_= -1;
-    cfg_grid_size_.store(g, std::memory_order_relaxed);
+    seeded_        = false;
+    prev_dominant_ = -1;
+    cfg_grid_size_.store(g,   std::memory_order_relaxed);
+    dominant_packed_.store(0, std::memory_order_relaxed);
+    entropy_.store(0.0,       std::memory_order_relaxed);
+    shift_events_.store(0,    std::memory_order_relaxed);
+    total_.store(0,           std::memory_order_relaxed);
 }
 
 } // namespace llmquant
