@@ -107,7 +107,7 @@ jobs:
         run: |
           clang-format --dry-run --Werror \
             src/*.cpp include/*.h \
-            tests/unit/*.cpp tests/integration/*.cpp tests/perf/*.cpp
+            tests/unit/*.cpp tests/integration/*.cpp tests/performance/*.cpp
 
   minimal:
     name: Minimal build (all optional features OFF)

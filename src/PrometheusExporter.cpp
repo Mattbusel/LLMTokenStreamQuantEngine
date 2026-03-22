@@ -263,7 +263,8 @@ std::string PrometheusExporter::format_histogram(const std::string& name,
         ss << "# TYPE " << name << " histogram\n";
     }
     for (const auto& b : buckets) {
-        if (std::isinf(b.upper_bound_us)) continue;  // +Inf is emitted explicitly below
+        // +Inf is emitted explicitly below; NaN is not a valid le= value — skip both.
+        if (!std::isfinite(b.upper_bound_us)) continue;
         ss << name << "_bucket{le=\"" << b.upper_bound_us << "\"} " << b.count << "\n";
     }
     ss << name << "_bucket{le=\"+Inf\"} " << count << "\n";

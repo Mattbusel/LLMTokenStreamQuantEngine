@@ -9,10 +9,16 @@
 namespace llmquant {
 
 LatencyController::LatencyController(const Config& config) : config_(config) {
+#ifdef LLMQUANT_PROFILING_ENABLED
     // Pre-allocate the ring buffer to its full capacity so writes never reallocate.
     latency_samples_.assign(config_.sample_window, std::chrono::microseconds{0});
     // Reserve the scratch buffer once so get_stats() never allocates on the heap.
     percentile_scratch_.reserve(config_.sample_window);
+#else
+    // Profiling compiled out — force enable_profiling off so all runtime guards
+    // (if config_.enable_profiling) become dead-code that the optimizer elides.
+    config_.enable_profiling = false;
+#endif
 }
 
 void LatencyController::start_measurement() {
@@ -195,12 +201,20 @@ void LatencyController::update_config(const Config& config) {
     std::lock_guard<std::mutex> lock(samples_mutex_);
     bool window_changed = (config.sample_window != config_.sample_window);
     config_ = config;
+#ifndef LLMQUANT_PROFILING_ENABLED
+    // Keep profiling forced off regardless of what the hot-reload config says.
+    config_.enable_profiling = false;
+#endif
+#ifdef LLMQUANT_PROFILING_ENABLED
     if (window_changed) {
         latency_samples_.assign(config_.sample_window, std::chrono::microseconds{0});
         percentile_scratch_.reserve(config_.sample_window);
         sample_head_  = 0;
         sample_count_ = 0;
     }
+#else
+    (void)window_changed;
+#endif
 }
 
 void LatencyController::record_batch(const std::vector<std::chrono::microseconds>& latencies) {

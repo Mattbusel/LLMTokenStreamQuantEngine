@@ -1731,5 +1731,39 @@ TEST(TradeSignalEngineTest, test_suppression_breakdown_resets_on_reset) {
     EXPECT_EQ(bd.total,               0u);
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 28: zero-confidence edge case
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_zero_confidence_weight_is_noise_filtered) {
+    // A SemanticWeight with confidence = 0 should never produce a signal
+    // because the resulting signal confidence falls below any positive threshold.
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_confidence_threshold = 0.01;  // any positive threshold
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    engine.process_semantic_weight({0.0, 0.0, 0.0, 0.0});  // all-zero weight
+    EXPECT_EQ(emitted.load(), 0)
+        << "zero-confidence SemanticWeight must not produce a signal";
+}
+
+TEST(TradeSignalEngineTest, test_signals_suppressed_increments_on_noise_filter) {
+    // Verify the signals_suppressed counter increments when a token is noise-filtered.
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 0.9;  // very high threshold — zero-weight token is filtered
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    const uint64_t before = engine.get_stats().signals_suppressed.load();
+    engine.process_semantic_weight({0.0, 0.0, 0.0, 0.0});
+    EXPECT_GT(engine.get_stats().signals_suppressed.load(), before)
+        << "signals_suppressed must increment after a noise-filtered token";
+}
+
 } // namespace
 } // namespace llmquant
