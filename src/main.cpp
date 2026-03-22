@@ -222,6 +222,12 @@
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
 #  include "CausalImpactEstimator.h"
 #endif
+#ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
+#  include "OptionsFlowSentimentBridge.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+#  include "SentimentPhasePortrait.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1920,6 +1926,26 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+    // SentimentPhasePortrait: treats (bias, velocity) as a 2-D dynamical system.
+    // Discretises the phase plane into an N×N grid; tracks dwell time, attractors
+    // and period-2 cycles in the trajectory.
+    llmquant::SentimentPhasePortrait phase_portrait;
+    {
+        llmquant::SentimentPhasePortrait::Config pp_cfg;
+        pp_cfg.grid_size           = 8;
+        pp_cfg.attractor_threshold = 0.15;
+        pp_cfg.min_visits          = 10;
+        pp_cfg.on_attractor_change = [](int r, int c) {
+            spdlog::info("[phase] attractor → ({}, {})", r, c);
+        };
+        pp_cfg.on_cycle_detected = [](int r1, int c1, int r2, int c2) {
+            spdlog::warn("[phase] CYCLE ({},{})↔({},{})", r1, c1, r2, c2);
+        };
+        phase_portrait.update_config(pp_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
     // CausalImpactEstimator: CUSUM structural-break detector — attributes
     // return regime shifts to preceding LLM sentiment events.
@@ -1936,6 +1962,34 @@ int main(int argc, char* argv[]) {
                          stat, label.empty() ? "<none>" : label, impact);
         };
         causal_impact.update_config(ci_causal_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
+    // OptionsFlowSentimentBridge: detects divergence between LLM sentiment
+    // velocity and options IV skew.  Smart-money bear: narrative bullish but
+    // IV skew widening.  Smart-money bull: narrative bearish but calls bid.
+    // record_skew() would be driven by a real options feed; here we seed a
+    // neutral skew so the detector is ready to accept live updates.
+    llmquant::OptionsFlowSentimentBridge options_flow_bridge;
+    {
+        llmquant::OptionsFlowSentimentBridge::Config ofb_cfg;
+        ofb_cfg.velocity_alpha = 0.15;
+        ofb_cfg.skew_alpha     = 0.20;
+        ofb_cfg.div_threshold  = 0.03;
+        ofb_cfg.hysteresis     = 0.30;
+        ofb_cfg.min_warmup     = 15;
+        ofb_cfg.on_divergence  = [](llmquant::OptionsFlowSentimentBridge::DivergenceKind kind,
+                                    double score, double vel, double skew) {
+            const char* label = "NONE";
+            if (kind == llmquant::OptionsFlowSentimentBridge::DivergenceKind::SmartMoneyBear)
+                label = "SMART_MONEY_BEAR";
+            else if (kind == llmquant::OptionsFlowSentimentBridge::DivergenceKind::SmartMoneyBull)
+                label = "SMART_MONEY_BULL";
+            spdlog::warn("[options_flow] divergence={} score={:.4f} vel={:.4f} skew={:.4f}",
+                         label, score, vel, skew);
+        };
+        options_flow_bridge.update_config(ofb_cfg);
     }
 #endif
 
@@ -2424,10 +2478,27 @@ int main(int argc, char* argv[]) {
         sentiment_persistence.record(signal.delta_bias_shift);
 #endif
 
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+        // Plot the signal on the (bias, velocity) phase plane.
+        phase_portrait.record(signal.delta_bias_shift);
+#endif
+
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
         // Record the signal as a sentiment event sentinel for causal attribution.
         // Return observations should be fed from the OMS P&L callback in production.
         causal_impact.record_event("signal:" + std::to_string(signal.delta_bias_shift));
+#endif
+#ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
+        // Feed current aggregated bias and elapsed time into the IV-skew divergence
+        // detector.  A live options feed would also call record_skew() separately.
+        {
+            static auto ofb_last_t = std::chrono::steady_clock::now();
+            auto ofb_now = std::chrono::steady_clock::now();
+            double ofb_dt = std::chrono::duration<double>(ofb_now - ofb_last_t).count();
+            ofb_last_t = ofb_now;
+            if (ofb_dt > 0.0)
+                options_flow_bridge.record_bias(signal.delta_bias_shift, ofb_dt);
+        }
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3557,6 +3628,17 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+                      << [&]() -> std::string {
+                            int r = phase_portrait.current_row();
+                            int c = phase_portrait.current_col();
+                            bool cyc = phase_portrait.cycle_detected();
+                            std::ostringstream o;
+                            o << "  PHS:" << C("\033[36m") << r << "," << c << C("\033[0m");
+                            if (cyc) o << C("\033[33m") << "~" << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -4053,12 +4135,37 @@ int main(int argc, char* argv[]) {
               << "  transitions=" << sentiment_persistence.state_changes()
               << "  records=" << sentiment_persistence.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+    std::cout << "  Phase portrait   : "
+              << "cell=(" << phase_portrait.current_row() << "," << phase_portrait.current_col() << ")"
+              << "  attractor=(" << phase_portrait.attractor_row() << "," << phase_portrait.attractor_col() << ")"
+              << "  cycle=" << (phase_portrait.cycle_detected() ? "YES" : "no")
+              << "  divergence=" << std::fixed << std::setprecision(4) << phase_portrait.divergence_index()
+              << "  transitions=" << phase_portrait.cell_transitions()
+              << "  records=" << phase_portrait.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
     std::cout << "  Causal impact    : "
               << "cusum=" << std::fixed << std::setprecision(4) << causal_impact.cusum_stat()
               << "  break=" << (causal_impact.break_detected() ? "YES" : "no")
               << "  breaks=" << causal_impact.break_count()
               << "  obs=" << causal_impact.observation_count() << "\n";
+#endif
+#ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
+    {
+        const char* div_label = "none";
+        auto dk = options_flow_bridge.last_divergence();
+        if (dk == llmquant::OptionsFlowSentimentBridge::DivergenceKind::SmartMoneyBear)
+            div_label = "SMART_MONEY_BEAR";
+        else if (dk == llmquant::OptionsFlowSentimentBridge::DivergenceKind::SmartMoneyBull)
+            div_label = "SMART_MONEY_BULL";
+        std::cout << "  Options flow     : "
+                  << "divergence=" << div_label
+                  << "  score=" << std::fixed << std::setprecision(4) << options_flow_bridge.divergence_score()
+                  << "  vel_ema=" << options_flow_bridge.sentiment_velocity_ema()
+                  << "  skew_ema=" << options_flow_bridge.skew_ema()
+                  << "  events=" << options_flow_bridge.divergence_count() << "\n";
+    }
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
@@ -4227,6 +4334,15 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         std::cout << "  [json:markov]     " << sentiment_persistence.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+        std::cout << "  [json:phase]      " << phase_portrait.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
+        std::cout << "  [json:causal]     " << causal_impact.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
+        std::cout << "  [json:optflow]    " << options_flow_bridge.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

@@ -132,6 +132,7 @@ void EnsembleSignalVoter::next_epoch() {
     std::lock_guard<std::mutex> lk(mutex_);
     for (auto& v : voters_) { v.has_voted = false; v.current_vote = 0.0; }
     ++epoch_;
+    last_result_.epoch = epoch_;  // keep last_consensus() epoch consistent
 }
 
 EnsembleSignalVoter::ConsensusResult

@@ -111,6 +111,11 @@ option(LLMQUANT_ENABLE_TOKEN_RECORDER               "Build TokenStreamRecorder: 
 option(LLMQUANT_ENABLE_ENSEMBLE_VOTER               "Build EnsembleSignalVoter: weighted vote aggregation (majority/confidence/rank) across multiple named signal sub-models" ON)
 option(LLMQUANT_ENABLE_SENTIMENT_PERSISTENCE        "Build SentimentPersistenceMatrix: Markov-chain model of discretised bias states with transition-probability matrix and stationary distribution" ON)
 option(LLMQUANT_ENABLE_CAUSAL_IMPACT                "Build CausalImpactEstimator: CUSUM structural-break detector that attributes return regime shifts to preceding sentiment events" ON)
+option(LLMQUANT_ENABLE_OPTIONS_FLOW_BRIDGE          "Build OptionsFlowSentimentBridge: detects divergence between LLM sentiment velocity and options IV skew for smart-money signals" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_PHASE_PORTRAIT     "Build SentimentPhasePortrait: 2-D phase-plane analyser of (bias, velocity) dynamics with attractor and cycle detection" ON)
+option(LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER   "Build NarrativeTopicClassifier: lightweight topic-tagging of token streams for multi-theme signal routing" ON)
+option(LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR     "Build TokenClockRecalibrator: detects drift between token-stream timestamps and wall-clock time, compensates token weights" ON)
+option(LLMQUANT_ENABLE_SHADOW_PORTFOLIO             "Build SignalShadowPortfolio: paper-trades every signal in parallel to measure P&L drag from risk constraints" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1052,6 +1057,50 @@ if(LLMQUANT_ENABLE_CAUSAL_IMPACT)
     message(STATUS "Feature: CausalImpactEstimator ENABLED (CUSUM sentiment→return causality)")
 else()
     message(STATUS "Feature: CausalImpactEstimator DISABLED (LLMQUANT_ENABLE_CAUSAL_IMPACT=OFF)")
+endif()
+
+if(LLMQUANT_ENABLE_OPTIONS_FLOW_BRIDGE)
+    target_sources(llmquant PRIVATE src/OptionsFlowSentimentBridge.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED)
+    message(STATUS "Feature: OptionsFlowSentimentBridge ENABLED (IV skew vs sentiment velocity divergence)")
+else()
+    message(STATUS "Feature: OptionsFlowSentimentBridge DISABLED (LLMQUANT_ENABLE_OPTIONS_FLOW_BRIDGE=OFF)")
+endif()
+
+# SentimentPhasePortrait: 2-D phase-plane (bias, velocity) attractor/cycle analysis.
+if(LLMQUANT_ENABLE_SENTIMENT_PHASE_PORTRAIT)
+    target_sources(llmquant PRIVATE src/SentimentPhasePortrait.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED)
+    message(STATUS "Feature: SentimentPhasePortrait ENABLED (2-D phase-plane dynamics)")
+else()
+    message(STATUS "Feature: SentimentPhasePortrait DISABLED (LLMQUANT_ENABLE_SENTIMENT_PHASE_PORTRAIT=OFF)")
+endif()
+
+# NarrativeTopicClassifier: lightweight topic tagging for multi-theme signal routing.
+if(LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER)
+    target_sources(llmquant PRIVATE src/NarrativeTopicClassifier.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED)
+    message(STATUS "Feature: NarrativeTopicClassifier ENABLED (multi-theme token routing)")
+else()
+    message(STATUS "Feature: NarrativeTopicClassifier DISABLED (LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER=OFF)")
+endif()
+
+# TokenClockRecalibrator: detects token-stream clock drift and compensates.
+if(LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR)
+    target_sources(llmquant PRIVATE src/TokenClockRecalibrator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED)
+    message(STATUS "Feature: TokenClockRecalibrator ENABLED (clock drift compensation)")
+else()
+    message(STATUS "Feature: TokenClockRecalibrator DISABLED (LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR=OFF)")
+endif()
+
+# SignalShadowPortfolio: paper-trades every signal in parallel for P&L drag attribution.
+if(LLMQUANT_ENABLE_SHADOW_PORTFOLIO)
+    target_sources(llmquant PRIVATE src/SignalShadowPortfolio.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SHADOW_PORTFOLIO_ENABLED)
+    message(STATUS "Feature: SignalShadowPortfolio ENABLED (shadow P&L vs live attribution)")
+else()
+    message(STATUS "Feature: SignalShadowPortfolio DISABLED (LLMQUANT_ENABLE_SHADOW_PORTFOLIO=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
