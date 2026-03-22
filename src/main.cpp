@@ -8,7 +8,9 @@
 #include "Deduplicator.h"
 #include "LLMStreamClient.h"
 #include "OmsAdapter.h"
-#include "RestOmsAdapter.h"
+#ifdef LLMQUANT_REST_OMS_ENABLED
+#  include "RestOmsAdapter.h"
+#endif
 #ifdef LLMQUANT_FIX_OMS_ENABLED
 #  include "FixOmsAdapter.h"
 #endif
@@ -533,6 +535,7 @@ int main(int argc, char* argv[]) {
                       "(LLMQUANT_ENABLE_FIX_OMS=OFF). Falling back to MockOmsAdapter.");
 #endif
     } else if (!oms_address.empty()) {
+#ifdef LLMQUANT_REST_OMS_ENABLED
         std::string endpoint = oms_address;
         llmquant::RestOmsAdapter::Config oms_cfg;
         size_t colon = endpoint.find(':');
@@ -544,6 +547,10 @@ int main(int argc, char* argv[]) {
             oms_cfg.host = endpoint;
         }
         oms_adapter = std::make_unique<llmquant::RestOmsAdapter>(oms_cfg);
+#else
+        spdlog::error("--oms requested but REST OMS support was disabled at build time "
+                      "(LLMQUANT_ENABLE_REST_OMS=OFF). Falling back to MockOmsAdapter.");
+#endif
     } else {
         auto mock = std::make_unique<llmquant::MockOmsAdapter>();
         mock->load_states({
@@ -1020,8 +1027,10 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_oms_update_count_total Total successful OMS position updates\n"
                  << "# TYPE llmquant_oms_update_count_total counter\n"
                  << "llmquant_oms_update_count_total " << [&]() -> uint64_t {
+#ifdef LLMQUANT_REST_OMS_ENABLED
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->update_count();
+#endif
 #ifdef LLMQUANT_FIX_OMS_ENABLED
                         if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
                             return fix->update_count();
@@ -1031,8 +1040,10 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_oms_error_count_total Total OMS connection errors\n"
                  << "# TYPE llmquant_oms_error_count_total counter\n"
                  << "llmquant_oms_error_count_total " << [&]() -> uint64_t {
+#ifdef LLMQUANT_REST_OMS_ENABLED
                         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get()))
                             return rest->error_count();
+#endif
 #ifdef LLMQUANT_FIX_OMS_ENABLED
                         if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get()))
                             return fix->error_count();
@@ -1411,14 +1422,19 @@ int main(int argc, char* argv[]) {
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
+#ifdef LLMQUANT_REST_OMS_ENABLED
         if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get())) {
             std::cout << "  OMS updates      : " << rest->update_count()
                       << "  errors=" << rest->error_count() << "\n";
-        } else if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get())) {
+        } else
+#endif
+#ifdef LLMQUANT_FIX_OMS_ENABLED
+        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get())) {
             std::cout << "  OMS updates      : " << fix->update_count()
                       << "  errors=" << fix->error_count()
                       << "  reconnects=" << fix->get_reconnect_count() << "\n";
         }
+#endif
     }
     {
         auto top = llm_adapter.top_tokens_by_frequency(5);
