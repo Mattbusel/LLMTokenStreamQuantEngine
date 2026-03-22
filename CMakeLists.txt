@@ -48,8 +48,11 @@ option(LLMQUANT_ENABLE_PARAMETER_SWEEP   "Build ParameterSweep: grid-search opti
 option(LLMQUANT_ENABLE_ALERT_DISPATCHER  "Build AlertDispatcher: async non-blocking alert delivery with dedup window and pluggable sinks" ON)
 option(LLMQUANT_ENABLE_ENTROPY_METER     "Build TokenEntropyMeter: Shannon entropy of the token sentiment stream for confidence scaling" ON)
 option(LLMQUANT_ENABLE_LATENCY_ENFORCER  "Build LatencyBudgetEnforcer: tiered SLA enforcement (Warn/Throttle/Drop/Breaker) on p99 latency" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_MOMENTUM_FILTER "Build SentimentMomentumFilter: cross-validates trade signals against trajectory trend" ON)
 option(LLMQUANT_ENABLE_ENTROPY_MONITOR   "Build TokenEntropyMonitor: real-time Shannon entropy of token type diversity in a sliding hash window" ON)
-option(LLMQUANT_ENABLE_TRADING_HOURS     "Build TradingHoursGuard: NYSE/NASDAQ session-aware signal gating with DST-aware ET clock" ON)
+option(LLMQUANT_ENABLE_TRADING_HOURS        "Build TradingHoursGuard: NYSE/NASDAQ session-aware signal gating with DST-aware ET clock" ON)
+option(LLMQUANT_ENABLE_SIGNAL_CORRELATION   "Build SignalCorrelationTracker: rolling Pearson correlation across named signal sources" ON)
+option(LLMQUANT_ENABLE_WARMUP_SEQUENCER     "Build WarmupSequencer: pre-seed pipeline EMA accumulators with synthetic tokens before live streaming" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -450,6 +453,31 @@ if(LLMQUANT_ENABLE_TRADING_HOURS)
     message(STATUS "Feature: TradingHoursGuard ENABLED (NYSE/NASDAQ session-aware signal gating)")
 else()
     message(STATUS "Feature: TradingHoursGuard DISABLED (LLMQUANT_ENABLE_TRADING_HOURS=OFF)")
+endif()
+if(LLMQUANT_ENABLE_SENTIMENT_MOMENTUM_FILTER)
+    target_sources(llmquant PRIVATE src/SentimentMomentumFilter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED)
+    message(STATUS "Feature: SentimentMomentumFilter ENABLED (trajectory-validated signal gating)")
+else()
+    message(STATUS "Feature: SentimentMomentumFilter DISABLED (LLMQUANT_ENABLE_SENTIMENT_MOMENTUM_FILTER=OFF)")
+endif()
+
+# SignalCorrelationTracker: rolling Pearson correlation across named signal sources.
+if(LLMQUANT_ENABLE_SIGNAL_CORRELATION)
+    target_sources(llmquant PRIVATE src/SignalCorrelationTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_CORRELATION_ENABLED)
+    message(STATUS "Feature: SignalCorrelationTracker ENABLED (rolling Pearson correlation)")
+else()
+    message(STATUS "Feature: SignalCorrelationTracker DISABLED (LLMQUANT_ENABLE_SIGNAL_CORRELATION=OFF)")
+endif()
+
+# WarmupSequencer: pre-seed pipeline EMA accumulators with synthetic tokens.
+if(LLMQUANT_ENABLE_WARMUP_SEQUENCER)
+    target_sources(llmquant PRIVATE src/WarmupSequencer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_WARMUP_SEQUENCER_ENABLED)
+    message(STATUS "Feature: WarmupSequencer ENABLED (pre-seed EMA with synthetic tokens)")
+else()
+    message(STATUS "Feature: WarmupSequencer DISABLED (LLMQUANT_ENABLE_WARMUP_SEQUENCER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

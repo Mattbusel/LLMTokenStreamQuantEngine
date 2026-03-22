@@ -82,7 +82,7 @@ void TokenEntropyMonitor::update_config(const Config& config) {
     }
 }
 
-Config TokenEntropyMonitor::get_config() const {
+TokenEntropyMonitor::Config TokenEntropyMonitor::get_config() const {
     std::lock_guard<std::mutex> lk(mutex_);
     return config_;
 }

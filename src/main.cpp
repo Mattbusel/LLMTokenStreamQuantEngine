@@ -48,6 +48,18 @@
 #ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
 #  include "RegimeDetector.h"
 #endif
+#ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
+#  include "TokenEntropyMonitor.h"
+#endif
+#ifdef LLMQUANT_TRADING_HOURS_ENABLED
+#  include "TradingHoursGuard.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_CORRELATION_ENABLED
+#  include "SignalCorrelationTracker.h"
+#endif
+#ifdef LLMQUANT_WARMUP_SEQUENCER_ENABLED
+#  include "WarmupSequencer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -955,6 +967,12 @@ int main(int argc, char* argv[]) {
     }
 #endif // LLMQUANT_HOT_RELOAD_ENABLED
 
+#ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
+    // Rolling Shannon entropy of token type diversity.
+    // Declared before process_token lambda so the lambda can capture it by ref.
+    llmquant::TokenEntropyMonitor entropy_monitor;
+#endif
+
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
     // Stale-token watchdog: fires if no token arrives for >30 s (configurable).
     // Declared before process_token lambda so the lambda can capture it by ref.
@@ -974,6 +992,9 @@ int main(int argc, char* argv[]) {
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
+#ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
+        entropy_monitor.record(std::hash<std::string>{}(text));
+#endif
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
         stale_detector.record_token();
 #endif
@@ -1113,6 +1134,49 @@ int main(int argc, char* argv[]) {
     llmquant::RegimeDetector regime_detector;
 #endif
 
+#ifdef LLMQUANT_TRADING_HOURS_ENABLED
+    // Market-hours guard: blocks signals outside NYSE/NASDAQ regular session.
+    llmquant::TradingHoursGuard trading_hours_guard;
+    trading_hours_guard.update_config([]{
+        llmquant::TradingHoursGuard::Config cfg;
+        cfg.on_session_change = [](bool open) {
+            spdlog::info("[trading_hours] session {} — signal gate {}",
+                         open ? "OPEN" : "CLOSED",
+                         open ? "enabled" : "disabled");
+        };
+        return cfg;
+    }());
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CORRELATION_ENABLED
+    // Cross-source correlation tracker: watches for diverging/converging sources.
+    llmquant::SignalCorrelationTracker signal_corr;
+    signal_corr.set_divergence_callback([](const std::string& a, const std::string& b, double r) {
+        spdlog::warn("[signal_corr] DIVERGE {}<>{} r={:.3f} — sources moving oppositely", a, b, r);
+    });
+    signal_corr.set_convergence_callback([](const std::string& a, const std::string& b, double r) {
+        spdlog::info("[signal_corr] CONVERGE {}<>{} r={:.3f} — sources in agreement", a, b, r);
+    });
+#endif
+
+#ifdef LLMQUANT_WARMUP_SEQUENCER_ENABLED
+    // Pre-seed EMA accumulators with a short synthetic token burst.
+    {
+        llmquant::WarmupSequencer::Config wcfg;
+        wcfg.synthetic_tokens = {
+            {"bullish", 0.6}, {"rally",   0.5}, {"growth",  0.4},
+            {"neutral", 0.0}, {"concern", -0.3}, {"crash",  -0.7},
+            {"bearish", -0.5}, {"recover", 0.3}, {"stable",  0.1},
+        };
+        wcfg.repeat_count = 3;
+        wcfg.on_complete  = [] { spdlog::info("[warmup] EMA pre-seeding complete"); };
+        llmquant::WarmupSequencer warmup(wcfg);
+        warmup.run([&](const std::string& tok, double sent) {
+            llm_adapter.map_token(tok, sent);
+        });
+    }
+#endif
+
 // stale_detector already declared above (before the process_token lambda).
 
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
@@ -1162,6 +1226,18 @@ int main(int argc, char* argv[]) {
         regime_detector.update(signal.delta_bias_shift,
                                signal.volatility_adjustment,
                                !passed);
+#endif
+
+#ifdef LLMQUANT_TRADING_HOURS_ENABLED
+        // Block signals outside NYSE market hours.
+        if (passed && trading_hours_guard.should_block()) {
+            passed = false;
+        }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CORRELATION_ENABLED
+        // Track bias value under the "main" source for correlation monitoring.
+        signal_corr.record("main", signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -2110,6 +2186,20 @@ int main(int argc, char* argv[]) {
                             o << std::showpos << std::fixed << std::setprecision(2) << sharpe << C("\033[0m");
                             return o.str();
                          }()
+#ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
+                      << [&]() -> std::string {
+                            // Token entropy: 0=focused/repetitive, 1=uniform/noisy.
+                            double h     = entropy_monitor.entropy();
+                            bool focused = entropy_monitor.is_focused();
+                            std::ostringstream o;
+                            o << "  ENT:";
+                            if      (focused)  o << C("\033[32m");   // green  = focused
+                            else if (h > 0.75) o << C("\033[31m");   // red    = noisy
+                            else               o << C("\033[33m");   // yellow = mixed
+                            o << std::fixed << std::setprecision(2) << h << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -2255,6 +2345,19 @@ int main(int argc, char* argv[]) {
               << "  transitions=" << regime_detector.total_transitions()
               << "  momentum=" << std::fixed << std::setprecision(3)
               << regime_detector.get_momentum() << "\n";
+#endif
+#ifdef LLMQUANT_TRADING_HOURS_ENABLED
+    std::cout << "  Market hrs guard : "
+              << (trading_hours_guard.is_market_open() ? "OPEN" : "CLOSED")
+              << "  blocked=" << trading_hours_guard.signals_blocked()
+              << "  transitions=" << trading_hours_guard.session_transitions()
+              << "  et=" << trading_hours_guard.current_et_time_str() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CORRELATION_ENABLED
+    std::cout << "  Signal corr      : "
+              << "sources=" << signal_corr.source_names().size()
+              << "  diverge_evts=" << signal_corr.divergence_events()
+              << "  converge_evts=" << signal_corr.convergence_events() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {

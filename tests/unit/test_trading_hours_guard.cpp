@@ -99,7 +99,7 @@ TEST(TradingHoursGuard, ShouldBlockCountsBlockedSignals) {
     TradingHoursGuard g(cfg);
 
     // Call should_block several times.
-    for (int i = 0; i < 5; ++i) g.should_block();
+    for (int i = 0; i < 5; ++i) (void)g.should_block();
     EXPECT_GE(g.signals_blocked(), 5u);
 }
 
@@ -146,7 +146,7 @@ TEST(TradingHoursGuard, SessionChangeCallbackFires) {
     TradingHoursGuard g(cfg);
 
     // First check seeds the state as closed.
-    g.is_market_open();
+    (void)g.is_market_open();
     EXPECT_FALSE(fired);  // first check doesn't fire
 
     // Now reconfigure to an always-open session.
@@ -158,7 +158,7 @@ TEST(TradingHoursGuard, SessionChangeCallbackFires) {
     g.update_config(cfg2);
 
     // Second check may fire the callback if a transition occurs.
-    g.is_market_open();
+    (void)g.is_market_open();
     // fired may or may not be true depending on current time, just no crash.
     (void)fired;
 }

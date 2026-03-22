@@ -128,7 +128,10 @@ jobs:
             -DLLMQUANT_ENABLE_ENTROPY_METER=OFF \
             -DLLMQUANT_ENABLE_LATENCY_ENFORCER=OFF \
             -DLLMQUANT_ENABLE_ENTROPY_MONITOR=OFF \
-            -DLLMQUANT_ENABLE_TRADING_HOURS=OFF
+            -DLLMQUANT_ENABLE_TRADING_HOURS=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_CORRELATION=OFF \
+            -DLLMQUANT_ENABLE_WARMUP_SEQUENCER=OFF \
+            -DLLMQUANT_ENABLE_SENTIMENT_MOMENTUM_FILTER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -172,6 +175,9 @@ jobs:
           - flag: LLMQUANT_ENABLE_LATENCY_ENFORCER
           - flag: LLMQUANT_ENABLE_ENTROPY_MONITOR
           - flag: LLMQUANT_ENABLE_TRADING_HOURS
+          - flag: LLMQUANT_ENABLE_SIGNAL_CORRELATION
+          - flag: LLMQUANT_ENABLE_WARMUP_SEQUENCER
+          - flag: LLMQUANT_ENABLE_SENTIMENT_MOMENTUM_FILTER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

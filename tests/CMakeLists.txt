@@ -34,6 +34,9 @@ add_executable(tests
     unit/test_latency_budget_enforcer.cpp
     unit/test_token_entropy_monitor.cpp
     unit/test_trading_hours_guard.cpp
+    unit/test_signal_correlation_tracker.cpp
+    unit/test_warmup_sequencer.cpp
+    unit/test_sentiment_momentum_filter.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
@@ -58,7 +61,7 @@ endif()
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests
-    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*"
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*"
 )
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 
