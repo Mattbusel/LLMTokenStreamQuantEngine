@@ -93,7 +93,7 @@ TEST(EdgeCase_Deduplicator, zero_ttl_entry_is_immediately_expired) {
     InProcessDeduplicator dedup;
     auto key = DedupKey::from_token("zero_ttl_test");
     // Register with TTL=0 ms: the entry should expire immediately.
-    dedup.check_and_register(key, std::chrono::milliseconds{0});
+    (void)dedup.check_and_register(key, std::chrono::milliseconds{0});
     // Wait a tick so steady_clock advances.
     std::this_thread::sleep_for(std::chrono::milliseconds{5});
     auto result = dedup.check_and_register(key, std::chrono::milliseconds{500});

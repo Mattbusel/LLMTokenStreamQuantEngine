@@ -77,7 +77,7 @@ TEST(ProductionReadinessTest, test_config_watch_fires_callback_on_file_change) {
     ASSERT_TRUE(cfg.load_from_file(path));
 
     std::atomic<int> reload_count{0};
-    cfg.start_watching(path, [&](const SystemConfig&) {
+    (void)cfg.start_watching(path, [&](const SystemConfig&) {
         reload_count++;
     }, /*poll_interval_ms=*/50);
 
@@ -177,7 +177,7 @@ TEST(ProductionReadinessTest, test_inprocess_dedup_purge_expired_removes_stale_k
     InProcessDeduplicator d;
     // Register a key with a 1ms TTL — effectively expired after any sleep.
     DedupKey k = DedupKey::from_token("ephemeral", "");
-    d.check_and_register(k, std::chrono::milliseconds{1});
+    (void)d.check_and_register(k, std::chrono::milliseconds{1});
 
     EXPECT_EQ(d.size(), 1u);
 

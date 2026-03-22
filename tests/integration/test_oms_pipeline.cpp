@@ -82,7 +82,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_position_update_blocks_overlimit_
     oms.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    oms.start();
+    (void)oms.start();
     // Allow the position state to propagate before evaluating signals.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     oms.stop();
@@ -129,7 +129,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_safe_position_allows_signals_thro
     oms.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    oms.start();
+    (void)oms.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     oms.stop();
 
@@ -166,7 +166,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_pnl_breach_blocks_all_signals) {
     oms.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    oms.start();
+    (void)oms.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     oms.stop();
 
@@ -210,7 +210,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_oms_event_callback_fires_on_posit
     oms.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    oms.start();
+    (void)oms.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     oms.stop();
 
@@ -346,7 +346,7 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_short_position_blocks_negative_si
     oms.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    oms.start();
+    (void)oms.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     oms.stop();
 
