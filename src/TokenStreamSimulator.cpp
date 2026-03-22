@@ -92,7 +92,7 @@ void TokenStreamSimulator::stream_worker() {
         }
 
         // 4. We have a token: dispatch via callback, update stats, THEN sleep (normal cadence).
-        uint64_t seq = current_sequence_.fetch_add(1);
+        uint64_t seq = current_sequence_.fetch_add(1, std::memory_order_relaxed);
         Token token(std::move(token_text), seq);
 
         if (callback_) {
@@ -101,16 +101,17 @@ void TokenStreamSimulator::stream_worker() {
             auto end   = std::chrono::high_resolution_clock::now();
             auto latency = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
             // Welford-style running average for callback latency.
-            uint64_t count = stats_.tokens_emitted.load() + 1;  // +1 because tokens_emitted increments after this
-            double old_avg = static_cast<double>(stats_.avg_latency_us.load());
+            uint64_t count = stats_.tokens_emitted.load(std::memory_order_relaxed) + 1;  // +1 because tokens_emitted increments after this
+            double old_avg = static_cast<double>(stats_.avg_latency_us.load(std::memory_order_relaxed));
             double new_avg = old_avg + (static_cast<double>(latency.count()) - old_avg)
                              / static_cast<double>(count);
-            stats_.avg_latency_us.store(static_cast<uint64_t>(new_avg));
-            stats_.max_latency_us = std::max(stats_.max_latency_us.load(),
-                                             static_cast<uint64_t>(latency.count()));
+            stats_.avg_latency_us.store(static_cast<uint64_t>(new_avg), std::memory_order_relaxed);
+            uint64_t cur_max = stats_.max_latency_us.load(std::memory_order_relaxed);
+            uint64_t new_max = std::max(cur_max, static_cast<uint64_t>(latency.count()));
+            stats_.max_latency_us.store(new_max, std::memory_order_relaxed);
         }
 
-        stats_.tokens_emitted++;
+        stats_.tokens_emitted.fetch_add(1, std::memory_order_relaxed);
         // Interruptible cadence sleep: break into 50ms slices so stop() returns
         // promptly even when token_interval is in the seconds range.
         // Clamp each slice to the remaining time so short intervals (< 50ms)

@@ -9,6 +9,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 44 — 2026-03-21)
+- **Feature flag** `LLMQUANT_ENABLE_MOCK_OMS` (default ON): gates
+  `MockOmsAdapter.cpp` out of the production binary when set OFF.
+  `src/MockOmsAdapter.cpp` is now conditionally added via
+  `target_sources` and defines `LLMQUANT_MOCK_OMS_ENABLED` when ON.
+  Added to the minimal-build and per-flag CI matrix jobs.
+- **Interface** `Deduplicator::start_background_purge()`: added as a
+  virtual no-op on the abstract base class, allowing callers to invoke
+  background purging through a base pointer without `dynamic_cast`.
+  `Deduplicator.cpp` now uses virtual dispatch instead of
+  `dynamic_cast<InProcessDeduplicator*>` for this call.
+- **Validation** `Config::validate()`: `token_stream.redis_url` must
+  start with `redis://` or `rediss://` (TLS). Malformed URLs now produce
+  a descriptive error via `validate()` rather than failing silently at
+  connect time.
+- **Tests** (2 new in `test_config.cpp`): `test_validate_accepts_valid_redis_url`
+  and `test_validate_rejects_invalid_redis_url_scheme` cover the new
+  redis_url validation.
+
 ### Fixed (Cycle 43 — 2026-03-21)
 - **Bug fix** `RiskManager::update_config()`: when a gate transitioned from
   disabled → enabled, the corresponding `gate_*_last_blocked_` flag retained its
