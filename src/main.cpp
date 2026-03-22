@@ -2306,6 +2306,26 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
+    // PositionConcentrationGuard: HHI-based theme concentration monitor.
+    // Signals tagged with a theme (via dominant_topic from NarrativeTopicClassifier)
+    // are tracked; high HHI means signal pipeline is dominated by a single theme.
+    llmquant::PositionConcentrationGuard concentration_guard;
+    {
+        llmquant::PositionConcentrationGuard::Config cg_cfg;
+        cg_cfg.window_size             = 64;
+        cg_cfg.concentration_threshold = 0.50;
+        cg_cfg.clear_hysteresis        = 0.80;
+        cg_cfg.on_concentrated = [](double hhi, const std::string& theme) {
+            spdlog::warn("[conc_guard] HIGH CONCENTRATION HHI={:.3f} dominant={}", hhi, theme);
+        };
+        cg_cfg.on_diversified = [](double hhi) {
+            spdlog::info("[conc_guard] diversified HHI={:.3f}", hhi);
+        };
+        concentration_guard.update_config(cg_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2838,6 +2858,12 @@ int main(int argc, char* argv[]) {
             lifecycle_tracker.record_signal(sig_id, signal.delta_bias_shift);
             lifecycle_tracker.tick();
         }
+#endif
+#if defined(LLMQUANT_POSITION_CONCENTRATION_ENABLED) && defined(LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED)
+        // Tag signal with the dominant narrative topic for HHI tracking.
+        concentration_guard.record_signal(narrative_classifier.dominant_topic(), signal.delta_bias_shift);
+#elif defined(LLMQUANT_POSITION_CONCENTRATION_ENABLED)
+        concentration_guard.record_signal("default", signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4590,6 +4616,15 @@ int main(int argc, char* argv[]) {
               << "error_ema=" << std::fixed << std::setprecision(5) << token_quantiser.quantisation_error()
               << "  clamp_rate=" << std::setprecision(3) << token_quantiser.clamp_rate()
               << "  total=" << token_quantiser.total_count() << "\n";
+#endif
+#ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
+    std::cout << "  Conc. guard HHI  : "
+              << std::fixed << std::setprecision(4) << concentration_guard.hhi()
+              << "  concentrated=" << (concentration_guard.is_concentrated() ? "YES" : "no")
+              << "  dominant=" << concentration_guard.dominant_theme()
+              << "  share=" << std::setprecision(2) << concentration_guard.dominant_share()
+              << "  themes=" << concentration_guard.distinct_themes()
+              << "  alerts=" << concentration_guard.concentration_events() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
