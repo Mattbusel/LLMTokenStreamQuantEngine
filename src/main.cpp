@@ -558,6 +558,21 @@
 #ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
 #  include "BiasExponentialSmoothing.h"
 #endif
+#ifdef LLMQUANT_RELATIVE_VIGOR_ENABLED
+#  include "SignalRelativeVigorIndex.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_VELOCITY_ENABLED
+#  include "NarrativeSentimentVelocity.h"
+#endif
+#ifdef LLMQUANT_ZSCORE_NORMALISER_ENABLED
+#  include "BiasZScoreNormaliser.h"
+#endif
+#ifdef LLMQUANT_KELTNER_CHANNEL_ENABLED
+#  include "SignalKeltnerChannel.h"
+#endif
+#ifdef LLMQUANT_BURST_INTENSITY_ENABLED
+#  include "TokenBurstIntensity.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3998,6 +4013,103 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_RELATIVE_VIGOR_ENABLED
+    // SignalRelativeVigorIndex: RVI = EMA(change) / EMA(|bias|) with signal line.
+    // Bullish cross (RVI>signal) = upward momentum strengthening.
+    llmquant::SignalRelativeVigorIndex rvi_signal;
+    {
+        llmquant::SignalRelativeVigorIndex::Config rv_cfg;
+        rv_cfg.alpha_rvi    = 0.2;
+        rv_cfg.alpha_signal = 0.25;
+        rv_cfg.min_samples  = 5;
+        rv_cfg.on_bullish_cross = [](double rvi) {
+            spdlog::info("[rvi] BULLISH CROSS rvi={:.6f} (upward momentum strengthening)", rvi);
+        };
+        rv_cfg.on_bearish_cross = [](double rvi) {
+            spdlog::info("[rvi] BEARISH CROSS rvi={:.6f} (downward momentum strengthening)", rvi);
+        };
+        rvi_signal.update_config(rv_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_VELOCITY_ENABLED
+    // NarrativeSentimentVelocity: first/second derivative of bias EMA.
+    // Positive surge = accelerating bullish bias; negative = bearish acceleration.
+    llmquant::NarrativeSentimentVelocity sent_velocity;
+    {
+        llmquant::NarrativeSentimentVelocity::Config sv_cfg;
+        sv_cfg.alpha           = 0.15;
+        sv_cfg.surge_threshold = 0.005;
+        sv_cfg.min_samples     = 5;
+        sv_cfg.on_positive_surge = [](double vel) {
+            spdlog::info("[sent_vel] POS SURGE vel={:.6f} (bullish momentum accelerating)", vel);
+        };
+        sv_cfg.on_negative_surge = [](double vel) {
+            spdlog::info("[sent_vel] NEG SURGE vel={:.6f} (bearish momentum accelerating)", vel);
+        };
+        sent_velocity.update_config(sv_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ZSCORE_NORMALISER_ENABLED
+    // BiasZScoreNormaliser: rolling z-score for bias outlier detection.
+    // |z| > threshold = statistically extreme bias event relative to recent history.
+    llmquant::BiasZScoreNormaliser zscore_norm;
+    {
+        llmquant::BiasZScoreNormaliser::Config zn_cfg;
+        zn_cfg.window            = 30;
+        zn_cfg.min_samples       = 10;
+        zn_cfg.extreme_threshold = 2.5;
+        zn_cfg.on_positive_extreme = [](double z) {
+            spdlog::warn("[zscore] POS EXTREME z={:.2f} (statistically high bias outlier)", z);
+        };
+        zn_cfg.on_negative_extreme = [](double z) {
+            spdlog::warn("[zscore] NEG EXTREME z={:.2f} (statistically low bias outlier)", z);
+        };
+        zscore_norm.update_config(zn_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_KELTNER_CHANNEL_ENABLED
+    // SignalKeltnerChannel: EMA ± k×ATR dynamic bands for bias.
+    // Breakout above upper = overextended positive narrative.
+    llmquant::SignalKeltnerChannel keltner_ch;
+    {
+        llmquant::SignalKeltnerChannel::Config kc_cfg;
+        kc_cfg.alpha_ema  = 0.1;
+        kc_cfg.alpha_atr  = 0.1;
+        kc_cfg.multiplier = 2.0;
+        kc_cfg.min_samples = 5;
+        kc_cfg.on_upper_break = [](double bias, double upper) {
+            spdlog::warn("[keltner] UPPER BREAK bias={:.4f} > upper={:.4f}", bias, upper);
+        };
+        kc_cfg.on_lower_break = [](double bias, double lower) {
+            spdlog::warn("[keltner] LOWER BREAK bias={:.4f} < lower={:.4f}", bias, lower);
+        };
+        keltner_ch.update_config(kc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BURST_INTENSITY_ENABLED
+    // TokenBurstIntensity: short/long variance ratio burst detector.
+    // High ratio = sudden volatility spike in token bias stream.
+    llmquant::TokenBurstIntensity burst_intensity;
+    {
+        llmquant::TokenBurstIntensity::Config bi_cfg;
+        bi_cfg.short_window = 5;
+        bi_cfg.long_window  = 30;
+        bi_cfg.burst_ratio  = 4.0;
+        bi_cfg.min_samples  = 15;
+        bi_cfg.on_burst_start = [](double ratio) {
+            spdlog::warn("[burst] BURST START ratio={:.2f} (token bias volatility spike)", ratio);
+        };
+        bi_cfg.on_burst_end = [](double ratio) {
+            spdlog::info("[burst] BURST END ratio={:.2f} (token bias volatility normalising)", ratio);
+        };
+        burst_intensity.update_config(bi_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -5256,6 +5368,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
         exp_smooth.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_RELATIVE_VIGOR_ENABLED
+        rvi_signal.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SENTIMENT_VELOCITY_ENABLED
+        sent_velocity.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ZSCORE_NORMALISER_ENABLED
+        zscore_norm.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_KELTNER_CHANNEL_ENABLED
+        keltner_ch.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BURST_INTENSITY_ENABLED
+        burst_intensity.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -7602,6 +7729,47 @@ int main(int argc, char* argv[]) {
               << "  err_ev=" << exp_smooth.error_events()
               << "  rec=" << exp_smooth.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_RELATIVE_VIGOR_ENABLED
+    std::cout << "  RVI              : "
+              << "rvi=" << std::fixed << std::setprecision(4) << rvi_signal.rvi()
+              << "  sig=" << rvi_signal.signal_line()
+              << "  bull=" << (rvi_signal.is_bullish() ? "Y" : "N")
+              << "  bull_x=" << rvi_signal.bullish_crosses()
+              << "  bear_x=" << rvi_signal.bearish_crosses()
+              << "  rec=" << rvi_signal.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_VELOCITY_ENABLED
+    std::cout << "  Sent Velocity    : "
+              << "vel=" << std::fixed << std::setprecision(6) << sent_velocity.velocity()
+              << "  accel=" << sent_velocity.acceleration()
+              << "  pos_s=" << sent_velocity.positive_surges()
+              << "  neg_s=" << sent_velocity.negative_surges()
+              << "  rec=" << sent_velocity.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ZSCORE_NORMALISER_ENABLED
+    std::cout << "  Z-Score Norm     : "
+              << "z=" << std::fixed << std::setprecision(3) << zscore_norm.z_score()
+              << "  mean=" << zscore_norm.rolling_mean()
+              << "  std=" << zscore_norm.rolling_std()
+              << "  pos_ext=" << zscore_norm.positive_extremes()
+              << "  neg_ext=" << zscore_norm.negative_extremes()
+              << "  rec=" << zscore_norm.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_KELTNER_CHANNEL_ENABLED
+    std::cout << "  Keltner Channel  : "
+              << "ema=" << std::fixed << std::setprecision(4) << keltner_ch.ema()
+              << "  atr=" << keltner_ch.atr()
+              << "  ub_ev=" << keltner_ch.upper_breaks()
+              << "  lb_ev=" << keltner_ch.lower_breaks()
+              << "  rec=" << keltner_ch.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BURST_INTENSITY_ENABLED
+    std::cout << "  Burst Intensity  : "
+              << "ratio=" << std::fixed << std::setprecision(2) << burst_intensity.burst_ratio()
+              << "  bursting=" << (burst_intensity.is_bursting() ? "Y" : "N")
+              << "  ev=" << burst_intensity.burst_events()
+              << "  rec=" << burst_intensity.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -8259,6 +8427,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
         std::cout << "  [json:exp_smooth] " << exp_smooth.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_RELATIVE_VIGOR_ENABLED
+        std::cout << "  [json:rvi]        " << rvi_signal.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_VELOCITY_ENABLED
+        std::cout << "  [json:sent_vel]   " << sent_velocity.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ZSCORE_NORMALISER_ENABLED
+        std::cout << "  [json:zscore]     " << zscore_norm.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_KELTNER_CHANNEL_ENABLED
+        std::cout << "  [json:keltner]    " << keltner_ch.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BURST_INTENSITY_ENABLED
+        std::cout << "  [json:burst]      " << burst_intensity.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";

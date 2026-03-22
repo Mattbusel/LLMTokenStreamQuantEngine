@@ -2201,6 +2201,56 @@ else()
     message(STATUS "Feature: BiasExponentialSmoothing DISABLED (LLMQUANT_ENABLE_EXP_SMOOTHING=OFF)")
 endif()
 
+# SignalRelativeVigorIndex: RVI momentum oscillator (EMA of change/range) with signal line.
+option(LLMQUANT_ENABLE_RELATIVE_VIGOR "Build SignalRelativeVigorIndex: RVI bullish/bearish cross detector" ON)
+if(LLMQUANT_ENABLE_RELATIVE_VIGOR)
+    target_sources(llmquant PRIVATE src/SignalRelativeVigorIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_RELATIVE_VIGOR_ENABLED)
+    message(STATUS "Feature: SignalRelativeVigorIndex ENABLED (RVI numerator/denominator EMAs, bull/bear cross callbacks)")
+else()
+    message(STATUS "Feature: SignalRelativeVigorIndex DISABLED (LLMQUANT_ENABLE_RELATIVE_VIGOR=OFF)")
+endif()
+
+# NarrativeSentimentVelocity: rate-of-change (velocity) and acceleration of bias EMA.
+option(LLMQUANT_ENABLE_SENTIMENT_VELOCITY "Build NarrativeSentimentVelocity: bias EMA velocity/acceleration surge detector" ON)
+if(LLMQUANT_ENABLE_SENTIMENT_VELOCITY)
+    target_sources(llmquant PRIVATE src/NarrativeSentimentVelocity.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_VELOCITY_ENABLED)
+    message(STATUS "Feature: NarrativeSentimentVelocity ENABLED (EMA velocity/acceleration, positive/negative surge callbacks)")
+else()
+    message(STATUS "Feature: NarrativeSentimentVelocity DISABLED (LLMQUANT_ENABLE_SENTIMENT_VELOCITY=OFF)")
+endif()
+
+# BiasZScoreNormaliser: rolling z-score normalisation of bias with extreme-event detection.
+option(LLMQUANT_ENABLE_ZSCORE_NORMALISER "Build BiasZScoreNormaliser: rolling z-score with positive/negative extreme callbacks" ON)
+if(LLMQUANT_ENABLE_ZSCORE_NORMALISER)
+    target_sources(llmquant PRIVATE src/BiasZScoreNormaliser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ZSCORE_NORMALISER_ENABLED)
+    message(STATUS "Feature: BiasZScoreNormaliser ENABLED (rolling mean/std, z-score, extreme-event callbacks)")
+else()
+    message(STATUS "Feature: BiasZScoreNormaliser DISABLED (LLMQUANT_ENABLE_ZSCORE_NORMALISER=OFF)")
+endif()
+
+# SignalKeltnerChannel: EMA ± multiplier×ATR Keltner bands with breakout detection.
+option(LLMQUANT_ENABLE_KELTNER_CHANNEL "Build SignalKeltnerChannel: Keltner Channel upper/lower breakout detector" ON)
+if(LLMQUANT_ENABLE_KELTNER_CHANNEL)
+    target_sources(llmquant PRIVATE src/SignalKeltnerChannel.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_KELTNER_CHANNEL_ENABLED)
+    message(STATUS "Feature: SignalKeltnerChannel ENABLED (EMA±k×ATR bands, upper/lower breakout callbacks)")
+else()
+    message(STATUS "Feature: SignalKeltnerChannel DISABLED (LLMQUANT_ENABLE_KELTNER_CHANNEL=OFF)")
+endif()
+
+# TokenBurstIntensity: burst detection via short/long variance ratio spike.
+option(LLMQUANT_ENABLE_BURST_INTENSITY "Build TokenBurstIntensity: variance-ratio burst start/end detector" ON)
+if(LLMQUANT_ENABLE_BURST_INTENSITY)
+    target_sources(llmquant PRIVATE src/TokenBurstIntensity.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BURST_INTENSITY_ENABLED)
+    message(STATUS "Feature: TokenBurstIntensity ENABLED (short/long variance ratio, burst start/end callbacks)")
+else()
+    message(STATUS "Feature: TokenBurstIntensity DISABLED (LLMQUANT_ENABLE_BURST_INTENSITY=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
