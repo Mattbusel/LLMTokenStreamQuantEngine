@@ -5,7 +5,9 @@
 #include "MetricsLogger.h"
 #include "Config.h"
 #include "OutputSinkImpl.h"
-#include "Deduplicator.h"
+#ifdef LLMQUANT_DEDUP_ENABLED
+#  include "Deduplicator.h"
+#endif
 #include "LLMStreamClient.h"
 #include "OmsAdapter.h"
 #ifdef LLMQUANT_REST_OMS_ENABLED
@@ -168,7 +170,9 @@ int main(int argc, char* argv[]) {
     std::string log_level_str  = "info";        // spdlog level name
     int         stats_interval_ms  = 1000;      // monitoring loop tick period
     bool        no_prometheus  = false;         // skip Prometheus exporter
-    bool        no_dedup       = false;         // disable deduplication
+#ifdef LLMQUANT_DEDUP_ENABLED
+    bool        no_dedup       = false;         // disable deduplication at runtime
+#endif
     bool        no_hot_reload  = false;         // skip config file watcher
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
@@ -195,7 +199,9 @@ int main(int argc, char* argv[]) {
                 "  --quiet           Suppress console signal/stats output (log-file only)\n"
                 "  --stats-interval N  Monitoring loop tick period in ms (default: 1000)\n"
                 "  --no-prometheus   Disable the Prometheus /metrics scrape endpoint\n"
+#ifdef LLMQUANT_DEDUP_ENABLED
                 "  --no-dedup        Disable token deduplication (all tokens treated as novel)\n"
+#endif
                 "  --no-hot-reload   Disable config file hot-reload watcher\n"
                 "  --version         Print version and exit\n"
                 "  --help            Print this help and exit\n"
@@ -203,7 +209,9 @@ int main(int argc, char* argv[]) {
                 "Environment:\n"
                 "  LLMQUANT_API_KEY        LLM API key (fallback when --stream has no key)\n"
                 "  LLMQUANT_NO_PROMETHEUS  Set to 1/true/yes to disable Prometheus endpoint\n"
+#ifdef LLMQUANT_DEDUP_ENABLED
                 "  LLMQUANT_NO_DEDUP       Set to 1/true/yes to disable token deduplication\n"
+#endif
                 "  LLMQUANT_NO_HOT_RELOAD  Set to 1/true/yes to disable config hot-reload\n"
                 "  LLMQUANT_DRY_RUN        Set to 1/true/yes for dry-run (signal only, no OMS)\n"
                 "  LLMQUANT_QUIET          Set to 1/true/yes to suppress console output\n"
@@ -256,8 +264,10 @@ int main(int argc, char* argv[]) {
             catch (...) { std::cerr << "error: --stats-interval requires an integer\n"; return 1; }
         } else if (arg == "--no-prometheus") {
             no_prometheus = true;
+#ifdef LLMQUANT_DEDUP_ENABLED
         } else if (arg == "--no-dedup") {
             no_dedup = true;
+#endif
         } else if (arg == "--no-hot-reload") {
             no_hot_reload = true;
         } else if (arg == "--oms" && i + 1 < argc) {
@@ -291,7 +301,9 @@ int main(int argc, char* argv[]) {
             return v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' || v[0] == 't' || v[0] == 'T');
         };
         if (!no_prometheus  && env_flag("LLMQUANT_NO_PROMETHEUS"))  no_prometheus  = true;
+#ifdef LLMQUANT_DEDUP_ENABLED
         if (!no_dedup       && env_flag("LLMQUANT_NO_DEDUP"))       no_dedup       = true;
+#endif
         if (!no_hot_reload  && env_flag("LLMQUANT_NO_HOT_RELOAD"))  no_hot_reload  = true;
         if (!dry_run        && env_flag("LLMQUANT_DRY_RUN"))        dry_run        = true;
         if (!quiet          && env_flag("LLMQUANT_QUIET"))          quiet          = true;
@@ -437,6 +449,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+#ifdef LLMQUANT_DEDUP_ENABLED
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
     auto dedup_backend = std::make_shared<llmquant::InProcessDeduplicator>();
     // Dedup TTL: use config value when set (> 0), else default to 10× the token interval.
@@ -447,6 +460,7 @@ int main(int argc, char* argv[]) {
         std::chrono::milliseconds(dedup_ttl_ms));
     // Prevent unbounded memory growth: purge expired entries every 60 s.
     dedup_backend->start_background_purge(60);
+#endif
 
     // Initialize subsystem components.
     MetricsLogger logger({
