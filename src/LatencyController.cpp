@@ -82,7 +82,12 @@ LatencyController::LatencyStats LatencyController::get_stats() const {
     }
     
     stats.avg_latency     = std::chrono::microseconds(total_latency_us_.load() / measurements);
-    stats.min_latency     = std::chrono::microseconds(min_latency_us_.load());
+    // Guard against the TOCTOU window between total_measurements_.fetch_add()
+    // and the min_latency_us_ CAS in record_latency(): a get_stats() call that
+    // lands in that window sees measurements > 0 but min_latency_us_ still at
+    // its UINT64_MAX sentinel, producing a bogus ~18 exasecond min latency.
+    uint64_t min_us = min_latency_us_.load();
+    stats.min_latency = std::chrono::microseconds(min_us == UINT64_MAX ? 0 : min_us);
     stats.max_latency     = std::chrono::microseconds(max_latency_us_.load());
     stats.measurements    = measurements;
     stats.target_breaches = target_breaches_.load();

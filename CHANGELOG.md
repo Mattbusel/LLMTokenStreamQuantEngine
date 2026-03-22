@@ -16,6 +16,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
 
+### Fixed (Cycle 40 — 2026-03-21)
+- **Bug fix** `LatencyController::get_stats()`: TOCTOU race between
+  `total_measurements_.fetch_add()` and the `min_latency_us_` CAS in
+  `record_latency()`. A `get_stats()` call landing in that window saw
+  `measurements > 0` but `min_latency_us_ == UINT64_MAX` (the initial
+  sentinel), reporting ~18 exaseconds as `stats.min_latency`.
+  Fixed by mapping the sentinel value back to 0 in `get_stats()`.
+
 ### Fixed (Cycle 39 — 2026-03-21)
 - **Security** `LLMStreamClient::build_http_request` and
   `RestOmsAdapter::build_request`: `config_.host` (and `config_.path` in
