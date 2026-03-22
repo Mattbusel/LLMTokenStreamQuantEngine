@@ -1631,6 +1631,46 @@ else()
     message(STATUS "Feature: TokenBiasPhaseSpace DISABLED (LLMQUANT_ENABLE_PHASE_SPACE=OFF)")
 endif()
 
+# SentimentTopologyMapper: zero-dimensional persistent homology proxy for bias streams.
+option(LLMQUANT_ENABLE_TOPOLOGY_MAPPER  "Build SentimentTopologyMapper: sublevel-set persistent homology component counter on rolling bias window" ON)
+if(LLMQUANT_ENABLE_TOPOLOGY_MAPPER)
+    target_sources(llmquant PRIVATE src/SentimentTopologyMapper.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOPOLOGY_MAPPER_ENABLED)
+    message(STATUS "Feature: SentimentTopologyMapper ENABLED (persistent homology, on_topology_change)")
+else()
+    message(STATUS "Feature: SentimentTopologyMapper DISABLED (LLMQUANT_ENABLE_TOPOLOGY_MAPPER=OFF)")
+endif()
+
+# BiasInformationGain: mutual information between consecutive bias bins.
+option(LLMQUANT_ENABLE_INFORMATION_GAIN "Build BiasInformationGain: joint-distribution mutual information I(X_t;X_{t+1}), fires on_mi_change" ON)
+if(LLMQUANT_ENABLE_INFORMATION_GAIN)
+    target_sources(llmquant PRIVATE src/BiasInformationGain.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_INFORMATION_GAIN_ENABLED)
+    message(STATUS "Feature: BiasInformationGain ENABLED (MI, NMI, on_mi_change)")
+else()
+    message(STATUS "Feature: BiasInformationGain DISABLED (LLMQUANT_ENABLE_INFORMATION_GAIN=OFF)")
+endif()
+
+# NarrativeDriftDetector: Page-Hinkley sequential drift detector for bias mean.
+option(LLMQUANT_ENABLE_NARRATIVE_DRIFT  "Build NarrativeDriftDetector: Page-Hinkley test detects sustained upward/downward bias drift; fires on_upward/downward_drift" ON)
+if(LLMQUANT_ENABLE_NARRATIVE_DRIFT)
+    target_sources(llmquant PRIVATE src/NarrativeDriftDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_DRIFT_ENABLED)
+    message(STATUS "Feature: NarrativeDriftDetector ENABLED (Page-Hinkley U/D statistics, drift alarms)")
+else()
+    message(STATUS "Feature: NarrativeDriftDetector DISABLED (LLMQUANT_ENABLE_NARRATIVE_DRIFT=OFF)")
+endif()
+
+# TokenSentimentGraphBuilder: directed weighted token co-occurrence influence graph.
+option(LLMQUANT_ENABLE_SENTIMENT_GRAPH  "Build TokenSentimentGraphBuilder: directed token-to-token sentiment influence graph; detects sentiment hubs via in-degree weight" ON)
+if(LLMQUANT_ENABLE_SENTIMENT_GRAPH)
+    target_sources(llmquant PRIVATE src/TokenSentimentGraphBuilder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_GRAPH_ENABLED)
+    message(STATUS "Feature: TokenSentimentGraphBuilder ENABLED (directed sentiment graph, hub detection)")
+else()
+    message(STATUS "Feature: TokenSentimentGraphBuilder DISABLED (LLMQUANT_ENABLE_SENTIMENT_GRAPH=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
