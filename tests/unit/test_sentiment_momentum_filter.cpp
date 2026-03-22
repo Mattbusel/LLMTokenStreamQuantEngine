@@ -236,8 +236,8 @@ TEST(SentimentMomentumFilter, StatsCountBothPassedAndBlocked) {
     SentimentMomentumFilter::Config cfg;
     cfg.mode = SentimentMomentumFilter::Mode::Disabled;
     SentimentMomentumFilter f(cfg);
-    f.filter_signal(make_signal(1.0));
-    f.filter_signal(make_signal(-1.0));
+    (void)f.filter_signal(make_signal(1.0));
+    (void)f.filter_signal(make_signal(-1.0));
     auto s = f.get_stats();
     EXPECT_EQ(s.signals_in, 2u);
     EXPECT_EQ(s.signals_passed, 2u);
@@ -252,7 +252,7 @@ TEST(SentimentMomentumFilter, ResetClearsStatsAndTrend) {
     cfg.analyzer.min_samples_for_trend = 5;
     SentimentMomentumFilter f(cfg);
     push_samples(f, rising(10));
-    f.filter_signal(make_signal(1.0));
+    (void)f.filter_signal(make_signal(1.0));
     f.reset();
     EXPECT_EQ(f.current_trend(), SentimentTrend::Undefined);
     EXPECT_EQ(f.get_stats().signals_in, 0u);

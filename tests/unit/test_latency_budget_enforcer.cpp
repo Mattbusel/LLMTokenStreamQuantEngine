@@ -40,7 +40,10 @@ TEST(LatencyBudgetEnforcer, ActionNamesAreCorrect) {
 
 TEST(LatencyBudgetEnforcer, CheckBelowWarnStaysNormal) {
     LatencyBudgetEnforcer::Config cfg;
-    cfg.warn_us = 10;
+    cfg.warn_us     = 10;
+    cfg.throttle_us = 20;
+    cfg.drop_us     = 30;
+    cfg.breaker_us  = 50;
     LatencyBudgetEnforcer lbe(cfg);
     EXPECT_EQ(lbe.check(9), LatencyBudgetEnforcer::Action::Normal);
 }

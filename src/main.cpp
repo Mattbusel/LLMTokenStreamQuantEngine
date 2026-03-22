@@ -1171,8 +1171,8 @@ int main(int argc, char* argv[]) {
         wcfg.repeat_count = 3;
         wcfg.on_complete  = [] { spdlog::info("[warmup] EMA pre-seeding complete"); };
         llmquant::WarmupSequencer warmup(wcfg);
-        warmup.run([&](const std::string& tok, double sent) {
-            llm_adapter.map_token(tok, sent);
+        warmup.run([&](const std::string& tok, double /*sent*/) {
+            (void)llm_adapter.map_token_to_weight(tok);
         });
     }
 #endif
