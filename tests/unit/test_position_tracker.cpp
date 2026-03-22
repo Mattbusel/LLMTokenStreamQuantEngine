@@ -1,6 +1,9 @@
+#include <gtest/gtest.h>
+
+#if defined(LLMQUANT_POSITION_TRACKER_ENABLED) && defined(LLMQUANT_KELLY_SIZER_ENABLED)
+
 #include "PositionTracker.h"
 #include "KellyPositionSizer.h"
-#include <gtest/gtest.h>
 
 #include <atomic>
 #include <thread>
@@ -273,3 +276,11 @@ TEST(PositionTracker, ConcurrentOpenCloseIsThreadSafe) {
 }
 
 } // namespace
+
+#else  // LLMQUANT_POSITION_TRACKER_ENABLED && LLMQUANT_KELLY_SIZER_ENABLED not defined
+
+TEST(PositionTracker, DisabledAtBuildTime) {
+    SUCCEED();
+}
+
+#endif  // LLMQUANT_POSITION_TRACKER_ENABLED && LLMQUANT_KELLY_SIZER_ENABLED

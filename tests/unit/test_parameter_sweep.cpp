@@ -93,7 +93,8 @@ TEST(ParameterSweep, UnknownAxisNameIsSkipped) {
     sweep.set_tokens(test_tokens());
     sweep.add_axis("unknown_axis_xyz", {0.5, 1.0});
     // Should not crash; unknown axis is logged and skipped.
-    EXPECT_NO_FATAL_FAILURE(sweep.run());
+    auto result = sweep.run();
+    EXPECT_NO_FATAL_FAILURE((void)result);
 }
 
 TEST(ParameterSweep, AxisNamesInResult) {
@@ -141,7 +142,7 @@ TEST(ParameterSweep, ProgressCallbackFires) {
     ParameterSweep sweep(cfg);
     sweep.set_tokens(test_tokens());
     sweep.add_axis("spread_cost", {0.001, 0.01, 0.05});
-    sweep.run();
+    (void)sweep.run();
     EXPECT_EQ(last_done, 3);
     EXPECT_EQ(last_total, 3);
 }
