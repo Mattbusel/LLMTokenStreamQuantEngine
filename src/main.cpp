@@ -210,6 +210,12 @@
 #ifdef LLMQUANT_WALK_FORWARD_ENABLED
 #  include "WalkForwardValidator.h"
 #endif
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+#  include "AdversarialInputDetector.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_CI_ENABLED
+#  include "SignalConfidenceInterval.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1753,9 +1759,8 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
-    // TokenNgramProfiler: tracks 2-gram and 3-gram frequencies; fires on
-    // hot n-grams that may indicate adversarial injection or stuck LLM output.
-    llmquant::TokenNgramProfiler ngram_profiler;
+    // TokenNgramProfiler: config — tracks 2-gram and 3-gram frequencies;
+    // fires on hot n-grams that may indicate adversarial injection or stuck LLM output.
     {
         llmquant::TokenNgramProfiler::Config ng_cfg;
         ng_cfg.hot_threshold = 10;
@@ -1841,6 +1846,49 @@ int main(int argc, char* argv[]) {
     wf_cfg.step_size  = 50;
     wf_cfg.optimize   = false;  // skip parameter sweep in live mode
     llmquant::WalkForwardValidator walk_forward(wf_cfg);
+#endif
+
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+    // AdversarialInputDetector: monitors token stream for weight anomalies,
+    // repetition attacks, and vocabulary inflation in real time.
+    llmquant::AdversarialInputDetector adversarial_detector;
+    {
+        llmquant::AdversarialInputDetector::Config ad_cfg;
+        ad_cfg.anomaly_threshold    = 4.0;
+        ad_cfg.min_warmup_tokens    = 30;
+        ad_cfg.max_repeat_fraction  = 0.6;
+        ad_cfg.max_novel_fraction   = 0.8;
+        ad_cfg.on_anomaly = [](llmquant::AdversarialInputDetector::AnomalyKind kind,
+                               const std::string& token, double score) {
+            const char* k =
+                kind == llmquant::AdversarialInputDetector::AnomalyKind::WeightAnomaly
+                ? "weight"
+                : kind == llmquant::AdversarialInputDetector::AnomalyKind::RepetitionAttack
+                  ? "repetition" : "vocab_inflation";
+            spdlog::warn("[adversarial] {} token=\"{}\" score={:.3f}", k, token, score);
+        };
+        adversarial_detector.update_config(ad_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CI_ENABLED
+    // SignalConfidenceInterval: jackknife CI on rolling signal window; narrow
+    // CI = high-confidence environment, wide CI = noisy / uncertain signals.
+    llmquant::SignalConfidenceInterval signal_ci;
+    {
+        llmquant::SignalConfidenceInterval::Config ci_cfg;
+        ci_cfg.window_size      = 64;
+        ci_cfg.z                = 1.96;
+        ci_cfg.narrow_threshold = 0.05;
+        ci_cfg.wide_threshold   = 0.30;
+        ci_cfg.on_narrow_interval = [](double mean, double hw) {
+            spdlog::info("[signal_ci] NARROW mean={:.4f} hw={:.4f}", mean, hw);
+        };
+        ci_cfg.on_wide_interval = [](double mean, double hw) {
+            spdlog::warn("[signal_ci] WIDE   mean={:.4f} hw={:.4f}", mean, hw);
+        };
+        signal_ci.update_config(ci_cfg);
+    }
 #endif
 
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
@@ -2316,6 +2364,11 @@ int main(int argc, char* argv[]) {
         sentiment_divergence.record("bias",       signal.delta_bias_shift);
         sentiment_divergence.record("vol",        signal.volatility_adjustment);
         sentiment_divergence.record("confidence", signal.confidence);
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CI_ENABLED
+        // Track jackknife CI on bias stream; narrow=reliable, wide=uncertain.
+        signal_ci.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).

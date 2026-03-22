@@ -107,6 +107,7 @@ option(LLMQUANT_ENABLE_TOKEN_INFLUENCE              "Build TokenInfluenceAttribu
 option(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE         "Build SentimentDivergenceDetector: multi-stream pairwise divergence detector that fires when sources disagree" ON)
 option(LLMQUANT_ENABLE_ADVERSARIAL_DETECT           "Build AdversarialInputDetector: z-score + repetition + vocabulary-inflation adversarial token detector" ON)
 option(LLMQUANT_ENABLE_SIGNAL_CI                    "Build SignalConfidenceInterval: rolling jackknife confidence interval estimator for trade signal uncertainty" ON)
+option(LLMQUANT_ENABLE_TOKEN_RECORDER               "Build TokenStreamRecorder: append-only binary audit log with CRC-32 integrity and auto-rotation for regulatory compliance" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1012,6 +1013,15 @@ if(LLMQUANT_ENABLE_SIGNAL_CI)
     message(STATUS "Feature: SignalConfidenceInterval ENABLED (jackknife CI estimation)")
 else()
     message(STATUS "Feature: SignalConfidenceInterval DISABLED (LLMQUANT_ENABLE_SIGNAL_CI=OFF)")
+endif()
+
+# TokenStreamRecorder: append-only binary audit log with CRC-32 and auto-rotation.
+if(LLMQUANT_ENABLE_TOKEN_RECORDER)
+    target_sources(llmquant PRIVATE src/TokenStreamRecorder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_RECORDER_ENABLED)
+    message(STATUS "Feature: TokenStreamRecorder ENABLED (audit log)")
+else()
+    message(STATUS "Feature: TokenStreamRecorder DISABLED (LLMQUANT_ENABLE_TOKEN_RECORDER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
