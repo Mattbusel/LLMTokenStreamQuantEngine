@@ -2251,6 +2251,56 @@ else()
     message(STATUS "Feature: TokenBurstIntensity DISABLED (LLMQUANT_ENABLE_BURST_INTENSITY=OFF)")
 endif()
 
+# SignalTripleEMAOscillator: TRIX — triple-smoothed EMA rate-of-change, noise-resistant trend confirmation.
+option(LLMQUANT_ENABLE_TRIPLE_EMA "Build SignalTripleEMAOscillator: TRIX oscillator with zero-cross and signal-line cross detection" ON)
+if(LLMQUANT_ENABLE_TRIPLE_EMA)
+    target_sources(llmquant PRIVATE src/SignalTripleEMAOscillator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TRIPLE_EMA_ENABLED)
+    message(STATUS "Feature: SignalTripleEMAOscillator ENABLED (TRIX zero-cross, signal-line cross)")
+else()
+    message(STATUS "Feature: SignalTripleEMAOscillator DISABLED (LLMQUANT_ENABLE_TRIPLE_EMA=OFF)")
+endif()
+
+# NarrativeCoherenceTracker: rolling directional coherence fraction of the bias stream.
+option(LLMQUANT_ENABLE_COHERENCE_TRACKER "Build NarrativeCoherenceTracker: fraction of window agreeing with majority direction; fires on_high/low_coherence" ON)
+if(LLMQUANT_ENABLE_COHERENCE_TRACKER)
+    target_sources(llmquant PRIVATE src/NarrativeCoherenceTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_COHERENCE_TRACKER_ENABLED)
+    message(STATUS "Feature: NarrativeCoherenceTracker ENABLED (directional coherence, high/low callbacks)")
+else()
+    message(STATUS "Feature: NarrativeCoherenceTracker DISABLED (LLMQUANT_ENABLE_COHERENCE_TRACKER=OFF)")
+endif()
+
+# BiasLocalExtrema: zigzag local peak/trough detector for the bias stream.
+option(LLMQUANT_ENABLE_LOCAL_EXTREMA "Build BiasLocalExtrema: zigzag alternating peak/trough detector; fires on_peak/on_trough" ON)
+if(LLMQUANT_ENABLE_LOCAL_EXTREMA)
+    target_sources(llmquant PRIVATE src/BiasLocalExtrema.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_LOCAL_EXTREMA_ENABLED)
+    message(STATUS "Feature: BiasLocalExtrema ENABLED (zigzag peak/trough detection)")
+else()
+    message(STATUS "Feature: BiasLocalExtrema DISABLED (LLMQUANT_ENABLE_LOCAL_EXTREMA=OFF)")
+endif()
+
+# SignalAdaptiveThresholdFilter: ATR-based adaptive signal filter — separates signal from noise.
+option(LLMQUANT_ENABLE_ADAPTIVE_FILTER "Build SignalAdaptiveThresholdFilter: ATR-adaptive above/below threshold with breakout callbacks" ON)
+if(LLMQUANT_ENABLE_ADAPTIVE_FILTER)
+    target_sources(llmquant PRIVATE src/SignalAdaptiveThresholdFilter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADAPTIVE_FILTER_ENABLED)
+    message(STATUS "Feature: SignalAdaptiveThresholdFilter ENABLED (ATR-adaptive threshold, above/below breakout callbacks)")
+else()
+    message(STATUS "Feature: SignalAdaptiveThresholdFilter DISABLED (LLMQUANT_ENABLE_ADAPTIVE_FILTER=OFF)")
+endif()
+
+# NarrativePressureGauge: fast/slow EMA spread as narrative directional pressure indicator.
+option(LLMQUANT_ENABLE_PRESSURE_GAUGE "Build NarrativePressureGauge: fast/slow EMA spread pressure with pos/neg callbacks" ON)
+if(LLMQUANT_ENABLE_PRESSURE_GAUGE)
+    target_sources(llmquant PRIVATE src/NarrativePressureGauge.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PRESSURE_GAUGE_ENABLED)
+    message(STATUS "Feature: NarrativePressureGauge ENABLED (fast/slow EMA spread, positive/negative pressure callbacks)")
+else()
+    message(STATUS "Feature: NarrativePressureGauge DISABLED (LLMQUANT_ENABLE_PRESSURE_GAUGE=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

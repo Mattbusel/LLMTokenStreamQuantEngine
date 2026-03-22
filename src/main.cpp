@@ -573,6 +573,21 @@
 #ifdef LLMQUANT_BURST_INTENSITY_ENABLED
 #  include "TokenBurstIntensity.h"
 #endif
+#ifdef LLMQUANT_TRIPLE_EMA_ENABLED
+#  include "SignalTripleEMAOscillator.h"
+#endif
+#ifdef LLMQUANT_COHERENCE_TRACKER_ENABLED
+#  include "NarrativeCoherenceTracker.h"
+#endif
+#ifdef LLMQUANT_LOCAL_EXTREMA_ENABLED
+#  include "BiasLocalExtrema.h"
+#endif
+#ifdef LLMQUANT_ADAPTIVE_FILTER_ENABLED
+#  include "SignalAdaptiveThresholdFilter.h"
+#endif
+#ifdef LLMQUANT_PRESSURE_GAUGE_ENABLED
+#  include "NarrativePressureGauge.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -4110,6 +4125,102 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_TRIPLE_EMA_ENABLED
+    // SignalTripleEMAOscillator: TRIX = ROC of triple-smoothed EMA.
+    // TRIX eliminates noise up to 3× the EMA period; trend flips are high-conviction.
+    llmquant::SignalTripleEMAOscillator triple_ema;
+    {
+        llmquant::SignalTripleEMAOscillator::Config te_cfg;
+        te_cfg.alpha        = 2.0 / (14 + 1);
+        te_cfg.alpha_signal = 2.0 / (9 + 1);
+        te_cfg.min_samples  = 14;
+        te_cfg.on_zero_cross = [](double trix) {
+            spdlog::info("[trix] ZERO CROSS trix={:.6f} (trend flip confirmation)", trix);
+        };
+        te_cfg.on_signal_cross = [](double trix, double sig) {
+            spdlog::info("[trix] SIGNAL CROSS trix={:.6f} sig={:.6f} (early trend signal)", trix, sig);
+        };
+        triple_ema.update_config(te_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_COHERENCE_TRACKER_ENABLED
+    // NarrativeCoherenceTracker: fraction of window agreeing with majority direction.
+    // High coherence = unified narrative; low = conflicted/mixed signal.
+    llmquant::NarrativeCoherenceTracker coherence_tracker;
+    {
+        llmquant::NarrativeCoherenceTracker::Config ct_cfg;
+        ct_cfg.window          = 20;
+        ct_cfg.min_samples     = 5;
+        ct_cfg.high_threshold  = 0.75;
+        ct_cfg.low_threshold   = 0.40;
+        ct_cfg.on_high_coherence = [](double coh) {
+            spdlog::info("[coherence] HIGH coh={:.3f} (narrative unified)", coh);
+        };
+        ct_cfg.on_low_coherence = [](double coh) {
+            spdlog::warn("[coherence] LOW coh={:.3f} (narrative conflicted)", coh);
+        };
+        coherence_tracker.update_config(ct_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_LOCAL_EXTREMA_ENABLED
+    // BiasLocalExtrema: zigzag local peak/trough detector.
+    // Peaks and troughs mark bias exhaustion points — potential reversal signals.
+    llmquant::BiasLocalExtrema local_extrema;
+    {
+        llmquant::BiasLocalExtrema::Config le_cfg;
+        le_cfg.reversal_threshold = 0.02;
+        le_cfg.min_samples        = 5;
+        le_cfg.on_peak = [](double val) {
+            spdlog::info("[extrema] PEAK confirmed val={:.4f} (local bias maximum)", val);
+        };
+        le_cfg.on_trough = [](double val) {
+            spdlog::info("[extrema] TROUGH confirmed val={:.4f} (local bias minimum)", val);
+        };
+        local_extrema.update_config(le_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ADAPTIVE_FILTER_ENABLED
+    // SignalAdaptiveThresholdFilter: ATR-based adaptive filter — separates signal from noise.
+    // Breakout above multiplier×ATR = statistically significant bias move.
+    llmquant::SignalAdaptiveThresholdFilter adaptive_filter;
+    {
+        llmquant::SignalAdaptiveThresholdFilter::Config af_cfg;
+        af_cfg.alpha_atr   = 0.1;
+        af_cfg.multiplier  = 2.0;
+        af_cfg.min_samples = 5;
+        af_cfg.on_above = [](double bias, double thresh) {
+            spdlog::warn("[adapt_filter] ABOVE bias={:.4f} thresh={:.4f} (significant positive bias)", bias, thresh);
+        };
+        af_cfg.on_below = [](double bias, double thresh) {
+            spdlog::warn("[adapt_filter] BELOW bias={:.4f} thresh=-{:.4f} (significant negative bias)", bias, thresh);
+        };
+        adaptive_filter.update_config(af_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_PRESSURE_GAUGE_ENABLED
+    // NarrativePressureGauge: fast/slow EMA spread as directional pressure.
+    // Positive pressure = bullish momentum building; negative = bearish.
+    llmquant::NarrativePressureGauge pressure_gauge;
+    {
+        llmquant::NarrativePressureGauge::Config pg_cfg;
+        pg_cfg.alpha_fast          = 0.3;
+        pg_cfg.alpha_slow          = 0.05;
+        pg_cfg.pressure_threshold  = 0.008;
+        pg_cfg.min_samples         = 5;
+        pg_cfg.on_positive_pressure = [](double p) {
+            spdlog::info("[pressure] POSITIVE p={:.6f} (bullish narrative pressure building)", p);
+        };
+        pg_cfg.on_negative_pressure = [](double p) {
+            spdlog::info("[pressure] NEGATIVE p={:.6f} (bearish narrative pressure building)", p);
+        };
+        pressure_gauge.update_config(pg_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -5383,6 +5494,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BURST_INTENSITY_ENABLED
         burst_intensity.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_TRIPLE_EMA_ENABLED
+        triple_ema.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_COHERENCE_TRACKER_ENABLED
+        coherence_tracker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_LOCAL_EXTREMA_ENABLED
+        local_extrema.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ADAPTIVE_FILTER_ENABLED
+        adaptive_filter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_PRESSURE_GAUGE_ENABLED
+        pressure_gauge.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -7770,6 +7896,49 @@ int main(int argc, char* argv[]) {
               << "  ev=" << burst_intensity.burst_events()
               << "  rec=" << burst_intensity.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_TRIPLE_EMA_ENABLED
+    std::cout << "  TRIX Oscillator  : "
+              << "trix=" << std::fixed << std::setprecision(6) << triple_ema.trix()
+              << "  sig=" << triple_ema.signal_line()
+              << "  zero_x=" << triple_ema.zero_cross_events()
+              << "  sig_x=" << triple_ema.signal_cross_events()
+              << "  rec=" << triple_ema.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_COHERENCE_TRACKER_ENABLED
+    std::cout << "  Coherence        : "
+              << "coh=" << std::fixed << std::setprecision(3) << coherence_tracker.coherence()
+              << "  hi_ev=" << coherence_tracker.high_coherence_events()
+              << "  lo_ev=" << coherence_tracker.low_coherence_events()
+              << "  rec=" << coherence_tracker.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_LOCAL_EXTREMA_ENABLED
+    std::cout << "  Local Extrema    : "
+              << "peak=" << std::fixed << std::setprecision(4) << local_extrema.last_peak()
+              << "  trough=" << local_extrema.last_trough()
+              << "  seek=" << (local_extrema.seeking_peak() ? "peak" : "trough")
+              << "  p_ev=" << local_extrema.peak_events()
+              << "  t_ev=" << local_extrema.trough_events()
+              << "  rec=" << local_extrema.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_FILTER_ENABLED
+    std::cout << "  Adaptive Filter  : "
+              << "atr=" << std::fixed << std::setprecision(4) << adaptive_filter.atr()
+              << "  thresh=" << adaptive_filter.threshold()
+              << "  ab=" << (adaptive_filter.is_above() ? "Y" : "N")
+              << "  bel=" << (adaptive_filter.is_below() ? "Y" : "N")
+              << "  ab_ev=" << adaptive_filter.above_events()
+              << "  bel_ev=" << adaptive_filter.below_events()
+              << "  rec=" << adaptive_filter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_PRESSURE_GAUGE_ENABLED
+    std::cout << "  Pressure Gauge   : "
+              << "press=" << std::fixed << std::setprecision(6) << pressure_gauge.pressure()
+              << "  fast=" << pressure_gauge.fast_ema()
+              << "  slow=" << pressure_gauge.slow_ema()
+              << "  +ev=" << pressure_gauge.positive_pressure_events()
+              << "  -ev=" << pressure_gauge.negative_pressure_events()
+              << "  rec=" << pressure_gauge.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -8442,6 +8611,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BURST_INTENSITY_ENABLED
         std::cout << "  [json:burst]      " << burst_intensity.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TRIPLE_EMA_ENABLED
+        std::cout << "  [json:trix]       " << triple_ema.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_COHERENCE_TRACKER_ENABLED
+        std::cout << "  [json:coherence]  " << coherence_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_LOCAL_EXTREMA_ENABLED
+        std::cout << "  [json:extrema]    " << local_extrema.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_FILTER_ENABLED
+        std::cout << "  [json:adapt_filt] " << adaptive_filter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PRESSURE_GAUGE_ENABLED
+        std::cout << "  [json:pressure]   " << pressure_gauge.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";
