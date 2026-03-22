@@ -38,7 +38,7 @@ static double percentile(const std::vector<double>& sorted, double p) {
 // ============================================================
 TEST(PerformanceBench, bench_llm_adapter_single_token_lookup_under_1us_p99) {
     LLMAdapter adapter;
-    auto samples = measure_us([&]{ adapter.map_token_to_weight("crash"); }, 1000, 10000);
+    auto samples = measure_us([&]{ (void)adapter.map_token_to_weight("crash"); }, 1000, 10000);
     double p99 = percentile(samples, 0.99);
     std::cout << "[bench] LLMAdapter single token p99: " << p99 << " μs\n";
     EXPECT_LT(p99, 1.0) << "Single token lookup p99 must be < 1μs";

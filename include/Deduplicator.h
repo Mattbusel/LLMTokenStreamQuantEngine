@@ -419,7 +419,7 @@ public:
      *
      * @return Connection status.
      */
-    bool is_connected() const;
+    [[nodiscard]] bool is_connected() const;
 
     /**
      * @brief Return the number of reconnect attempts since construction.

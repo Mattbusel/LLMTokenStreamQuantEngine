@@ -243,7 +243,7 @@ public:
      * @param threshold Volatility threshold in [0.0, 1.0].
      * @return Number of tokens where volatility_score > threshold.
      */
-    size_t count_tokens_above_volatility(double threshold) const;
+    [[nodiscard]] size_t count_tokens_above_volatility(double threshold) const;
 
     /**
      * @brief Removes all mappings from the dictionary.
@@ -263,7 +263,7 @@ public:
      * @param token Raw token string.
      * @return true if a mapping exists; false otherwise.
      */
-    bool contains_token(const std::string& token) const;
+    [[nodiscard]] bool contains_token(const std::string& token) const;
 
     /**
      * @brief Return true if the dictionary contains at least one of the given tokens.
@@ -274,7 +274,7 @@ public:
      * @param tokens Candidate token strings (raw / unnormalised).
      * @return true if any of @p tokens is found in the dictionary.
      */
-    bool contains_any_of(const std::vector<std::string>& tokens) const;
+    [[nodiscard]] bool contains_any_of(const std::vector<std::string>& tokens) const;
 
     /**
      * @brief Remove a single token mapping from the dictionary.
@@ -285,7 +285,7 @@ public:
      * @param token Raw token string to remove.
      * @return true if a mapping was removed; false if it did not exist.
      */
-    bool remove_token_mapping(const std::string& token);
+    [[nodiscard]] bool remove_token_mapping(const std::string& token);
 
     /**
      * @brief Update the numeric fields of an existing token mapping in-place.
@@ -298,7 +298,7 @@ public:
      * @param weight New weight values to store.
      * @return true if the entry was found and updated; false if not found.
      */
-    bool update_token_weight(const std::string& token, const SemanticWeight& weight);
+    [[nodiscard]] bool update_token_weight(const std::string& token, const SemanticWeight& weight);
 
     /**
      * @brief Insert or overwrite multiple token mappings in one call.
@@ -309,7 +309,7 @@ public:
      * @param mappings Map of raw token string to SemanticWeight.
      * @return Number of new entries inserted (not counting overwrites).
      */
-    size_t batch_add_token_mappings(
+    [[nodiscard]] size_t batch_add_token_mappings(
         const std::unordered_map<std::string, SemanticWeight>& mappings);
 
     /**
@@ -323,7 +323,7 @@ public:
      * @return true if found; false if the token is not in the dictionary
      *         (weight is left unchanged on false return).
      */
-    bool get_token_mapping(const std::string& token, SemanticWeight& weight) const;
+    [[nodiscard]] bool get_token_mapping(const std::string& token, SemanticWeight& weight) const;
 
     /**
      * @brief Multiply every token's confidence_score by @p factor.
@@ -370,7 +370,7 @@ public:
      * @param max_sentiment Upper bound (inclusive) on sentiment_score.
      * @return Vector of (token, sentiment_score) pairs in unspecified order.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         filter_tokens_by_sentiment(double min_sentiment, double max_sentiment) const;
 
     /**
@@ -385,7 +385,7 @@ public:
      * @return Vector of (token, sentiment_score) pairs, sorted descending
      *         by |sentiment_score|.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         top_tokens_by_sentiment(size_t n = 10) const;
 
     /**
@@ -397,7 +397,7 @@ public:
      * @param max_confidence Upper bound (inclusive) on confidence_score.
      * @return Vector of (token, confidence_score) pairs in unspecified order.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         filter_tokens_by_confidence(double min_confidence, double max_confidence) const;
 
     /**
@@ -411,7 +411,7 @@ public:
      * @param max_volatility Upper bound (inclusive) on volatility_score.
      * @return Vector of (token, volatility_score) pairs in unspecified order.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         filter_tokens_by_volatility(double min_volatility, double max_volatility) const;
 
     /**
@@ -423,7 +423,7 @@ public:
      *          If n >= dictionary size, all tokens are returned.
      * @return Vector of (token, volatility_score) pairs, sorted descending.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         top_tokens_by_volatility(size_t n = 10) const;
 
     /**
@@ -437,7 +437,7 @@ public:
      * @param max_bias Upper bound (inclusive) on directional_bias.
      * @return Vector of (token, directional_bias) pairs in unspecified order.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         filter_tokens_by_directional_bias(double min_bias, double max_bias) const;
 
     /**
@@ -449,7 +449,7 @@ public:
      *          If n >= dictionary size, all tokens are returned.
      * @return Vector of (token, directional_bias) pairs, sorted descending by |directional_bias|.
      */
-    std::vector<std::pair<std::string, double>>
+    [[nodiscard]] std::vector<std::pair<std::string, double>>
         top_tokens_by_directional_bias(size_t n = 10) const;
 
     /**
@@ -503,7 +503,7 @@ public:
      * @param token Raw token string.
      * @return Hit count for the token.
      */
-    uint64_t get_token_hit_count(const std::string& token) const;
+    [[nodiscard]] uint64_t get_token_hit_count(const std::string& token) const;
 
     /**
      * @brief Return the top N most frequently hit dictionary tokens, sorted descending.
@@ -515,7 +515,7 @@ public:
      * @param n Maximum number of entries to return (default: 10).
      * @return Vector of (token, hit_count) pairs sorted by hit_count descending.
      */
-    std::vector<std::pair<std::string, uint64_t>> top_tokens_by_frequency(size_t n = 10) const;
+    [[nodiscard]] std::vector<std::pair<std::string, uint64_t>> top_tokens_by_frequency(size_t n = 10) const;
 
     /**
      * @brief Reset all per-token hit counters to zero without affecting statistics.
@@ -561,7 +561,7 @@ public:
      *
      * @return Single-line stats summary string.
      */
-    std::string format_stats() const;
+    [[nodiscard]] std::string format_stats() const;
 
     /**
      * @brief Serialise the current adapter statistics to a JSON string.

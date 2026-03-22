@@ -219,8 +219,8 @@ TEST(LLMAdapterTest, test_llm_adapter_case_insensitive_lookup) {
 
 TEST(LLMAdapterTest, test_llm_adapter_get_stats_hit_miss_sum_equals_processed) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("bullish");    // hit
-    adapter.map_token_to_weight("unknown_xyz"); // miss
+    (void)adapter.map_token_to_weight("bullish");    // hit
+    (void)adapter.map_token_to_weight("unknown_xyz"); // miss
     auto s = adapter.get_stats();
     EXPECT_EQ(s.cache_hits + s.cache_misses, s.tokens_processed)
         << "cache_hits + cache_misses must equal tokens_processed";
@@ -267,9 +267,9 @@ TEST(LLMAdapterTest, test_llm_adapter_clear_custom_mappings_empties_dictionary) 
 TEST(LLMAdapterTest, test_llm_adapter_tokens_processed_increments_per_call) {
     LLMAdapter adapter;
     auto before = adapter.get_stats();
-    adapter.map_token_to_weight("crash");
-    adapter.map_token_to_weight("panic");
-    adapter.map_token_to_weight("xyzzy_unknown_42");
+    (void)adapter.map_token_to_weight("crash");
+    (void)adapter.map_token_to_weight("panic");
+    (void)adapter.map_token_to_weight("xyzzy_unknown_42");
     auto after = adapter.get_stats();
     EXPECT_EQ(after.tokens_processed, before.tokens_processed + 3u)
         << "tokens_processed must increment by exactly 1 per map_token_to_weight call";
