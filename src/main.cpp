@@ -270,6 +270,9 @@
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
 #  include "SignalStrengthIndexer.h"
 #endif
+#ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
+#  include "SignalPolarizationMonitor.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2370,6 +2373,26 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
+    // SignalPolarizationMonitor: detects bimodal sentiment distribution using
+    // Sarle's bimodality coefficient.  BC > 0.6 → two opposing camps active.
+    llmquant::SignalPolarizationMonitor polarization_monitor;
+    {
+        llmquant::SignalPolarizationMonitor::Config pm_cfg;
+        pm_cfg.window                 = 64;
+        pm_cfg.min_observations       = 8;
+        pm_cfg.polarization_threshold = 0.60;
+        pm_cfg.clear_hysteresis       = 0.85;
+        pm_cfg.on_polarized = [](double bc) {
+            spdlog::warn("[polarization] BIMODAL BC={:.3f} — bulls/bears split, regime unstable", bc);
+        };
+        pm_cfg.on_unified = [](double bc) {
+            spdlog::info("[polarization] unified BC={:.3f} — distribution normalized", bc);
+        };
+        polarization_monitor.update_config(pm_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2914,6 +2937,10 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
         signal_ssi.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
+        // Track bimodality of signal distribution — polarized market = two-camp regime.
+        polarization_monitor.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4690,6 +4717,14 @@ int main(int argc, char* argv[]) {
               << "  oversold=" << (signal_ssi.is_oversold() ? "YES" : "no")
               << "  obs=" << signal_ssi.observation_count() << "\n";
 #endif
+#ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
+    std::cout << "  Polarization BC  : "
+              << std::fixed << std::setprecision(3) << polarization_monitor.bimodality_coefficient()
+              << "  polarized=" << (polarization_monitor.is_polarized() ? "YES" : "no")
+              << "  skew=" << std::setprecision(3) << polarization_monitor.skewness()
+              << "  kurt=" << polarization_monitor.excess_kurtosis()
+              << "  events=" << polarization_monitor.polarization_events() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4913,6 +4948,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
         std::cout << "  [json:ssi]        " << signal_ssi.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
+        std::cout << "  [json:polarization] " << polarization_monitor.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
