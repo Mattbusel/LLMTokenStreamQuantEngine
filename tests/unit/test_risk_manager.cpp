@@ -1955,22 +1955,22 @@ TEST(RiskManagerTest, test_pnl_gate_trip_callback_is_separate_from_position) {
     rm.update_position(pos);
 
     // First block: pnl callback fires once.
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
     EXPECT_EQ(pnl_trips,      1) << "pnl trip callback must fire on first pnl block";
     EXPECT_EQ(position_trips, 0) << "position callback must NOT fire for pnl-only block";
 
     // Second consecutive block: callback must NOT re-fire.
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
     EXPECT_EQ(pnl_trips, 1) << "pnl trip callback must not re-fire on consecutive pnl block";
 
     // Restore position state so gate clears.
     pos.pnl = 0.0;
     rm.update_position(pos);
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));  // passes
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));  // passes
 
     // Re-trip: callback fires again.
     pos.pnl = -50.0;
     rm.update_position(pos);
-    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
     EXPECT_EQ(pnl_trips, 2) << "pnl trip callback must re-fire after gate re-arms";
 }
