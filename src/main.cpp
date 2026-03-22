@@ -1885,6 +1885,11 @@ int main(int argc, char* argv[]) {
         adaptive_sampler.record_activity(std::abs(signal.delta_bias_shift));
 #endif
 
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+        // Compute self-information of this signal relative to learned distribution.
+        signal_surprise.record(signal.delta_bias_shift);
+#endif
+
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
             int idx = spark_head.fetch_add(1, std::memory_order_relaxed) % kSparkSlots;
@@ -2930,6 +2935,20 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+                      << [&]() -> std::string {
+                            // Normalized self-information: 0=expected, 1=maximally surprising.
+                            double s   = signal_surprise.surprise();
+                            bool   hi  = signal_surprise.is_high_surprise();
+                            std::ostringstream o;
+                            o << "  SUR:";
+                            if      (hi)       o << C("\033[35m");   // magenta = surprise
+                            else if (s > 0.5)  o << C("\033[33m");   // yellow  = moderate
+                            else               o << C("\033[32m");   // green   = expected
+                            o << std::fixed << std::setprecision(2) << s << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -3205,6 +3224,13 @@ int main(int argc, char* argv[]) {
               << "  outcomes=" << blind_spot.total_outcomes()
               << "  events=" << blind_spot.detection_events() << "\n";
 #endif
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+    std::cout << "  Signal surprise  : "
+              << "last=" << std::fixed << std::setprecision(3) << signal_surprise.surprise()
+              << "  mean=" << signal_surprise.mean_surprise()
+              << "  high=" << (signal_surprise.is_high_surprise() ? "YES" : "no")
+              << "  events=" << signal_surprise.high_surprise_count() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3338,6 +3364,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
         std::cout << "  [json:bspot]   " << blind_spot.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
+        std::cout << "  [json:surprise]" << signal_surprise.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
