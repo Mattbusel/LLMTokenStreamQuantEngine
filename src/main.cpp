@@ -1077,9 +1077,17 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Main monitoring loop — prints a rolling stats bar every second.
+    // Interruptible sleep: wake every 100ms to check g_running so that
+    // SIGINT/SIGTERM is handled promptly regardless of --stats-interval.
     uint64_t last_tick = 0;
     while (g_running) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(stats_interval_ms));
+        {
+            auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::milliseconds(stats_interval_ms);
+            while (g_running && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!g_running) break;
+        }
 
         auto stats    = latency_ctrl.get_stats();
         auto pressure = latency_ctrl.get_pressure();
