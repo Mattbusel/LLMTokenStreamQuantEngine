@@ -1,0 +1,58 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libspdlog-dev libfmt-dev libyaml-cpp-dev \
+            libgtest-dev nlohmann-json3-dev \
+            libssl-dev libhiredis-dev \
+            lcov
+
+      - name: Configure (coverage build)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DLLMQUANT_ENABLE_COVERAGE=ON \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure --parallel $(nproc)
+
+      - name: Collect coverage
+        run: |
+          lcov --capture \
+               --directory build \
+               --output-file coverage.info \
+               --no-external \
+               --ignore-errors mismatch
+          lcov --remove coverage.info \
+               '*/tests/*' '*/gtest*' \
+               --output-file coverage_filtered.info
+          lcov --summary coverage_filtered.info
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage_filtered.info
+          retention-days: 14

@@ -83,8 +83,10 @@ void TokenStreamSimulator::stream_worker() {
             if (!ring_buffer_.try_pop(token_text)) {
                 auto deadline = std::chrono::steady_clock::now() + config_.token_interval;
                 const auto slice = std::chrono::milliseconds{50};
-                while (running_.load() && std::chrono::steady_clock::now() < deadline)
-                    std::this_thread::sleep_for(slice);
+                while (running_.load() && std::chrono::steady_clock::now() < deadline) {
+                    auto remaining = deadline - std::chrono::steady_clock::now();
+                    std::this_thread::sleep_for(remaining < slice ? remaining : slice);
+                }
                 continue;  // Do NOT fall through to the dispatch sleep.
             }
         }
@@ -111,11 +113,15 @@ void TokenStreamSimulator::stream_worker() {
         stats_.tokens_emitted++;
         // Interruptible cadence sleep: break into 50ms slices so stop() returns
         // promptly even when token_interval is in the seconds range.
+        // Clamp each slice to the remaining time so short intervals (< 50ms)
+        // are honoured accurately.
         {
             auto deadline = std::chrono::steady_clock::now() + config_.token_interval;
             const auto slice = std::chrono::milliseconds{50};
-            while (running_.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::sleep_for(slice);
+            while (running_.load() && std::chrono::steady_clock::now() < deadline) {
+                auto remaining = deadline - std::chrono::steady_clock::now();
+                std::this_thread::sleep_for(remaining < slice ? remaining : slice);
+            }
         }
     }
 }
