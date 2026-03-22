@@ -377,3 +377,33 @@ TEST(DeduplicatorTest, test_to_stats_json_empty_dedup_shows_zero_rate) {
     EXPECT_NE(json.find("\"total_duplicates\":0"), std::string::npos);
     EXPECT_NE(json.find("\"dup_rate_pct\":0.00"),  std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 35: regression — Redis key buffer was 35 bytes but needed 38
+//   ("llmq:" 5 + 16 hex + 16 hex + null 1 = 38).  With a 35-byte buffer,
+//   snprintf truncated the last 3 hex chars of value_hi, making keys that
+//   differ only in the bottom 12 bits of value_hi collide in Redis.
+//
+//   This test verifies that two DedupKeys with the same `value` but different
+//   `value_hi` are always treated as distinct (never duplicate) by the
+//   in-process backend, which stores and compares the full 128-bit key.
+// ---------------------------------------------------------------------------
+
+TEST(DeduplicatorTest, test_keys_differing_only_in_value_hi_are_always_distinct) {
+    InProcessDeduplicator dedup;
+    // Construct keys that share `value` but differ only in the lowest 12 bits
+    // of `value_hi` — the exact bits that would be lost by a 35-byte buffer.
+    DedupKey k1{0xAAAAAAAAAAAAAAAAULL, 0xBBBBBBBBBBBBB000ULL};
+    DedupKey k2{0xAAAAAAAAAAAAAAAAULL, 0xBBBBBBBBBBBBB001ULL};
+
+    auto r1 = dedup.check_and_register(k1, ms{60000});
+    auto r2 = dedup.check_and_register(k2, ms{60000});
+    EXPECT_EQ(r1, DedupResult::Novel) << "k1 must be novel on first insert";
+    EXPECT_EQ(r2, DedupResult::Novel) << "k2 must be novel — must not collide with k1";
+
+    // Both keys present now; re-checking each must report Duplicate, not Novel.
+    EXPECT_EQ(dedup.check_and_register(k1, ms{60000}), DedupResult::Duplicate)
+        << "k1 must be duplicate on second check";
+    EXPECT_EQ(dedup.check_and_register(k2, ms{60000}), DedupResult::Duplicate)
+        << "k2 must be duplicate on second check";
+}

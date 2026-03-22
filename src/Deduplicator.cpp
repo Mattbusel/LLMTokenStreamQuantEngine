@@ -226,7 +226,7 @@ DedupResult RedisDeduplicator::check_and_register(const DedupKey& key,
         // Use both 64-bit halves as the Redis key for full 128-bit uniqueness.
         // Hex encoding with fixed width avoids the separator collision that
         // plain decimal + "_" can cause (e.g. "12_3" vs "1_23").
-        char redis_key_buf[35]; // "llmq:" + 16 hex + 16 hex + null
+        char redis_key_buf[38]; // "llmq:" (5) + 16 hex + 16 hex + null (1) = 38
         std::snprintf(redis_key_buf, sizeof(redis_key_buf), "llmq:%016llx%016llx",
                       static_cast<unsigned long long>(key.value),
                       static_cast<unsigned long long>(key.value_hi));
@@ -267,7 +267,7 @@ void RedisDeduplicator::evict(const DedupKey& key) {
         auto* ctx   = static_cast<redisContext*>(redis_ctx_);
         // Hex encoding with fixed width avoids the separator collision that
         // plain decimal + "_" can cause (e.g. "12_3" vs "1_23").
-        char redis_key_buf[35]; // "llmq:" + 16 hex + 16 hex + null
+        char redis_key_buf[38]; // "llmq:" (5) + 16 hex + 16 hex + null (1) = 38
         std::snprintf(redis_key_buf, sizeof(redis_key_buf), "llmq:%016llx%016llx",
                       static_cast<unsigned long long>(key.value),
                       static_cast<unsigned long long>(key.value_hi));

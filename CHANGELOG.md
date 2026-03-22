@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 36 — 2026-03-21)
+- **Bug fix** `Deduplicator.cpp`: Redis key buffer was `[35]` bytes but the
+  formatted key `"llmq:" + 16 hex + 16 hex + null` requires 38 bytes. With the
+  under-sized buffer `snprintf` silently truncated the last 3 hex characters of
+  `value_hi`, causing two keys that differ only in the bottom 12 bits of
+  `value_hi` to collide in Redis (false positive duplicate detection). Buffer
+  corrected to `[38]`; same fix applied to both call sites (`check_and_register`
+  and `evict`). Regression test added.
+
 ### Fixed (Cycle 35 — 2026-03-21)
 - **Bug fix** `PrometheusExporter::format_info`: label values containing `"`,
   `\`, or `\n` were emitted unescaped, producing invalid Prometheus text format.
