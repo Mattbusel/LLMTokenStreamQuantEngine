@@ -4362,8 +4362,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  Decay scheduler  : "
                   << "eff_sent=" << std::fixed << std::setprecision(4)
                   << decay_scheduler.effective_sentiment(tds_now)
-                  << "  entries=" << decay_scheduler.entry_count()
-                  << "  evictions=" << decay_scheduler.eviction_count()
+                  << "  active=" << decay_scheduler.active_entries()
+                  << "  total=" << decay_scheduler.total_recorded()
                   << "  flips=" << decay_scheduler.flip_count() << "\n";
     }
 #endif
@@ -4578,6 +4578,17 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
         std::cout << "  [json:shadow]     " << shadow_portfolio.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
+        std::cout << "  [json:confband]   " << confidence_band.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+        {
+            auto tds_now2 = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            std::cout << "  [json:decay]      " << decay_scheduler.to_stats_json(tds_now2) << "\n";
+        }
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
