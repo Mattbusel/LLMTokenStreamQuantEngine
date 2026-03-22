@@ -1571,6 +1571,66 @@ else()
     message(STATUS "Feature: SignalReversalDetector DISABLED (LLMQUANT_ENABLE_REVERSAL_DETECTOR=OFF)")
 endif()
 
+# AdaptiveThresholdController: vol-adjusted overbought/oversold thresholds.
+option(LLMQUANT_ENABLE_ADAPTIVE_THRESHOLD "Build AdaptiveThresholdController: EMA-vol-adjusted OB/OS thresholds that widen in volatile regimes" ON)
+if(LLMQUANT_ENABLE_ADAPTIVE_THRESHOLD)
+    target_sources(llmquant PRIVATE src/AdaptiveThresholdController.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADAPTIVE_THRESHOLD_ENABLED)
+    message(STATUS "Feature: AdaptiveThresholdController ENABLED (vol-adaptive OB/OS thresholds, on_threshold_change)")
+else()
+    message(STATUS "Feature: AdaptiveThresholdController DISABLED (LLMQUANT_ENABLE_ADAPTIVE_THRESHOLD=OFF)")
+endif()
+
+# BiasConditionalDistribution: P(bias|prev_dir) asymmetry via total variation distance.
+option(LLMQUANT_ENABLE_CONDITIONAL_DIST "Build BiasConditionalDistribution: conditional histogram asymmetry (momentum vs mean-reversion) via TV distance" ON)
+if(LLMQUANT_ENABLE_CONDITIONAL_DIST)
+    target_sources(llmquant PRIVATE src/BiasConditionalDistribution.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONDITIONAL_DIST_ENABLED)
+    message(STATUS "Feature: BiasConditionalDistribution ENABLED (conditional histograms, TV asymmetry callback)")
+else()
+    message(STATUS "Feature: BiasConditionalDistribution DISABLED (LLMQUANT_ENABLE_CONDITIONAL_DIST=OFF)")
+endif()
+
+# SignalCompressor: LZ76 algorithmic complexity as predictability/compressibility measure.
+option(LLMQUANT_ENABLE_SIGNAL_COMPRESSOR "Build SignalCompressor: normalised LZ76 complexity for trend vs noise regime classification" ON)
+if(LLMQUANT_ENABLE_SIGNAL_COMPRESSOR)
+    target_sources(llmquant PRIVATE src/SignalCompressor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_COMPRESSOR_ENABLED)
+    message(STATUS "Feature: SignalCompressor ENABLED (LZ76 complexity, on_complexity_change)")
+else()
+    message(STATUS "Feature: SignalCompressor DISABLED (LLMQUANT_ENABLE_SIGNAL_COMPRESSOR=OFF)")
+endif()
+
+# BiasRollingQuantileTracker: P10/P25/P50/P75/P90 quantiles of rolling bias window.
+option(LLMQUANT_ENABLE_ROLLING_QUANTILE "Build BiasRollingQuantileTracker: rolling P10-P90 quantiles with median-shift and skew-change callbacks" ON)
+if(LLMQUANT_ENABLE_ROLLING_QUANTILE)
+    target_sources(llmquant PRIVATE src/BiasRollingQuantileTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ROLLING_QUANTILE_ENABLED)
+    message(STATUS "Feature: BiasRollingQuantileTracker ENABLED (P10/P25/P50/P75/P90, skew, median-shift callback)")
+else()
+    message(STATUS "Feature: BiasRollingQuantileTracker DISABLED (LLMQUANT_ENABLE_ROLLING_QUANTILE=OFF)")
+endif()
+
+# SignalAutoregressor: online AR(p) model fitted via RLS for prediction-error spike detection.
+option(LLMQUANT_ENABLE_AUTOREGRESSOR "Build SignalAutoregressor: online RLS AR(p) model — fires on_prediction_error_spike on regime breaks" ON)
+if(LLMQUANT_ENABLE_AUTOREGRESSOR)
+    target_sources(llmquant PRIVATE src/SignalAutoregressor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_AUTOREGRESSOR_ENABLED)
+    message(STATUS "Feature: SignalAutoregressor ENABLED (RLS AR(p), prediction-error spike detection)")
+else()
+    message(STATUS "Feature: SignalAutoregressor DISABLED (LLMQUANT_ENABLE_AUTOREGRESSOR=OFF)")
+endif()
+
+# TokenBiasPhaseSpace: 2-D delay-embedding phase-space grid with attractor-shift detection.
+option(LLMQUANT_ENABLE_PHASE_SPACE "Build TokenBiasPhaseSpace: (bias_t, bias_{t-1}) phase-space grid, dominant-attractor tracking, on_attractor_shift" ON)
+if(LLMQUANT_ENABLE_PHASE_SPACE)
+    target_sources(llmquant PRIVATE src/TokenBiasPhaseSpace.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PHASE_SPACE_ENABLED)
+    message(STATUS "Feature: TokenBiasPhaseSpace ENABLED (phase-space grid, attractor detection)")
+else()
+    message(STATUS "Feature: TokenBiasPhaseSpace DISABLED (LLMQUANT_ENABLE_PHASE_SPACE=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
