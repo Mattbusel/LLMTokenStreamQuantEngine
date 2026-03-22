@@ -322,6 +322,8 @@ public:
      *   LLMQUANT_STATS_PORT             → metrics.stats_port
      *   LLMQUANT_LOG_FILE               → logging.log_file_path
      *   LLMQUANT_LOG_FORMAT             → logging.format (uppercased, e.g. "CSV" or "JSON")
+     *   LLMQUANT_DEDUP_TTL_MS           → token_stream.dedup_ttl_ms (>= 0; 0 = auto)
+     *   LLMQUANT_DEDUP_REDIS_URL        → token_stream.redis_url (e.g. "redis://127.0.0.1:6379")
      *
      * Thread-safe (acquires config_mutex_).
      *

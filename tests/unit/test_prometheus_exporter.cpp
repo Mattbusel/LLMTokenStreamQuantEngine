@@ -363,3 +363,58 @@ TEST(PrometheusExporterTest, test_format_counter_zero_value_emitted) {
     EXPECT_NE(result.find("llmquant_signals_cooldown_suppressed_total 0"), std::string::npos)
         << "zero-value counter must still be emitted";
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 45: label value escaping — \r and \n must be escaped
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_info_label_value_with_newline_is_escaped) {
+    // A label value containing \n would corrupt the Prometheus text format if
+    // not escaped — the parser would misinterpret the following characters as
+    // a new metric line.
+    auto result = PrometheusExporter::format_info(
+        "llmquant_build_info",
+        {{"version", "1.0\ninjected"}},
+        "Build information");
+    // The raw newline must not appear in the output.
+    EXPECT_EQ(result.find("1.0\ninjected"), std::string::npos)
+        << "raw newline in label value must be escaped";
+    EXPECT_NE(result.find("1.0\\ninjected"), std::string::npos)
+        << "newline in label value must appear as \\n";
+}
+
+TEST(PrometheusExporterTest, test_format_info_label_value_with_carriage_return_is_escaped) {
+    // A \r (carriage return) in a label value would also corrupt Prometheus
+    // output on some parsers that treat CRLF as a line ending.
+    auto result = PrometheusExporter::format_info(
+        "llmquant_build_info",
+        {{"version", "1.0\rinjected"}},
+        "Build information");
+    EXPECT_EQ(result.find("1.0\rinjected"), std::string::npos)
+        << "raw carriage return in label value must be escaped";
+    EXPECT_NE(result.find("1.0\\rinjected"), std::string::npos)
+        << "carriage return in label value must appear as \\r";
+}
+
+TEST(PrometheusExporterTest, test_format_info_label_value_with_backslash_is_escaped) {
+    // Input: one backslash between "a" and "b".
+    auto result = PrometheusExporter::format_info(
+        "llmquant_build_info",
+        {{"path", "a\\b"}},
+        "");
+    // Each \ must appear as \\ in the output.
+    EXPECT_NE(result.find("a\\\\b"), std::string::npos)
+        << "backslash in label value must be doubled to \\\\";
+    // A raw (unescaped) backslash must not appear between a and b.
+    EXPECT_EQ(result.find("a\\b"), std::string::npos)
+        << "raw backslash must not appear in escaped label value";
+}
+
+TEST(PrometheusExporterTest, test_format_info_label_value_with_double_quote_is_escaped) {
+    auto result = PrometheusExporter::format_info(
+        "llmquant_build_info",
+        {{"desc", "say \"hello\""}},
+        "");
+    EXPECT_NE(result.find("say \\\"hello\\\""), std::string::npos)
+        << "double-quote in label value must be escaped as \\\"";
+}

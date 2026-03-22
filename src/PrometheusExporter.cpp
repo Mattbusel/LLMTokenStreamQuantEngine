@@ -221,6 +221,7 @@ static std::string escape_prom_label_value(const std::string& s) {
         if      (c == '\\') out += "\\\\";
         else if (c == '"')  out += "\\\"";
         else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
         else                out += c;
     }
     return out;

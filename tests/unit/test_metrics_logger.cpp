@@ -734,3 +734,35 @@ TEST(MetricsLoggerTest, test_enable_token_logging_true_writes_entries) {
     EXPECT_TRUE(found) << "TOKEN_RECEIVED must appear when enable_token_logging=true";
     std::remove(path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 45: enable_token_logging=false does not increment log_entry_count
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_enable_token_logging_false_does_not_increment_entry_count) {
+    const std::string path = "/tmp/test_metrics_token_logging_counter.log";
+    MetricsLogger::Config cfg = make_csv_config(path);
+    cfg.enable_token_logging = false;
+    MetricsLogger logger(cfg);
+
+    logger.log_token_received("bullish", 1);
+    logger.log_token_received("bearish", 2);
+
+    EXPECT_EQ(logger.get_log_entry_count(), 0u)
+        << "log_entry_count must stay 0 when enable_token_logging=false";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_enable_token_logging_true_increments_entry_count) {
+    const std::string path = "/tmp/test_metrics_token_logging_counter2.log";
+    MetricsLogger::Config cfg = make_csv_config(path);
+    cfg.enable_token_logging = true;
+    MetricsLogger logger(cfg);
+
+    logger.log_token_received("bullish", 1);
+    logger.log_token_received("bearish", 2);
+
+    EXPECT_EQ(logger.get_log_entry_count(), 2u)
+        << "log_entry_count must increment once per log_token_received call";
+    std::remove(path.c_str());
+}

@@ -507,6 +507,8 @@ int Config::load_from_env() {
         { config_.risk_thresholds.max_drawdown = d; ++applied; }
     if (get_size_t("LLMQUANT_MAX_SIGNALS_PER_SECOND", sz))
         { config_.risk_thresholds.max_signals_per_second = sz; ++applied; }
+    if (get_int("LLMQUANT_DEDUP_TTL_MS", i) && i >= 0)
+        { config_.token_stream.dedup_ttl_ms = i; ++applied; }
     if (get_uint16("LLMQUANT_STATS_PORT", u16) && u16 > 0)
         { config_.metrics.stats_port = u16; ++applied; }
 

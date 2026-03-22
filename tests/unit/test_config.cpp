@@ -1304,5 +1304,102 @@ TEST(ConfigTest, test_validate_rejects_negative_spread_magnitude) {
     EXPECT_TRUE(found) << "validate() must reject max_spread_magnitude < 0";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 45: LLMQUANT_DEDUP_TTL_MS env var
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_config_load_from_env_dedup_ttl_ms_applied) {
+    Config cfg;
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_TTL_MS", "250");
+#else
+    setenv("LLMQUANT_DEDUP_TTL_MS", "250", 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0) << "At least one env var must be applied";
+    EXPECT_EQ(cfg.get_config().token_stream.dedup_ttl_ms, 250);
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_TTL_MS", "");
+#else
+    unsetenv("LLMQUANT_DEDUP_TTL_MS");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_dedup_ttl_ms_negative_ignored) {
+    Config cfg;
+    int before = cfg.get_config().token_stream.dedup_ttl_ms;
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_TTL_MS", "-1");
+#else
+    setenv("LLMQUANT_DEDUP_TTL_MS", "-1", 1);
+#endif
+    cfg.load_from_env();
+    EXPECT_EQ(cfg.get_config().token_stream.dedup_ttl_ms, before)
+        << "Negative LLMQUANT_DEDUP_TTL_MS must be ignored";
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_TTL_MS", "");
+#else
+    unsetenv("LLMQUANT_DEDUP_TTL_MS");
+#endif
+}
+
+TEST(ConfigTest, test_config_load_from_env_dedup_redis_url_applied) {
+    Config cfg;
+    const char* test_url = "redis://127.0.0.1:6379";
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_REDIS_URL", test_url);
+#else
+    setenv("LLMQUANT_DEDUP_REDIS_URL", test_url, 1);
+#endif
+    int applied = cfg.load_from_env();
+    EXPECT_GT(applied, 0) << "LLMQUANT_DEDUP_REDIS_URL must be applied";
+    EXPECT_EQ(cfg.get_config().token_stream.redis_url, std::string(test_url));
+#ifdef _WIN32
+    _putenv_s("LLMQUANT_DEDUP_REDIS_URL", "");
+#else
+    unsetenv("LLMQUANT_DEDUP_REDIS_URL");
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 45: to_yaml_string round-trip with redis_url
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_to_yaml_string_round_trips_redis_url) {
+    Config cfg;
+    ASSERT_TRUE(cfg.load_from_yaml_string(
+        "token_stream:\n  redis_url: \"redis://127.0.0.1:6379\"\n"));
+    std::string yaml = cfg.to_yaml_string();
+
+    Config cfg2;
+    ASSERT_TRUE(cfg2.load_from_yaml_string(yaml));
+    EXPECT_EQ(cfg2.get_config().token_stream.redis_url, "redis://127.0.0.1:6379")
+        << "redis_url must survive a to_yaml_string round-trip";
+}
+
+TEST(ConfigTest, test_to_yaml_string_omits_empty_redis_url) {
+    Config cfg;
+    std::string yaml = cfg.to_yaml_string();
+    // An empty redis_url must not appear in the YAML output (it's the default).
+    // The key should be absent entirely.
+    EXPECT_EQ(yaml.find("redis_url: \"\""), std::string::npos)
+        << "to_yaml_string must not emit redis_url when it is empty";
+}
+
+// ---------------------------------------------------------------------------
+// Cycle 45: diff_from_defaults includes redis_url when set
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_diff_from_defaults_detects_redis_url_change) {
+    Config cfg;
+    ASSERT_TRUE(cfg.load_from_yaml_string(
+        "token_stream:\n  redis_url: \"redis://myhost:6379\"\n"));
+    auto diffs = cfg.diff_from_defaults();
+    bool found = false;
+    for (const auto& d : diffs)
+        if (d.find("redis_url") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found) << "diff_from_defaults must include redis_url when non-default";
+}
+
 } // namespace
 } // namespace llmquant

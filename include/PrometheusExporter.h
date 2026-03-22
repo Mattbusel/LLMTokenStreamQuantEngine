@@ -78,7 +78,7 @@ public:
      *
      * @return Running state.
      */
-    bool is_running() const { return running_.load(); }
+    [[nodiscard]] bool is_running() const { return running_.load(); }
 
     /**
      * @brief Return the number of successful /metrics scrapes served since start().
@@ -88,7 +88,7 @@ public:
      *
      * @return Scrape count.
      */
-    uint64_t scrape_count() const noexcept {
+    [[nodiscard]] uint64_t scrape_count() const noexcept {
         return scrape_count_.load(std::memory_order_relaxed);
     }
 
