@@ -106,8 +106,8 @@ TEST(TokenInfluenceAttributor, VisitorMatchesVector) {
     attr.record("c", 0.7);
 
     auto vec_results = attr.attribute();
-    std::vector<AttributionResult> visited;
-    attr.attribute([&](const AttributionResult& r) { visited.push_back(r); });
+    std::vector<TokenInfluenceAttributor::AttributionResult> visited;
+    attr.attribute([&](const TokenInfluenceAttributor::AttributionResult& r) { visited.push_back(r); });
 
     ASSERT_EQ(vec_results.size(), visited.size());
     for (std::size_t i = 0; i < vec_results.size(); ++i)

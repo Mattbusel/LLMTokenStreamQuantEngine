@@ -1172,6 +1172,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
     llmquant::TokenInfluenceAttributor token_influence;
 #endif
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+    llmquant::TokenNgramProfiler ngram_profiler;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1830,17 +1833,14 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef LLMQUANT_WALK_FORWARD_ENABLED
-    // WalkForwardValidator: rolling OOS validation — offline tool.
-    // Constructed here; tokens are loaded and run() is called at session end.
-    llmquant::WalkForwardValidator walk_forward;
-    {
-        llmquant::WalkForwardValidator::Config wf_cfg;
-        wf_cfg.train_size = 200;
-        wf_cfg.test_size  = 50;
-        wf_cfg.step_size  = 50;
-        wf_cfg.optimize   = false;  // skip parameter sweep in live mode
-        walk_forward = llmquant::WalkForwardValidator(wf_cfg);
-    }
+    // WalkForwardValidator: rolling OOS validation — offline/diagnostic tool.
+    // Tokens must be loaded via load_tokens() before run() can be called.
+    llmquant::WalkForwardValidator::Config wf_cfg;
+    wf_cfg.train_size = 200;
+    wf_cfg.test_size  = 50;
+    wf_cfg.step_size  = 50;
+    wf_cfg.optimize   = false;  // skip parameter sweep in live mode
+    llmquant::WalkForwardValidator walk_forward(wf_cfg);
 #endif
 
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
@@ -2253,7 +2253,7 @@ int main(int argc, char* argv[]) {
         regime_sizer.update_hurst(fractal_dim.hurst());
 #  endif
 #  ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
-        regime_sizer.update_vol(vol_forecaster.annualised_vol());
+        regime_sizer.update_vol(vol_forecaster.conditional_vol());
 #  endif
 #endif
 
