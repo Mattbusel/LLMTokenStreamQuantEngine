@@ -474,7 +474,13 @@ int main(int argc, char* argv[]) {
     LatencyController latency_ctrl({
         .target_latency = std::chrono::microseconds(sys_config.latency.target_latency_us),
         .sample_window = sys_config.latency.sample_window,
+        // When compiled with LLMQUANT_ENABLE_PROFILING=OFF the sample ring buffer
+        // is always disabled regardless of the YAML/env runtime setting.
+#ifdef LLMQUANT_PROFILING_ENABLED
         .enable_profiling = sys_config.latency.enable_profiling
+#else
+        .enable_profiling = false
+#endif
     });
 
     // Arrival rate tracking for pressure system.
@@ -646,7 +652,13 @@ int main(int argc, char* argv[]) {
     // Start config hot-reload watcher now that all pipeline objects exist.
     // The callback can update every subsystem live, including reloading the
     // token file when token_stream.data_file_path changes at runtime.
-    // Disabled when --no-hot-reload is passed (useful in CI/embedded contexts).
+    // Disabled when --no-hot-reload is passed OR when hot-reload was compiled
+    // out with -DLLMQUANT_ENABLE_HOT_RELOAD=OFF (useful in CI/embedded contexts).
+#ifndef LLMQUANT_HOT_RELOAD_ENABLED
+    (void)no_hot_reload;  // suppress unused-variable warning
+    spdlog::info("Config hot-reload watcher compiled out (LLMQUANT_ENABLE_HOT_RELOAD=OFF)");
+    if (false) {
+#else
     if (no_hot_reload) {
         spdlog::info("--no-hot-reload: config file watcher disabled");
     } else if (!config.start_watching(config_file, [&risk_mgr, &trade_engine, &token_sim,
@@ -707,6 +719,7 @@ int main(int argc, char* argv[]) {
     })) {
         spdlog::warn("Config hot-reload watcher failed to start");
     }
+#endif // LLMQUANT_HOT_RELOAD_ENABLED
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1338,8 +1351,15 @@ int main(int argc, char* argv[]) {
                 snap << "# HELP llmquant_top_influence_token Composite influence score (freq+bias blend) [0,1]\n"
                      << "# TYPE llmquant_top_influence_token gauge\n";
                 for (const auto& [tok, score] : llm_adapter.export_hot_tokens(5)) {
+                    // Prometheus text format requires escaping \, ", and \n in label values.
                     std::string safe_tok;
-                    for (char c : tok) safe_tok += (c == '"') ? '\'' : c;
+                    safe_tok.reserve(tok.size());
+                    for (char c : tok) {
+                        if (c == '\\')     { safe_tok += "\\\\"; }
+                        else if (c == '"') { safe_tok += "\\\""; }
+                        else if (c == '\n') { safe_tok += "\\n"; }
+                        else               { safe_tok += c; }
+                    }
                     snap << "llmquant_top_influence_token{token=\"" << safe_tok << "\"} "
                          << std::setprecision(4) << score << "\n";
                 }
