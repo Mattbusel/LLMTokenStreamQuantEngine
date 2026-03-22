@@ -135,6 +135,9 @@ option(LLMQUANT_ENABLE_ECHO_SUPPRESSOR              "Build SignalEchoSuppressor:
 option(LLMQUANT_ENABLE_WEIGHT_HISTOGRAM             "Build TokenWeightHistogram: 20-bucket discretized histogram of bias values with entropy and mode tracking" ON)
 option(LLMQUANT_ENABLE_SIGNAL_SLOPE                 "Build SignalSlopeMeter: OLS linear regression slope over rolling window of bias values; fires on_trend_acceleration" ON)
 option(LLMQUANT_ENABLE_LATENCY_JITTER               "Build LatencyJitterMonitor: MAD-based latency jitter tracker; fires on_jitter_spike when consistency degrades beyond threshold" ON)
+option(LLMQUANT_ENABLE_HURST_ESTIMATOR              "Build SignalHurstEstimator: R/S rescaled-range Hurst exponent on rolling bias window; H>0.6=trending, H<0.4=mean-reverting" ON)
+option(LLMQUANT_ENABLE_RUN_LENGTH                   "Build BiasRunLengthEncoder: run-length stats on bias sign sequence (current_run, max_run, avg_run); fires on_long_run callback" ON)
+option(LLMQUANT_ENABLE_COVERAGE_METER               "Build SignalCoverageMeter: rolling min/max of bias values -> coverage fraction of configured range; fires on_range_expansion" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1289,6 +1292,33 @@ if(LLMQUANT_ENABLE_LATENCY_JITTER)
     message(STATUS "Feature: LatencyJitterMonitor ENABLED (MAD jitter tracking, spike/clear callbacks)")
 else()
     message(STATUS "Feature: LatencyJitterMonitor DISABLED (LLMQUANT_ENABLE_LATENCY_JITTER=OFF)")
+endif()
+
+# SignalHurstEstimator: R/S rescaled-range Hurst exponent for persistence classification.
+if(LLMQUANT_ENABLE_HURST_ESTIMATOR)
+    target_sources(llmquant PRIVATE src/SignalHurstEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_HURST_ESTIMATOR_ENABLED)
+    message(STATUS "Feature: SignalHurstEstimator ENABLED (R/S Hurst: H>0.6 trending, H<0.4 reverting)")
+else()
+    message(STATUS "Feature: SignalHurstEstimator DISABLED (LLMQUANT_ENABLE_HURST_ESTIMATOR=OFF)")
+endif()
+
+# BiasRunLengthEncoder: run-length statistics on bias sign sequence.
+if(LLMQUANT_ENABLE_RUN_LENGTH)
+    target_sources(llmquant PRIVATE src/BiasRunLengthEncoder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_RUN_LENGTH_ENABLED)
+    message(STATUS "Feature: BiasRunLengthEncoder ENABLED (run-length stats, on_long_run callback)")
+else()
+    message(STATUS "Feature: BiasRunLengthEncoder DISABLED (LLMQUANT_ENABLE_RUN_LENGTH=OFF)")
+endif()
+
+# SignalCoverageMeter: rolling min/max -> coverage fraction of configured bias range.
+if(LLMQUANT_ENABLE_COVERAGE_METER)
+    target_sources(llmquant PRIVATE src/SignalCoverageMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_COVERAGE_METER_ENABLED)
+    message(STATUS "Feature: SignalCoverageMeter ENABLED (bias range coverage, on_range_expansion callback)")
+else()
+    message(STATUS "Feature: SignalCoverageMeter DISABLED (LLMQUANT_ENABLE_COVERAGE_METER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

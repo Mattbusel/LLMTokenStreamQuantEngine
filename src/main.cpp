@@ -285,6 +285,9 @@
 #ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
 #  include "SignalEchoSuppressor.h"
 #endif
+#ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
+#  include "SignalHurstEstimator.h"
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
 #  include "TokenWeightHistogram.h"
 #endif
@@ -2526,6 +2529,27 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
+    // SignalHurstEstimator: R/S rescaled-range Hurst exponent.
+    // H>0.6 = trending (momentum regime — amplify), H<0.4 = mean-reverting (fade).
+    llmquant::SignalHurstEstimator hurst_estimator;
+    {
+        llmquant::SignalHurstEstimator::Config he_cfg;
+        he_cfg.window              = 64;
+        he_cfg.min_samples         = 16;
+        he_cfg.trending_threshold  = 0.60;
+        he_cfg.reverting_threshold = 0.40;
+        he_cfg.clear_hysteresis    = 0.85;
+        he_cfg.on_trending = [](double h) {
+            spdlog::info("[hurst] trending regime H={:.3f} — persistent momentum, consider amplifying", h);
+        };
+        he_cfg.on_mean_reverting = [](double h) {
+            spdlog::info("[hurst] mean-reverting regime H={:.3f} — anti-persistent, consider fading", h);
+        };
+        hurst_estimator.update_config(he_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     // TokenWeightHistogram: 20-bucket histogram of bias values [-1, 1].
     // Tracks mode bucket and entropy; fires on_distribution_shift on mode change.
@@ -3117,6 +3141,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
         // Detect echo state: near-duplicate consecutive signals = narrative stutter.
         echo_suppressor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
+        // Update Hurst estimate: H>0.6=trending momentum, H<0.4=mean-reverting.
+        hurst_estimator.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
         // Update bias histogram — tracks distribution shape over session.
@@ -4938,6 +4966,14 @@ int main(int argc, char* argv[]) {
               << "  echo_count=" << echo_suppressor.echo_count()
               << "  events=" << echo_suppressor.echo_events() << "\n";
 #endif
+#ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
+    std::cout << "  Hurst Exponent   : "
+              << std::fixed << std::setprecision(3) << hurst_estimator.hurst()
+              << "  trending=" << (hurst_estimator.is_trending() ? "YES" : "no")
+              << "  reverting=" << (hurst_estimator.is_mean_reverting() ? "YES" : "no")
+              << "  t_events=" << hurst_estimator.trend_events()
+              << "  r_events=" << hurst_estimator.revert_events() << "\n";
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
               << "mode=" << weight_histogram.mode_bucket()
@@ -5190,6 +5226,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
         std::cout << "  [json:echo_suppressor] " << echo_suppressor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_HURST_ESTIMATOR_ENABLED
+        std::cout << "  [json:hurst] " << hurst_estimator.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_LATENCY_JITTER_ENABLED
         std::cout << "  [json:latency_jitter] " << latency_jitter.to_stats_json() << "\n";
