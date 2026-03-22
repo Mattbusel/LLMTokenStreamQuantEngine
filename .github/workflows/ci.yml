@@ -208,7 +208,8 @@ jobs:
             -DLLMQUANT_ENABLE_SIGNAL_SSI=OFF \
             -DLLMQUANT_ENABLE_POLARIZATION_MONITOR=OFF \
             -DLLMQUANT_ENABLE_FLOW_PRESSURE=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_FATIGUE=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_FATIGUE=OFF \
+            -DLLMQUANT_ENABLE_NARRATIVE_TEMPERATURE=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -332,6 +333,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_POLARIZATION_MONITOR
           - flag: LLMQUANT_ENABLE_FLOW_PRESSURE
           - flag: LLMQUANT_ENABLE_SIGNAL_FATIGUE
+          - flag: LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

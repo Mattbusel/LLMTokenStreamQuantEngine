@@ -279,6 +279,9 @@
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
 #  include "SignalPolarizationMonitor.h"
 #endif
+#ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
+#  include "NarrativeTemperatureGauge.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2442,6 +2445,27 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
+    // NarrativeTemperatureGauge: combined |EMA(bias)| × σ(bias) "temperature".
+    // Hot narrative = strong direction AND high volatility = elevated execution risk.
+    llmquant::NarrativeTemperatureGauge narrative_temperature;
+    {
+        llmquant::NarrativeTemperatureGauge::Config nt_cfg;
+        nt_cfg.window        = 32;
+        nt_cfg.ema_alpha     = 0.15;
+        nt_cfg.normalizer    = 0.5;
+        nt_cfg.hot_threshold = 0.7;
+        nt_cfg.cool_hysteresis = 0.8;
+        nt_cfg.on_hot = [](double temp) {
+            spdlog::warn("[narrative_temp] HOT temperature={:.3f} — strong+volatile narrative, risk elevated", temp);
+        };
+        nt_cfg.on_cool = [](double temp) {
+            spdlog::info("[narrative_temp] cooled temperature={:.3f}", temp);
+        };
+        narrative_temperature.update_config(nt_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2994,6 +3018,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
         // Track bimodality of signal distribution — polarized market = two-camp regime.
         polarization_monitor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
+        // Update narrative temperature: hot when direction and volatility both elevated.
+        narrative_temperature.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4792,6 +4820,14 @@ int main(int argc, char* argv[]) {
               << "  kurt=" << polarization_monitor.excess_kurtosis()
               << "  events=" << polarization_monitor.polarization_events() << "\n";
 #endif
+#ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
+    std::cout << "  Narrative Temp   : "
+              << std::fixed << std::setprecision(3) << narrative_temperature.temperature()
+              << "  hot=" << (narrative_temperature.is_hot() ? "YES" : "no")
+              << "  ema=" << std::setprecision(4) << narrative_temperature.bias_ema()
+              << "  sigma=" << narrative_temperature.bias_sigma()
+              << "  heat_events=" << narrative_temperature.heat_events() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -5024,6 +5060,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
         std::cout << "  [json:polarization] " << polarization_monitor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
+        std::cout << "  [json:narrative_temp] " << narrative_temperature.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

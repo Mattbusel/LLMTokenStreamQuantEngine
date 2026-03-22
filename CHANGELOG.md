@@ -86,6 +86,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   timestamps; zero external dependencies.  Feature flag:
   `LLMQUANT_ENABLE_CROSS_SESSION_MEMORY`.  9 unit tests added.
 
+### Added (Cycle 39 — 2026-03-21)
+- **New module `RegimeSwitchingSignalRouter`**: 3-state FSM (trending/ranging/crash)
+  routes signals to per-regime scaling configurations.  Feature flag:
+  `LLMQUANT_ENABLE_REGIME_ROUTER`.
+- **New module `TokenStreamDifferencer`**: computes velocity, acceleration, and
+  jerk of the token weight series for early reversal detection.  Feature flag:
+  `LLMQUANT_ENABLE_STREAM_DIFFERENCER`.
+- **New module `SignalDriftMonitor`**: Wasserstein-1 distribution-drift detector
+  comparing recent vs baseline bias-shift distributions; fires callback when
+  distribution shift exceeds threshold.  Feature flag:
+  `LLMQUANT_ENABLE_SIGNAL_DRIFT`.
+
 ### Added (Cycle 35 — 2026-03-21)
 - **New module `KellyPositionSizer`** (`include/KellyPositionSizer.h`,
   `src/KellyPositionSizer.cpp`): adaptive position sizing using the Kelly

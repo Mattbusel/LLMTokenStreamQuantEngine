@@ -130,6 +130,7 @@ option(LLMQUANT_ENABLE_SIGNAL_SSI                   "Build SignalStrengthIndexer
 option(LLMQUANT_ENABLE_FLOW_PRESSURE                "Build TokenFlowPressureGauge: EMA of inter-token arrival intervals -> pressure score [0,1], fires on_pressure_spike" ON)
 option(LLMQUANT_ENABLE_SIGNAL_FATIGUE               "Build SignalFatigueMeter: consecutive same-direction signal streak counter with fatigue score and on_fatigue callback" ON)
 option(LLMQUANT_ENABLE_POLARIZATION_MONITOR         "Build SignalPolarizationMonitor: Sarle bimodality coefficient detector — fires when signal distribution splits into two opposing camps" ON)
+option(LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE        "Build NarrativeTemperatureGauge: combined |EMA(bias)|×σ(bias) temperature index for hot/volatile narrative detection" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1239,6 +1240,15 @@ if(LLMQUANT_ENABLE_POLARIZATION_MONITOR)
     message(STATUS "Feature: SignalPolarizationMonitor ENABLED (bimodality coefficient, polarization detection)")
 else()
     message(STATUS "Feature: SignalPolarizationMonitor DISABLED (LLMQUANT_ENABLE_POLARIZATION_MONITOR=OFF)")
+endif()
+
+# NarrativeTemperatureGauge: |EMA(bias)| × σ(bias) "temperature" index.
+if(LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE)
+    target_sources(llmquant PRIVATE src/NarrativeTemperatureGauge.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED)
+    message(STATUS "Feature: NarrativeTemperatureGauge ENABLED (intensity × volatility temperature index)")
+else()
+    message(STATUS "Feature: NarrativeTemperatureGauge DISABLED (LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
