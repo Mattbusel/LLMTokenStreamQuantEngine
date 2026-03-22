@@ -495,6 +495,21 @@
 #ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
 #  include "TokenBiasCorrelogram.h"
 #endif
+#ifdef LLMQUANT_KURTOSIS_TRACKER_ENABLED
+#  include "SignalKurtosisTracker.h"
+#endif
+#ifdef LLMQUANT_PERSISTENCE_INDEX_ENABLED
+#  include "NarrativePersistenceIndex.h"
+#endif
+#ifdef LLMQUANT_BIAS_ENTROPY_RATE_ENABLED
+#  include "BiasEntropyRate.h"
+#endif
+#ifdef LLMQUANT_DRAWDOWN_METER_ENABLED
+#  include "SignalDrawdownMeter.h"
+#endif
+#ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
+#  include "TokenCadenceAnalyser.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3526,6 +3541,103 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_KURTOSIS_TRACKER_ENABLED
+    // SignalKurtosisTracker: rolling excess kurtosis — fat-tail risk monitor for bias.
+    // High kurtosis → frequent outlier spikes; fires on_fat_tail when kurtosis > threshold.
+    llmquant::SignalKurtosisTracker kurtosis_tracker;
+    {
+        llmquant::SignalKurtosisTracker::Config kt_cfg;
+        kt_cfg.window            = 30;
+        kt_cfg.min_samples       = 10;
+        kt_cfg.fat_tail_threshold = 1.0;
+        kt_cfg.on_fat_tail = [](double kurt) {
+            spdlog::warn("[kurtosis] FAT TAIL excess_kurt={:.3f}", kurt);
+        };
+        kt_cfg.on_normal_tail = [](double kurt) {
+            spdlog::info("[kurtosis] NORMAL TAIL excess_kurt={:.3f}", kurt);
+        };
+        kurtosis_tracker.update_config(kt_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_PERSISTENCE_INDEX_ENABLED
+    // NarrativePersistenceIndex: run-length based persistence index ∈ (0, 1].
+    // > 0.5 → auto-correlated trending; < 0.5 → mean-reverting oscillation.
+    llmquant::NarrativePersistenceIndex persistence_idx;
+    {
+        llmquant::NarrativePersistenceIndex::Config pi_cfg;
+        pi_cfg.window               = 30;
+        pi_cfg.min_samples          = 10;
+        pi_cfg.persistent_threshold = 0.6;
+        pi_cfg.reverting_threshold  = 0.4;
+        pi_cfg.on_persistent = [](double pi) {
+            spdlog::info("[persistence] TRENDING pi={:.3f}", pi);
+        };
+        pi_cfg.on_mean_reverting = [](double pi) {
+            spdlog::info("[persistence] REVERTING pi={:.3f}", pi);
+        };
+        persistence_idx.update_config(pi_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BIAS_ENTROPY_RATE_ENABLED
+    // BiasEntropyRate: normalised Shannon entropy of the discretised bias stream.
+    // 0 → fully structured; 1 → maximum randomness; fires on_high/low_entropy.
+    llmquant::BiasEntropyRate bias_entropy;
+    {
+        llmquant::BiasEntropyRate::Config er_cfg;
+        er_cfg.window         = 32;
+        er_cfg.n_buckets      = 8;
+        er_cfg.min_samples    = 10;
+        er_cfg.high_threshold = 0.75;
+        er_cfg.low_threshold  = 0.25;
+        er_cfg.on_high_entropy = [](double h) {
+            spdlog::info("[entropy] HIGH ENTROPY h={:.3f}", h);
+        };
+        er_cfg.on_low_entropy = [](double h) {
+            spdlog::info("[entropy] LOW ENTROPY (structured) h={:.3f}", h);
+        };
+        bias_entropy.update_config(er_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_DRAWDOWN_METER_ENABLED
+    // SignalDrawdownMeter: running max-drawdown of cumulative bias.
+    // Tracks peak, drawdown, and recovery events for session risk monitoring.
+    llmquant::SignalDrawdownMeter drawdown_meter;
+    {
+        llmquant::SignalDrawdownMeter::Config dm_cfg;
+        dm_cfg.drawdown_threshold = 0.1;
+        dm_cfg.on_new_drawdown_high = [](double dd) {
+            spdlog::warn("[drawdown] NEW MAX dd={:.4f}", dd);
+        };
+        dm_cfg.on_recovery = [](double cum) {
+            spdlog::info("[drawdown] RECOVERY cum={:.4f}", cum);
+        };
+        drawdown_meter.update_config(dm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
+    // TokenCadenceAnalyser: inter-token arrival timing (IAI mean, CV, burst/gap detection).
+    // Detects rapid token floods (bursts) and silent periods (gaps) in the stream.
+    llmquant::TokenCadenceAnalyser cadence_analyser;
+    {
+        llmquant::TokenCadenceAnalyser::Config ca_cfg;
+        ca_cfg.window             = 20;
+        ca_cfg.min_samples        = 5;
+        ca_cfg.burst_threshold_ms = 1.0;
+        ca_cfg.gap_threshold_ms   = 200.0;
+        ca_cfg.on_burst = [](double iai) {
+            spdlog::warn("[cadence] BURST iai={:.2f}ms", iai);
+        };
+        ca_cfg.on_gap = [](double iai) {
+            spdlog::info("[cadence] GAP iai={:.1f}ms", iai);
+        };
+        cadence_analyser.update_config(ca_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -4720,6 +4832,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
         bias_correlogram.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_KURTOSIS_TRACKER_ENABLED
+        kurtosis_tracker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_PERSISTENCE_INDEX_ENABLED
+        persistence_idx.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BIAS_ENTROPY_RATE_ENABLED
+        bias_entropy.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_DRAWDOWN_METER_ENABLED
+        drawdown_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
+        cadence_analyser.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -6891,6 +7018,45 @@ int main(int argc, char* argv[]) {
               << "  cycles=" << bias_correlogram.cycle_events()
               << "  obs=" << bias_correlogram.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_KURTOSIS_TRACKER_ENABLED
+    std::cout << "  Kurtosis         : "
+              << "kurt=" << std::fixed << std::setprecision(3) << kurtosis_tracker.kurtosis()
+              << "  fat_ev=" << kurtosis_tracker.fat_tail_events()
+              << "  normal_ev=" << kurtosis_tracker.normal_tail_events()
+              << "  obs=" << kurtosis_tracker.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_PERSISTENCE_INDEX_ENABLED
+    std::cout << "  Persistence Idx  : "
+              << "pi=" << std::fixed << std::setprecision(3) << persistence_idx.persistence_index()
+              << "  persistent=" << (persistence_idx.is_persistent() ? "Y" : "N")
+              << "  reverting=" << (persistence_idx.is_reverting() ? "Y" : "N")
+              << "  persist_ev=" << persistence_idx.persistent_events()
+              << "  obs=" << persistence_idx.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_ENTROPY_RATE_ENABLED
+    std::cout << "  Bias Entropy     : "
+              << "H=" << std::fixed << std::setprecision(3) << bias_entropy.entropy()
+              << "  high_ev=" << bias_entropy.high_entropy_events()
+              << "  low_ev=" << bias_entropy.low_entropy_events()
+              << "  obs=" << bias_entropy.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_DRAWDOWN_METER_ENABLED
+    std::cout << "  Drawdown Meter   : "
+              << "cum=" << std::fixed << std::setprecision(4) << drawdown_meter.cum_bias()
+              << "  peak=" << drawdown_meter.peak()
+              << "  dd=" << drawdown_meter.drawdown()
+              << "  max_dd=" << drawdown_meter.max_drawdown()
+              << "  dd_ev=" << drawdown_meter.drawdown_events()
+              << "  obs=" << drawdown_meter.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
+    std::cout << "  Token Cadence    : "
+              << "mean_iai=" << std::fixed << std::setprecision(2) << cadence_analyser.mean_iai_ms() << "ms"
+              << "  cv=" << std::setprecision(3) << cadence_analyser.cv_iai()
+              << "  bursts=" << cadence_analyser.burst_events()
+              << "  gaps=" << cadence_analyser.gap_events()
+              << "  obs=" << cadence_analyser.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -7485,6 +7651,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BIAS_CORRELOGRAM_ENABLED
         std::cout << "  [json:correlogram]" << bias_correlogram.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_KURTOSIS_TRACKER_ENABLED
+        std::cout << "  [json:kurtosis]   " << kurtosis_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PERSISTENCE_INDEX_ENABLED
+        std::cout << "  [json:persistence]" << persistence_idx.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_ENTROPY_RATE_ENABLED
+        std::cout << "  [json:entropy]    " << bias_entropy.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_DRAWDOWN_METER_ENABLED
+        std::cout << "  [json:drawdown]   " << drawdown_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
+        std::cout << "  [json:cadence]    " << cadence_analyser.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";

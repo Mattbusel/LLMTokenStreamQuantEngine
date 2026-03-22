@@ -95,6 +95,22 @@ TEST(BayesianSentimentPrior, BeliefShiftCallbackFires) {
 // Belief restored callback fires when mean returns to prior
 // -----------------------------------------------------------------------
 
+TEST(BayesianSentimentPrior, BeliefRestoredCallbackFires) {
+    BayesianSentimentPrior::Config cfg;
+    cfg.prior_kappa      = 0.5;
+    cfg.shift_threshold  = 1.5;
+    cfg.min_samples      = 3;
+    std::atomic<int> restores{0};
+    cfg.on_belief_restored = [&]() { restores.fetch_add(1, std::memory_order_relaxed); };
+    BayesianSentimentPrior p(cfg);
+    // Push into shifted state with positive extreme values
+    for (int i = 0; i < 5; ++i) p.update(3.0);
+    EXPECT_TRUE(p.is_shifted());
+    // Mirror with equal negative values — posterior mean returns to ~0 (prior mean)
+    for (int i = 0; i < 5; ++i) p.update(-3.0);
+    EXPECT_GE(restores.load(), 1);
+}
+
 TEST(BayesianSentimentPrior, ResetRestoresBelief) {
     BayesianSentimentPrior::Config cfg;
     cfg.prior_kappa      = 0.5;

@@ -1991,6 +1991,56 @@ else()
     message(STATUS "Feature: TokenBiasCorrelogram DISABLED (LLMQUANT_ENABLE_BIAS_CORRELOGRAM=OFF)")
 endif()
 
+# SignalKurtosisTracker: rolling excess kurtosis for fat-tail detection.
+option(LLMQUANT_ENABLE_KURTOSIS_TRACKER "Build SignalKurtosisTracker: rolling excess kurtosis; fires on_fat_tail/on_normal_tail" ON)
+if(LLMQUANT_ENABLE_KURTOSIS_TRACKER)
+    target_sources(llmquant PRIVATE src/SignalKurtosisTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_KURTOSIS_TRACKER_ENABLED)
+    message(STATUS "Feature: SignalKurtosisTracker ENABLED (excess kurtosis, fat/normal tail callbacks)")
+else()
+    message(STATUS "Feature: SignalKurtosisTracker DISABLED (LLMQUANT_ENABLE_KURTOSIS_TRACKER=OFF)")
+endif()
+
+# NarrativePersistenceIndex: Hurst-lite run-analysis persistence meter.
+option(LLMQUANT_ENABLE_PERSISTENCE_INDEX "Build NarrativePersistenceIndex: run-length persistence index; fires on_persistent/on_mean_reverting" ON)
+if(LLMQUANT_ENABLE_PERSISTENCE_INDEX)
+    target_sources(llmquant PRIVATE src/NarrativePersistenceIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PERSISTENCE_INDEX_ENABLED)
+    message(STATUS "Feature: NarrativePersistenceIndex ENABLED (run-length PI, trending/reverting callbacks)")
+else()
+    message(STATUS "Feature: NarrativePersistenceIndex DISABLED (LLMQUANT_ENABLE_PERSISTENCE_INDEX=OFF)")
+endif()
+
+# BiasEntropyRate: Shannon entropy rate of discretised bias stream.
+option(LLMQUANT_ENABLE_BIAS_ENTROPY_RATE "Build BiasEntropyRate: normalised Shannon entropy [0,1]; fires on_high_entropy/on_low_entropy" ON)
+if(LLMQUANT_ENABLE_BIAS_ENTROPY_RATE)
+    target_sources(llmquant PRIVATE src/BiasEntropyRate.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_ENTROPY_RATE_ENABLED)
+    message(STATUS "Feature: BiasEntropyRate ENABLED (normalised Shannon entropy, high/low callbacks)")
+else()
+    message(STATUS "Feature: BiasEntropyRate DISABLED (LLMQUANT_ENABLE_BIAS_ENTROPY_RATE=OFF)")
+endif()
+
+# SignalDrawdownMeter: running max-drawdown tracker for cumulative bias.
+option(LLMQUANT_ENABLE_DRAWDOWN_METER "Build SignalDrawdownMeter: cumulative bias max-drawdown tracker; fires on_new_drawdown_high/on_recovery" ON)
+if(LLMQUANT_ENABLE_DRAWDOWN_METER)
+    target_sources(llmquant PRIVATE src/SignalDrawdownMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DRAWDOWN_METER_ENABLED)
+    message(STATUS "Feature: SignalDrawdownMeter ENABLED (cumulative drawdown, drawdown/recovery callbacks)")
+else()
+    message(STATUS "Feature: SignalDrawdownMeter DISABLED (LLMQUANT_ENABLE_DRAWDOWN_METER=OFF)")
+endif()
+
+# TokenCadenceAnalyser: inter-token timing analyser for burst/gap detection.
+option(LLMQUANT_ENABLE_CADENCE_ANALYSER "Build TokenCadenceAnalyser: IAI mean/CV statistics; fires on_burst/on_gap" ON)
+if(LLMQUANT_ENABLE_CADENCE_ANALYSER)
+    target_sources(llmquant PRIVATE src/TokenCadenceAnalyser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CADENCE_ANALYSER_ENABLED)
+    message(STATUS "Feature: TokenCadenceAnalyser ENABLED (IAI timing stats, burst/gap callbacks)")
+else()
+    message(STATUS "Feature: TokenCadenceAnalyser DISABLED (LLMQUANT_ENABLE_CADENCE_ANALYSER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
