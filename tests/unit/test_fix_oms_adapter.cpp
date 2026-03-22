@@ -106,7 +106,7 @@ TEST(FixOmsAdapterTest, test_start_returns_true_and_sets_running) {
 TEST(FixOmsAdapterTest, test_stop_after_start_does_not_crash) {
     FixOmsAdapter adapter(make_test_config());
 
-    adapter.start();
+    (void)adapter.start();
     // Give the reader thread time to launch and attempt the connection.
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     adapter.stop();  // must not deadlock, crash, or throw
@@ -153,7 +153,7 @@ TEST(FixOmsAdapterTest, test_stop_before_start_is_safe) {
 TEST(FixOmsAdapterTest, test_destructor_stops_adapter_safely) {
     {
         FixOmsAdapter adapter(make_test_config());
-        adapter.start();
+        (void)adapter.start();
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
         // Let destructor call stop() and join the thread.
     }
@@ -176,7 +176,7 @@ TEST(FixOmsAdapterTest, test_set_position_callback_stores_callback) {
         ++call_count;
     });
 
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     adapter.stop();
 
@@ -200,7 +200,7 @@ TEST(FixOmsAdapterTest, test_fix_message_construction_does_not_crash) {
     // start() will internally call build_logon() -> fix_message() ->
     // fix_checksum() before attempting the TCP write.  If any of those helpers
     // have a bug that causes UB, the sanitiser build will catch it here.
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     adapter.stop();
 
@@ -214,7 +214,7 @@ TEST(FixOmsAdapterTest, test_fix_message_construction_does_not_crash) {
 TEST(FixOmsAdapterTest, test_messages_parsed_non_decreasing) {
     FixOmsAdapter adapter(make_test_config());
 
-    adapter.start();
+    (void)adapter.start();
     uint64_t mid = adapter.messages_parsed();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     uint64_t after = adapter.messages_parsed();
@@ -233,7 +233,7 @@ TEST(FixOmsAdapterTest, test_multiple_start_stop_cycles_are_safe) {
     FixOmsAdapter adapter(make_test_config());
 
     for (int i = 0; i < 3; ++i) {
-        adapter.start();
+        (void)adapter.start();
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         adapter.stop();
         EXPECT_FALSE(adapter.is_running())
@@ -267,7 +267,7 @@ TEST(FixOmsAdapterTest, test_set_position_callback_can_be_overwritten) {
     // Overwrite with a second callback — must not crash.
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
 
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(30));
     adapter.stop();
 

@@ -40,7 +40,7 @@ TEST(OmsAdapterTest, test_mock_oms_emits_all_states) {
         make_pos(0.3, 1.0,  0.3, -10.0),
     });
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
 
     // Wait long enough for all 3 states to be emitted (3 * 5 ms + margin).
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
@@ -69,7 +69,7 @@ TEST(OmsAdapterTest, test_mock_oms_callback_receives_correct_values) {
         std::lock_guard<std::mutex> lock(mu);
         received.push_back(s.net_position);
     });
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 
     std::lock_guard<std::mutex> lock(mu);
@@ -94,7 +94,7 @@ TEST(OmsAdapterTest, test_mock_oms_stop_before_all_states_emitted) {
     adapter.load_states(states);
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
 
-    adapter.start();
+    (void)adapter.start();
     // Stop after ~80 ms: enough for ~1 emission but not all 10 (10 * 50 ms = 500 ms).
     std::this_thread::sleep_for(std::chrono::milliseconds{80});
     adapter.stop();
@@ -116,7 +116,7 @@ TEST(OmsAdapterTest, test_mock_oms_is_running_false_after_sequence_exhausted) {
         make_pos(0.2, 1.0, 0.0, -10.0),
     });
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
 
     // Wait for both states + one full interval as headroom.
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
@@ -168,7 +168,7 @@ TEST(OmsAdapterTest, test_rest_oms_connect_refused_does_not_hang) {
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
 
     auto t0 = std::chrono::steady_clock::now();
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{60});
     adapter.stop();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -189,7 +189,7 @@ TEST(OmsAdapterTest, test_rest_oms_error_count_increments_on_bad_host) {
 
     RestOmsAdapter adapter(cfg);
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{80});
     adapter.stop();
 
@@ -235,7 +235,7 @@ TEST(OmsAdapterTest, test_mock_oms_position_feeds_into_risk_manager) {
     adapter.set_position_callback([&](const RiskManager::PositionState& s) {
         risk_mgr.update_position(s);
     });
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
     adapter.stop();
 
@@ -256,7 +256,7 @@ TEST(OmsAdapterTest, test_mock_oms_empty_state_list_stops_immediately) {
 
     adapter.load_states({});
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
 
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
 
@@ -277,7 +277,7 @@ TEST(OmsAdapterTest, test_rest_oms_update_count_zero_on_bad_endpoint) {
 
     RestOmsAdapter adapter(cfg);
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{80});
     adapter.stop();
 
@@ -482,7 +482,7 @@ TEST(RestOmsAdapterParsingTest, test_rest_description_contains_path_and_interval
 TEST(MockOmsAdapterTest, MockOmsAdapterRapidCycle) {
     llmquant::MockOmsAdapter adapter;
     for (int i = 0; i < 50; ++i) {
-        adapter.start();
+        (void)adapter.start();
         adapter.stop();
     }
     EXPECT_FALSE(adapter.is_running());
@@ -546,7 +546,7 @@ TEST(MockOmsAdapterTest, test_stop_returns_promptly_with_large_emit_interval) {
     MockOmsAdapter adapter(cfg);
     // Load one state so the emitter thread starts and enters the sleep.
     adapter.load_states({make_pos(0.1, 1.0, 0.5, -10.0)});
-    adapter.start();
+    (void)adapter.start();
 
     // Give the thread time to start and begin the inter-state sleep.
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
@@ -577,7 +577,7 @@ TEST(MockOmsAdapterTest, test_stop_before_emission_completes_returns_promptly) {
         make_pos(0.2, 1.0, 0.0, -10.0),
         make_pos(0.3, 1.0, 0.0, -10.0),
     });
-    adapter.start();
+    (void)adapter.start();
 
     // Stop immediately — the thread may not have emitted anything yet.
     auto t0 = std::chrono::steady_clock::now();

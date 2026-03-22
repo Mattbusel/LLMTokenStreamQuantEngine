@@ -66,7 +66,7 @@ TEST(NetworkErrorPaths_RestOmsAdapter, refused_connection_does_not_crash) {
 TEST(NetworkErrorPaths_RestOmsAdapter, update_count_zero_on_failed_connections) {
     RestOmsAdapter adapter(refused_oms_config());
     adapter.set_position_callback([](const RiskManager::PositionState&) {});
-    adapter.start();
+    (void)adapter.start();
     std::this_thread::sleep_for(std::chrono::milliseconds{120});
     adapter.stop();
     // No successful updates on a refused port.
@@ -220,7 +220,7 @@ TEST(NetworkErrorPaths_LLMStreamClient, done_callback_receives_error_on_connect_
 
 TEST(NetworkErrorPaths_LLMStreamClient, connect_then_immediate_stop_does_not_hang) {
     LLMStreamClient client(refused_stream_config());
-    client.connect();
+    (void)client.connect();
     // stop() must return in bounded time even if the reader thread is mid-backoff.
     client.stop();
     EXPECT_FALSE(client.is_running());
