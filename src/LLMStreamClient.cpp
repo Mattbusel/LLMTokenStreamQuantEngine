@@ -431,7 +431,14 @@ void LLMStreamClient::reader_thread() {
                 // Parse HTTP status line: "HTTP/1.1 200 OK"
                 size_t status_start = headers.find(' ');
                 if (status_start != std::string::npos) {
-                    int status_code = std::stoi(headers.substr(status_start + 1, 3));
+                    int status_code = 0;
+                    try {
+                        status_code = std::stoi(headers.substr(status_start + 1, 3));
+                    } catch (...) {
+                        spdlog::warn("[llm_client] malformed HTTP status line; reconnecting");
+                        close_socket();
+                        continue;
+                    }
                     if (status_code == 401 || status_code == 403) {
                         spdlog::error("[llm_client] HTTP {} — check API key; stopping", status_code);
                         running_ = false;

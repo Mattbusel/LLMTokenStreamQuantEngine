@@ -6,6 +6,21 @@
 
 namespace llmquant {
 
+// RFC 4180 CSV field quoting: wraps the value in double-quotes and doubles any
+// embedded double-quote characters.  Applied to any user-controlled string
+// (token text, file paths) embedded in CSV log lines.
+static std::string csv_quote(const std::string& s) {
+    bool needs_quoting = (s.find_first_of(",\"\n\r") != std::string::npos);
+    if (!needs_quoting) return s;
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') out += "\"\"";
+        else          out += c;
+    }
+    out += '"';
+    return out;
+}
+
 // Minimal JSON string escaper: handles the characters that break JSON parsing.
 // Used whenever user-controlled strings (tokens, file paths, keys) are embedded
 // in the JSON log output — without this, a token containing '"' or '\' produces
@@ -98,7 +113,7 @@ void MetricsLogger::log_token_received(const std::string& token, uint64_t sequen
     
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",TOKEN_RECEIVED," << token << "," << sequence_id << ",,,,,";
+        oss << timestamp << ",TOKEN_RECEIVED," << csv_quote(token) << "," << sequence_id << ",,,,,";
 
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_) console_logger_->info("Token received: \"{}\"", token);
@@ -184,7 +199,7 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
         // Columns: timestamp,RISK_REJECTION,reason,,bias,,,, (9 cols matching header).
         // confidence has no dedicated CSV column; it is written to JSON only.
         // Previously confidence was placed in column 7 (latency_us), which was wrong.
-        oss << timestamp << ",RISK_REJECTION," << reason << ",,"
+        oss << timestamp << ",RISK_REJECTION," << csv_quote(reason) << ",,"
             << std::fixed << std::setprecision(3) << bias << ",,,,";
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
@@ -236,7 +251,7 @@ void MetricsLogger::log_config_reload(const std::string& source_path, bool succe
     const char* status = success ? "ok" : "failed";
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << timestamp << ",CONFIG_RELOAD," << status << "," << source_path << ",,,,,";
+        oss << timestamp << ",CONFIG_RELOAD," << csv_quote(status) << "," << csv_quote(source_path) << ",,,,,";
         if (file_logger_) file_logger_->info(oss.str());
         if (console_logger_)
             console_logger_->info("Config reload {}: {}", status, source_path);
@@ -277,7 +292,7 @@ void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
     const char* kind = is_duplicate ? "duplicate" : "novel";
     if (config_.format == OutputFormat::CSV) {
         std::ostringstream oss;
-        oss << ts << ",DEDUP," << kind << "," << key << ",,,,,";
+        oss << ts << ",DEDUP," << kind << "," << csv_quote(key) << ",,,,,";
         if (file_logger_) file_logger_->info(oss.str());
     } else if (config_.format == OutputFormat::JSON) {
         if (file_logger_)
