@@ -237,6 +237,15 @@
 #ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
 #  include "SignalShadowPortfolio.h"
 #endif
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+#  include "TokenInformationBottleneck.h"
+#endif
+#ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
+#  include "LLMConfidenceBandTracker.h"
+#endif
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+#  include "TokenImportanceDecayScheduler.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1205,6 +1214,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
     llmquant::AdversarialInputDetector adversarial_detector;
 #endif
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+    llmquant::TokenInformationBottleneck token_ib;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1293,6 +1305,12 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
         // Screen each token for weight anomalies, repetition, and vocab inflation.
         adversarial_detector.inspect(text, weight.directional_bias);
+#endif
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+        // Accumulate per-token weight sample; bias_shift will be filled in the
+        // signal callback — here we store the weight with a placeholder 0.0 bias
+        // so per-token relevance can be recalculated once a signal fires.
+        token_ib.record(text, weight.directional_bias, 0.0);
 #endif
 #ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
         // Attribute per-token marginal contribution to the current bias.
@@ -1912,6 +1930,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+    // TokenInformationBottleneck: per-token relevance/complexity IB score.
+    // Declared in pre-lambda block; configure here.
+    {
+        llmquant::TokenInformationBottleneck::Config tib_cfg;
+        tib_cfg.window_size      = 64;
+        tib_cfg.min_observations = 8;
+        tib_cfg.prune_threshold  = 0.05;
+        tib_cfg.top_k            = 10;
+        tib_cfg.on_low_score = [](const std::string& tok, double sc) {
+            spdlog::debug("[token_ib] LOW score token=\"{}\" ib={:.4f}", tok, sc);
+        };
+        tib_cfg.on_recovered = [](const std::string& tok, double sc) {
+            spdlog::debug("[token_ib] RECOVERED token=\"{}\" ib={:.4f}", tok, sc);
+        };
+        token_ib.update_config(tib_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
     // SignalConfidenceInterval: jackknife CI on rolling signal window; narrow
     // CI = high-confidence environment, wide CI = noisy / uncertain signals.
@@ -1945,26 +1982,6 @@ int main(int argc, char* argv[]) {
             spdlog::info("[markov] state {} → {} p={:.3f}", from, to, p);
         };
         sentiment_persistence.update_config(mp_cfg);
-    }
-#endif
-
-#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
-    // SentimentPhasePortrait: treats (bias, velocity) as a 2-D dynamical system.
-    // Discretises the phase plane into an N×N grid; tracks dwell time, attractors
-    // and period-2 cycles in the trajectory.
-    llmquant::SentimentPhasePortrait phase_portrait;
-    {
-        llmquant::SentimentPhasePortrait::Config pp_cfg;
-        pp_cfg.grid_size           = 8;
-        pp_cfg.attractor_threshold = 0.15;
-        pp_cfg.min_visits          = 10;
-        pp_cfg.on_attractor_change = [](int r, int c) {
-            spdlog::info("[phase] attractor → ({}, {})", r, c);
-        };
-        pp_cfg.on_cycle_detected = [](int r1, int c1, int r2, int c2) {
-            spdlog::warn("[phase] CYCLE ({},{})↔({},{})", r1, c1, r2, c2);
-        };
-        phase_portrait.update_config(pp_cfg);
     }
 #endif
 
@@ -2093,6 +2110,43 @@ int main(int argc, char* argv[]) {
                          drag, shad, live);
         };
         shadow_portfolio.update_config(sp_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONFIDENCE_BAND_ENABLED
+    // LLMConfidenceBandTracker: scalar Kalman filter that maintains Bayesian
+    // confidence bands around the sentiment EMA.  Bands narrow when observations
+    // are consistent and widen when sentiment is erratic.
+    llmquant::LLMConfidenceBandTracker confidence_band;
+    {
+        llmquant::LLMConfidenceBandTracker::Config cb_cfg;
+        cb_cfg.process_noise         = 0.001;
+        cb_cfg.measurement_noise     = 0.01;
+        cb_cfg.initial_variance      = 1.0;
+        cb_cfg.z_score               = 2.0;
+        cb_cfg.band_change_threshold = 0.10;
+        cb_cfg.on_band_change = [](double lo, double center, double hi) {
+            spdlog::debug("[conf_band] [{:.4f}, {:.4f}, {:.4f}]  hw={:.4f}",
+                          lo, center, hi, (hi - lo) / 2.0);
+        };
+        confidence_band.update_config(cb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
+    // TokenImportanceDecayScheduler: applies true wall-clock exponential decay
+    // to per-token weights.  A token emitted 30 s ago carries far less signal
+    // weight than the same token just received.
+    llmquant::TokenImportanceDecayScheduler decay_scheduler;
+    {
+        llmquant::TokenImportanceDecayScheduler::Config tds_cfg;
+        tds_cfg.half_life_s  = 10.0;
+        tds_cfg.max_age_s    = 60.0;
+        tds_cfg.max_entries  = 1024;
+        tds_cfg.on_sentiment_flip = [](double old_s, double new_s) {
+            spdlog::warn("[decay_sched] sentiment sign flip {:.4f} → {:.4f}", old_s, new_s);
+        };
+        decay_scheduler.update_config(tds_cfg);
     }
 #endif
 
@@ -2579,11 +2633,6 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         // Feed each signal's bias shift into the Markov state chain.
         sentiment_persistence.record(signal.delta_bias_shift);
-#endif
-
-#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
-        // Plot the signal on the (bias, velocity) phase plane.
-        phase_portrait.record(signal.delta_bias_shift);
 #endif
 
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
@@ -3741,9 +3790,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
                       << [&]() -> std::string {
-                            int r = phase_portrait.current_row();
-                            int c = phase_portrait.current_col();
-                            bool cyc = phase_portrait.cycle_detected();
+                            int r = sentiment_phase_portrait.current_row();
+                            int c = sentiment_phase_portrait.current_col();
+                            bool cyc = sentiment_phase_portrait.cycle_detected();
                             std::ostringstream o;
                             o << "  PHS:" << C("\033[36m") << r << "," << c << C("\033[0m");
                             if (cyc) o << C("\033[33m") << "~" << C("\033[0m");
@@ -4238,6 +4287,12 @@ int main(int argc, char* argv[]) {
               << "  [" << signal_ci.lower() << ", " << signal_ci.upper() << "]"
               << "  narrow=" << (signal_ci.is_narrow() ? "yes" : "no") << "\n";
 #endif
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+    std::cout << "  Token IB         : "
+              << "distinct=" << token_ib.distinct_tokens()
+              << "  flagged=" << token_ib.flagged_count()
+              << "  records=" << token_ib.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
     std::cout << "  Markov chain     : "
               << "state=" << sentiment_persistence.current_state()
@@ -4464,20 +4519,20 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
         std::cout << "  [json:signal_ci]  " << signal_ci.to_stats_json() << "\n";
 #endif
+#ifdef LLMQUANT_TOKEN_IB_ENABLED
+        std::cout << "  [json:token_ib]   " << token_ib.to_stats_json() << "\n";
+#endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         std::cout << "  [json:markov]     " << sentiment_persistence.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
-        std::cout << "  [json:phase]      " << phase_portrait.to_stats_json() << "\n";
+        std::cout << "  [json:phase]      " << sentiment_phase_portrait.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
         std::cout << "  [json:causal]     " << causal_impact.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
         std::cout << "  [json:optflow]    " << options_flow_bridge.to_stats_json() << "\n";
-#endif
-#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
-        std::cout << "  [json:phase]      " << sentiment_phase_portrait.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
         std::cout << "  [json:topic]      " << narrative_classifier.to_stats_json() << "\n";

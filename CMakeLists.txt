@@ -117,6 +117,8 @@ option(LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER   "Build NarrativeTopicClassif
 option(LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR     "Build TokenClockRecalibrator: detects drift between token-stream timestamps and wall-clock time, compensates token weights" ON)
 option(LLMQUANT_ENABLE_SHADOW_PORTFOLIO             "Build SignalShadowPortfolio: paper-trades every signal in parallel to measure P&L drag from risk constraints" ON)
 option(LLMQUANT_ENABLE_TOKEN_IB                     "Build TokenInformationBottleneck: per-token IB relevance/complexity scoring for online vocabulary pruning" ON)
+option(LLMQUANT_ENABLE_CONFIDENCE_BAND              "Build LLMConfidenceBandTracker: Kalman-filter confidence bands around sentiment EMA for uncertainty-aware signal gating" ON)
+option(LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER        "Build TokenImportanceDecayScheduler: exponential token weight decay by token age and recency, for temporal relevance weighting" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1111,6 +1113,24 @@ if(LLMQUANT_ENABLE_TOKEN_IB)
     message(STATUS "Feature: TokenInformationBottleneck ENABLED (IB vocabulary pruning)")
 else()
     message(STATUS "Feature: TokenInformationBottleneck DISABLED (LLMQUANT_ENABLE_TOKEN_IB=OFF)")
+endif()
+
+# LLMConfidenceBandTracker: Kalman-filter confidence bands for uncertainty-aware signal gating.
+if(LLMQUANT_ENABLE_CONFIDENCE_BAND)
+    target_sources(llmquant PRIVATE src/LLMConfidenceBandTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONFIDENCE_BAND_ENABLED)
+    message(STATUS "Feature: LLMConfidenceBandTracker ENABLED (Kalman confidence bands)")
+else()
+    message(STATUS "Feature: LLMConfidenceBandTracker DISABLED (LLMQUANT_ENABLE_CONFIDENCE_BAND=OFF)")
+endif()
+
+# TokenImportanceDecayScheduler: exponential decay of token weights by age.
+if(LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER)
+    target_sources(llmquant PRIVATE src/TokenImportanceDecayScheduler.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED)
+    message(STATUS "Feature: TokenImportanceDecayScheduler ENABLED (temporal weight decay)")
+else()
+    message(STATUS "Feature: TokenImportanceDecayScheduler DISABLED (LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,39 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to `delta_bias_shift` before Kelly sizing, so stale conviction fades without
   an explicit reset.  Feature flag: `LLMQUANT_ENABLE_SIGNAL_DECAY`.
 
+### Fixed (Cycle 38 — 2026-03-21)
+- **`main.cpp` spurious `#endif`**: stray `#endif` at line 1552 (no matching
+  `#ifdef`) caused C1020 compile error; removed it.
+- **`SignalReplayBuffer.cpp`** missing `#include <mutex>`; added.
+- **`main.cpp` `annualised_vol`**: method does not exist on `VolatilityForecaster`;
+  corrected to `conditional_vol()`.
+- **`TokenInfluenceAttributor::Config::top_n`**: field is named `top_k`; fixed
+  the reference in `main.cpp`.
+- **`test_token_influence_attributor.cpp`**: `AttributionResult` is a nested
+  struct — needed full qualification `TokenInfluenceAttributor::AttributionResult`.
+- **`EnsembleSignalVoter.NextEpochClearsVotes`**: stale object file was used in
+  test run; fresh build confirms test passes with correct implementation.
+- **`main.cpp` `ngram_profiler` undeclared**: `TokenNgramProfiler` object was
+  declared after the `process_token` lambda; moved to pre-lambda block and
+  removed duplicate post-lambda declaration.
+
+### Added (Cycle 38 — 2026-03-21)
+- **New module `AdaptiveVelocityBreaker`** (`include/AdaptiveVelocityBreaker.h`,
+  `src/AdaptiveVelocityBreaker.cpp`): EMA-smoothed velocity circuit-breaker.
+  Trips when `|Δbias/s|` EMA exceeds configurable threshold; auto-recovers when
+  velocity decays below `trip_threshold × recovery_factor`.  Feature flag:
+  `LLMQUANT_ENABLE_VELOCITY_BREAKER`.  9 unit tests added.
+- **New module `TokenBiasHeatmap`** (`include/TokenBiasHeatmap.h`,
+  `src/TokenBiasHeatmap.cpp`): per-token signed bias contribution tracker.
+  Exposes `top_by_abs_contribution()`, `top_bullish()`, `top_bearish()` for
+  operator attribution.  Feature flag: `LLMQUANT_ENABLE_TOKEN_BIAS_HEATMAP`.
+  10 unit tests added.
+- **New module `CrossSessionMemory`** (`include/CrossSessionMemory.h`,
+  `src/CrossSessionMemory.cpp`): JSON persistence of Kelly/drawdown warm-start
+  state across engine restarts.  Atomic file rename for safe saves; ISO-8601
+  timestamps; zero external dependencies.  Feature flag:
+  `LLMQUANT_ENABLE_CROSS_SESSION_MEMORY`.  9 unit tests added.
+
 ### Added (Cycle 35 — 2026-03-21)
 - **New module `KellyPositionSizer`** (`include/KellyPositionSizer.h`,
   `src/KellyPositionSizer.cpp`): adaptive position sizing using the Kelly
