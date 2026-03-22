@@ -133,7 +133,7 @@ TEST(GradientOptimiser, ProgressCallbackInvoked) {
     GradientOptimiser opt(cfg);
     opt.set_tokens(make_tokens(30));
     opt.add_axis({"spread_cost", 0.001, 0.0001, 0.01});
-    opt.run();
+    (void)opt.run();
     EXPECT_GT(cb_count, 0);
 }
 

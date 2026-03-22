@@ -132,10 +132,9 @@ TEST(SignalDecayEnvelope, ZeroCrossCallbackFiredOnSignChange) {
     env.set_zero_cross_callback([&](double, double) { crosses.fetch_add(1); });
 
     env.reinforce( 0.5);
-    (void)env.decayed_bias();  // establishes positive sign
-    env.reset();
-    env.reinforce(-0.5);
-    (void)env.decayed_bias();  // triggers cross
+    (void)env.decayed_bias();  // establishes positive sign (last_reported_sign_ = +1)
+    env.reinforce(-1.5);       // overwrite bias to -1.5 (negative), no reset needed
+    (void)env.decayed_bias();  // triggers cross: sign changed from +1 to -1
 
     EXPECT_GE(crosses.load(), 1);
 }

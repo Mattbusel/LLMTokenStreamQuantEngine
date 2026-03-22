@@ -37,7 +37,7 @@ double SignalDecayEnvelope::decayed_bias() const {
     if (last_reported_sign_ != 0.0 && sign != 0.0 && sign != last_reported_sign_) {
         if (zero_cross_cb_) zero_cross_cb_(last_reported_sign_ * std::abs(raw_bias_), val);
     }
-    if (sign != 0.0) const_cast<SignalDecayEnvelope*>(this)->last_reported_sign_ = sign;
+    if (sign != 0.0) last_reported_sign_ = sign;
 
     return val;
 }

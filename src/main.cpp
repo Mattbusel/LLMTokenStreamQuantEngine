@@ -48,6 +48,9 @@
 #ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
 #  include "RegimeDetector.h"
 #endif
+#ifdef LLMQUANT_REGIME_TRANSITION_MODEL_ENABLED
+#  include "RegimeTransitionModel.h"
+#endif
 #ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
 #  include "TokenEntropyMonitor.h"
 #endif
@@ -1138,6 +1141,14 @@ int main(int argc, char* argv[]) {
     // Regime detector: classifies pipeline as Bull/Bear/Volatile/RiskOff/Neutral.
     // Updated per signal in the hot-path callback; logged on regime transitions.
     llmquant::RegimeDetector regime_detector;
+#endif
+#if defined(LLMQUANT_REGIME_TRANSITION_MODEL_ENABLED) && defined(LLMQUANT_REGIME_DETECTOR_ENABLED)
+    // Markov transition model: learns P(next|current) from regime change history.
+    llmquant::RegimeTransitionModel regime_transition_model;
+    regime_detector.set_regime_change_callback(
+        [&](llmquant::RegimeDetector::Regime next, llmquant::RegimeDetector::Regime prev) {
+            regime_transition_model.record_transition(prev, next);
+        });
 #endif
 
 #ifdef LLMQUANT_TRADING_HOURS_ENABLED

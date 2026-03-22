@@ -154,8 +154,8 @@ private:
     Config cfg_;
     mutable std::mutex mtx_;
 
-    double  raw_bias_{0.0};
-    double  last_reported_sign_{0.0};  // tracks zero-cross
+    double          raw_bias_{0.0};
+    mutable double  last_reported_sign_{0.0};  // tracks zero-cross; mutable because updated in const decayed_bias()
 
     using Clock = std::chrono::steady_clock;
     Clock::time_point last_reinforce_time_{Clock::now()};

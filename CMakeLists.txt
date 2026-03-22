@@ -58,7 +58,10 @@ option(LLMQUANT_ENABLE_WARMUP_SEQUENCER          "Build WarmupSequencer: pre-see
 option(LLMQUANT_ENABLE_SIGNAL_DECAY              "Build SignalDecayEnvelope: exponential time-decay on accumulated bias so stale conviction fades" ON)
 option(LLMQUANT_ENABLE_TOKEN_COST_BUDGET         "Build TokenCostBudget: real-time LLM API cost limiter with soft/hard budget tiers" ON)
 option(LLMQUANT_ENABLE_DRAWDOWN_PROTECTOR        "Build DrawdownProtector: tiered risk scaling that tightens limits as cumulative losses grow" ON)
-option(LLMQUANT_ENABLE_MULTI_TIMEFRAME           "Build MultiTimeframeAggregator: fuse signals across multiple EMA horizons (1s/5s/30s/5m)" ON)
+option(LLMQUANT_ENABLE_MULTI_TIMEFRAME              "Build MultiTimeframeAggregator: fuse signals across multiple EMA horizons (1s/5s/30s/5m)" ON)
+option(LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL      "Build RegimeTransitionModel: online Markov-chain learner for regime transition probabilities" ON)
+option(LLMQUANT_ENABLE_SIGNAL_THROTTLE              "Build SignalThrottle: token-bucket rate limiter for signal emission to prevent OMS flooding" ON)
+option(LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR        "Build ConfidenceCalibrator: Platt-scaling online calibration of confidence from trade outcomes" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -534,6 +537,31 @@ if(LLMQUANT_ENABLE_MULTI_TIMEFRAME)
     message(STATUS "Feature: MultiTimeframeAggregator ENABLED (1s/5s/30s/5m EMA fusion)")
 else()
     message(STATUS "Feature: MultiTimeframeAggregator DISABLED (LLMQUANT_ENABLE_MULTI_TIMEFRAME=OFF)")
+endif()
+
+# RegimeTransitionModel: online Markov-chain learner for regime transitions.
+if(LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL AND LLMQUANT_ENABLE_REGIME_DETECTOR)
+    target_sources(llmquant PRIVATE src/RegimeTransitionModel.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_TRANSITION_MODEL_ENABLED)
+    message(STATUS "Feature: RegimeTransitionModel ENABLED (Markov regime transition predictor)")
+elseif(LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL AND NOT LLMQUANT_ENABLE_REGIME_DETECTOR)
+    message(STATUS "Feature: RegimeTransitionModel SKIPPED (requires LLMQUANT_ENABLE_REGIME_DETECTOR=ON)")
+else()
+    message(STATUS "Feature: RegimeTransitionModel DISABLED (LLMQUANT_ENABLE_REGIME_TRANSITION_MODEL=OFF)")
+endif()
+if(LLMQUANT_ENABLE_SIGNAL_THROTTLE)
+    target_sources(llmquant PRIVATE src/SignalThrottle.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_THROTTLE_ENABLED)
+    message(STATUS "Feature: SignalThrottle ENABLED (token-bucket rate limiter)")
+else()
+    message(STATUS "Feature: SignalThrottle DISABLED (LLMQUANT_ENABLE_SIGNAL_THROTTLE=OFF)")
+endif()
+if(LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR)
+    target_sources(llmquant PRIVATE src/ConfidenceCalibrator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONFIDENCE_CALIBRATOR_ENABLED)
+    message(STATUS "Feature: ConfidenceCalibrator ENABLED (Platt-scaling online confidence calibration)")
+else()
+    message(STATUS "Feature: ConfidenceCalibrator DISABLED (LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
