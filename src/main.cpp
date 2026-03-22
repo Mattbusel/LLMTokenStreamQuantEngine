@@ -1271,6 +1271,19 @@ int main(int argc, char* argv[]) {
         signal_corr.record("main", signal.delta_bias_shift);
 #endif
 
+#ifdef LLMQUANT_MULTI_TIMEFRAME_ENABLED
+        // Feed the raw bias into all timeframe EMAs for multi-horizon consensus.
+        multi_tf.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_DRAWDOWN_PROTECTOR_ENABLED
+        // Record simulated P&L outcome (passed signals only) into drawdown protector.
+        if (passed) {
+            // Use a simple proxy: bias * 0.001 as a per-signal PnL estimate.
+            drawdown_protector.record_pnl(signal.delta_bias_shift * 0.001);
+        }
+#endif
+
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
             int idx = spark_head.fetch_add(1, std::memory_order_relaxed) % kSparkSlots;
@@ -2389,6 +2402,21 @@ int main(int argc, char* argv[]) {
               << "sources=" << signal_corr.source_names().size()
               << "  diverge_evts=" << signal_corr.divergence_events()
               << "  converge_evts=" << signal_corr.convergence_events() << "\n";
+#endif
+#ifdef LLMQUANT_DRAWDOWN_PROTECTOR_ENABLED
+    std::cout << "  Drawdown protect : "
+              << "tier=" << drawdown_protector.current_tier()
+              << "  drawdown=" << std::fixed << std::setprecision(1)
+              << (drawdown_protector.current_drawdown_pct() * 100.0) << "%"
+              << "  hwm=" << std::setprecision(6) << drawdown_protector.high_water_mark()
+              << "  transitions=" << drawdown_protector.tier_transitions() << "\n";
+#endif
+#ifdef LLMQUANT_MULTI_TIMEFRAME_ENABLED
+    std::cout << "  Multi-timeframe  : "
+              << "consensus=" << std::fixed << std::setprecision(4) << multi_tf.consensus()
+              << "  spread=" << multi_tf.timeframe_spread()
+              << "  diverging=" << (multi_tf.is_diverging() ? "Y" : "N")
+              << "  records=" << multi_tf.total_records() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
