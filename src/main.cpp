@@ -201,6 +201,15 @@
 #ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
 #  include "SentimentDispersionIndex.h"
 #endif
+#ifdef LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED
+#  include "SentimentDivergenceDetector.h"
+#endif
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+#  include "TokenInfluenceAttributor.h"
+#endif
+#ifdef LLMQUANT_WALK_FORWARD_ENABLED
+#  include "WalkForwardValidator.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3773,6 +3782,41 @@ int main(int argc, char* argv[]) {
     std::cout << "  Cross-session    : session=" << cross_session_mem.session_number()
               << "  loaded=" << (cross_session_mem.has_loaded_state() ? "yes" : "no") << "\n";
 #endif
+#ifdef LLMQUANT_REGIME_PROB_ENABLED
+    std::cout << "  Regime HMM       : "
+              << "p_risk_on=" << std::fixed << std::setprecision(4) << regime_prob_est.prob_risk_on()
+              << "  p_risk_off=" << regime_prob_est.prob_risk_off()
+              << "  transitions=" << regime_prob_est.transition_count() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED
+    std::cout << "  Signal replay    : "
+              << "retained=" << signal_replay.size()
+              << "  total=" << signal_replay.total_pushed() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+    {
+        auto top = ngram_profiler.top_by_frequency(3);
+        std::cout << "  N-gram profiler  : "
+                  << "distinct=" << ngram_profiler.distinct_ngrams()
+                  << "  hot_events=" << ngram_profiler.hot_events();
+        if (!top.empty()) {
+            std::cout << "  top=[";
+            for (size_t i = 0; i < top.size(); ++i) {
+                if (i > 0) std::cout << ",";
+                std::cout << "\"" << top[i].ngram << "\":" << top[i].count;
+            }
+            std::cout << "]";
+        }
+        std::cout << "\n";
+    }
+#endif
+#ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
+    std::cout << "  Sent dispersion  : "
+              << "sdi=" << std::fixed << std::setprecision(4) << sentiment_dispersion.sdi()
+              << "  dispersed=" << (sentiment_dispersion.is_dispersed() ? "YES" : "no")
+              << "  coherent=" << (sentiment_dispersion.is_coherent() ? "YES" : "no")
+              << "  events=" << sentiment_dispersion.high_dispersion_events() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -3910,6 +3954,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
         std::cout << "  [json:session]  " << cross_session_mem.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_PROB_ENABLED
+        std::cout << "  [json:regime_hmm] " << regime_prob_est.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED
+        std::cout << "  [json:replay]   " << signal_replay.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+        std::cout << "  [json:ngram]    " << ngram_profiler.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_EXECUTION_QUALITY_ENABLED
+        std::cout << "  [json:execqual] " << exec_quality.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
+        std::cout << "  [json:dispersion] " << sentiment_dispersion.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
