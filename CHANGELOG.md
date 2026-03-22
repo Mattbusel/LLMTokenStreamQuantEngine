@@ -9,6 +9,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 27 — 2026-03-21)
+- **CI: feature-flags-matrix job** in `ci.yml`: six-job matrix that builds and
+  tests with each `LLMQUANT_ENABLE_*` flag individually set to OFF, confirming
+  every optional subsystem compiles and passes tests when disabled in isolation.
+- **CI: minimal job expanded**: `LLMQUANT_ENABLE_DEDUP=OFF`,
+  `LLMQUANT_ENABLE_PROFILING=OFF`, and `LLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF`
+  added so the minimal job truly exercises the all-features-off path.
+- **CI bug fix (`sanitizers.yml`)**: added `sudo apt-get update -qq`, added
+  missing `libssl-dev libhiredis-dev clang`, set
+  `-DCMAKE_CXX_COMPILER=clang++`, enabled `LLMQUANT_WARNINGS_AS_ERRORS=ON`,
+  and added `ASAN_OPTIONS`/`UBSAN_OPTIONS` env vars — matching the `asan` job
+  in `ci.yml` which already had these fixes.
+- **CI bug fix (`fuzz.yml`)**: added `sudo apt-get update -qq`, added missing
+  `libfmt-dev libgtest-dev libssl-dev libhiredis-dev` so the fuzz smoke-test
+  build no longer fails on missing headers.
+- **Env-var feature flags** (`src/main.cpp`): `LLMQUANT_NO_PROMETHEUS`,
+  `LLMQUANT_NO_DEDUP`, `LLMQUANT_NO_HOT_RELOAD`, `LLMQUANT_DRY_RUN`,
+  `LLMQUANT_QUIET`, `LLMQUANT_BACKTEST` — all map to their CLI-flag equivalents.
+  CLI flags take precedence; env vars only activate the flag when the CLI has
+  not already set it. Useful for containerised/Kubernetes deployments.
+
 ### Added (Cycle 26 — 2026-03-21)
 - **Bug fix (CI)**: `asan` job in `.github/workflows/ci.yml` was missing `clang`
   and `clang-tidy` from its `apt-get install` step, causing the Configure step

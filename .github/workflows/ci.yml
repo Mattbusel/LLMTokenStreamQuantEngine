@@ -44,6 +44,15 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure --parallel $(nproc)
 
+      - name: cppcheck (static analysis)
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Release'
+        run: |
+          cppcheck --error-exitcode=1 \
+            --enable=warning,performance,portability \
+            --suppress=missingIncludeSystem \
+            -I include \
+            src/*.cpp
+
   asan:
     runs-on: ubuntu-latest
     steps:

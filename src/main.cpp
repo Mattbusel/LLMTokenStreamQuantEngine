@@ -66,12 +66,19 @@ static uint64_t get_process_rss_bytes() {
 ///        Returns 0.0 if unavailable.  Not async-signal-safe; call from monitoring thread only.
 static double get_process_cpu_fraction() {
 #ifdef _WIN32
+    static bool  win_initialized = false;
     static FILETIME prev_kernel{}, prev_user{}, prev_wall{};
     FILETIME creation, exit_ft, kernel, user;
     if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit_ft, &kernel, &user))
         return 0.0;
     FILETIME now_ft;
     GetSystemTimeAsFileTime(&now_ft);
+    // On first call: seed previous values and return 0 to avoid cumulative-uptime spike.
+    if (!win_initialized) {
+        win_initialized = true;
+        prev_kernel = kernel; prev_user = user; prev_wall = now_ft;
+        return 0.0;
+    }
     auto to_u64 = [](FILETIME ft) -> uint64_t {
         return (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
     };
@@ -194,7 +201,13 @@ int main(int argc, char* argv[]) {
                 "  --help            Print this help and exit\n"
                 "\n"
                 "Environment:\n"
-                "  LLMQUANT_API_KEY  LLM API key (fallback when --stream has no key)\n"
+                "  LLMQUANT_API_KEY        LLM API key (fallback when --stream has no key)\n"
+                "  LLMQUANT_NO_PROMETHEUS  Set to 1/true/yes to disable Prometheus endpoint\n"
+                "  LLMQUANT_NO_DEDUP       Set to 1/true/yes to disable token deduplication\n"
+                "  LLMQUANT_NO_HOT_RELOAD  Set to 1/true/yes to disable config hot-reload\n"
+                "  LLMQUANT_DRY_RUN        Set to 1/true/yes for dry-run (signal only, no OMS)\n"
+                "  LLMQUANT_QUIET          Set to 1/true/yes to suppress console output\n"
+                "  LLMQUANT_BACKTEST       Set to 1/true/yes to enable backtest mode\n"
                 "\n"
                 "Config file (YAML) keys: token_stream, trading, latency, logging,\n"
                 "  pressure, risk_thresholds, risk (override flags).\n";
@@ -250,6 +263,37 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--fix" && i + 1 < argc) {
             fix_address = argv[++i];
         }
+    }
+
+    // Environment variable overrides for runtime feature flags.
+    // Useful in containerised / Kubernetes deployments where editing the command
+    // line is inconvenient.  CLI flags take precedence; env vars only set the flag
+    // when the CLI has NOT already set it.
+    //
+    // LLMQUANT_NO_PROMETHEUS=1   equivalent to --no-prometheus
+    // LLMQUANT_NO_DEDUP=1        equivalent to --no-dedup
+    // LLMQUANT_NO_HOT_RELOAD=1   equivalent to --no-hot-reload
+    // LLMQUANT_DRY_RUN=1         equivalent to --dry-run
+    // LLMQUANT_QUIET=1           equivalent to --quiet
+    // LLMQUANT_BACKTEST=1        equivalent to --backtest
+    {
+        auto env_flag = [](const char* name) -> bool {
+#ifdef _WIN32
+            char buf[8] = {};
+            size_t sz = 0;
+            if (getenv_s(&sz, buf, sizeof(buf), name) != 0 || sz == 0) return false;
+            const char* v = buf;
+#else
+            const char* v = std::getenv(name);
+#endif
+            return v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' || v[0] == 't' || v[0] == 'T');
+        };
+        if (!no_prometheus  && env_flag("LLMQUANT_NO_PROMETHEUS"))  no_prometheus  = true;
+        if (!no_dedup       && env_flag("LLMQUANT_NO_DEDUP"))       no_dedup       = true;
+        if (!no_hot_reload  && env_flag("LLMQUANT_NO_HOT_RELOAD"))  no_hot_reload  = true;
+        if (!dry_run        && env_flag("LLMQUANT_DRY_RUN"))        dry_run        = true;
+        if (!quiet          && env_flag("LLMQUANT_QUIET"))          quiet          = true;
+        if (!backtest_mode  && env_flag("LLMQUANT_BACKTEST"))       backtest_mode  = true;
     }
 
     // Apply log level before any spdlog calls so early warnings are visible.
