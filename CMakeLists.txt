@@ -2151,6 +2151,56 @@ else()
     message(STATUS "Feature: TokenInfluenceDecay DISABLED (LLMQUANT_ENABLE_INFLUENCE_DECAY=OFF)")
 endif()
 
+# NarrativePolarityShift: rolling polarity (sign) distribution tracker with bullish/bearish callbacks.
+option(LLMQUANT_ENABLE_POLARITY_SHIFT "Build NarrativePolarityShift: narrative bullish/bearish polarity shift detector" ON)
+if(LLMQUANT_ENABLE_POLARITY_SHIFT)
+    target_sources(llmquant PRIVATE src/NarrativePolarityShift.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POLARITY_SHIFT_ENABLED)
+    message(STATUS "Feature: NarrativePolarityShift ENABLED (positive fraction, bull/bear threshold callbacks)")
+else()
+    message(STATUS "Feature: NarrativePolarityShift DISABLED (LLMQUANT_ENABLE_POLARITY_SHIFT=OFF)")
+endif()
+
+# SignalChandeOscillator: Chande Momentum Oscillator (CMO) applied to bias stream.
+option(LLMQUANT_ENABLE_CHANDE_OSC "Build SignalChandeOscillator: Chande Momentum Oscillator overbought/oversold" ON)
+if(LLMQUANT_ENABLE_CHANDE_OSC)
+    target_sources(llmquant PRIVATE src/SignalChandeOscillator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CHANDE_OSC_ENABLED)
+    message(STATUS "Feature: SignalChandeOscillator ENABLED (CMO [-100,+100], overbought/oversold callbacks)")
+else()
+    message(STATUS "Feature: SignalChandeOscillator DISABLED (LLMQUANT_ENABLE_CHANDE_OSC=OFF)")
+endif()
+
+# SignalDonchianChannel: rolling high/low Donchian bands with breakout detection.
+option(LLMQUANT_ENABLE_DONCHIAN_CHANNEL "Build SignalDonchianChannel: Donchian Channel upper/lower band breakout detector" ON)
+if(LLMQUANT_ENABLE_DONCHIAN_CHANNEL)
+    target_sources(llmquant PRIVATE src/SignalDonchianChannel.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DONCHIAN_CHANNEL_ENABLED)
+    message(STATUS "Feature: SignalDonchianChannel ENABLED (rolling high/low bands, upper/lower breakout callbacks)")
+else()
+    message(STATUS "Feature: SignalDonchianChannel DISABLED (LLMQUANT_ENABLE_DONCHIAN_CHANNEL=OFF)")
+endif()
+
+# TokenBiasHistogram: fixed-bin histogram of bias values with mode-change detection.
+option(LLMQUANT_ENABLE_BIAS_HISTOGRAM "Build TokenBiasHistogram: bias distribution histogram with mode tracking" ON)
+if(LLMQUANT_ENABLE_BIAS_HISTOGRAM)
+    target_sources(llmquant PRIVATE src/TokenBiasHistogram.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_HISTOGRAM_ENABLED)
+    message(STATUS "Feature: TokenBiasHistogram ENABLED (n-bin histogram, Shannon entropy, mode-change callbacks)")
+else()
+    message(STATUS "Feature: TokenBiasHistogram DISABLED (LLMQUANT_ENABLE_BIAS_HISTOGRAM=OFF)")
+endif()
+
+# BiasExponentialSmoothing: double exponential smoothing (Holt-Winters) with large-error callbacks.
+option(LLMQUANT_ENABLE_EXP_SMOOTHING "Build BiasExponentialSmoothing: Holt-Winters double exponential smoothing forecaster" ON)
+if(LLMQUANT_ENABLE_EXP_SMOOTHING)
+    target_sources(llmquant PRIVATE src/BiasExponentialSmoothing.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_EXP_SMOOTHING_ENABLED)
+    message(STATUS "Feature: BiasExponentialSmoothing ENABLED (level+trend EMA, one-step forecast, large-error callbacks)")
+else()
+    message(STATUS "Feature: BiasExponentialSmoothing DISABLED (LLMQUANT_ENABLE_EXP_SMOOTHING=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
@@ -2174,6 +2224,56 @@ endif()
 # ---------------------------------------------------------------------------
 enable_testing()
 add_subdirectory(tests)
+
+# SignalDonchianChannel: rolling high/low bands with breakout callbacks.
+option(LLMQUANT_ENABLE_DONCHIAN "Build SignalDonchianChannel: Donchian channel upper/lower band breakout detector" ON)
+if(LLMQUANT_ENABLE_DONCHIAN)
+    target_sources(llmquant PRIVATE src/SignalDonchianChannel.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DONCHIAN_ENABLED)
+    message(STATUS "Feature: SignalDonchianChannel ENABLED (rolling high/low bands, breakout callbacks)")
+else()
+    message(STATUS "Feature: SignalDonchianChannel DISABLED (LLMQUANT_ENABLE_DONCHIAN=OFF)")
+endif()
+
+# SignalChandeOscillator: Chande Momentum Oscillator (CMO) for bias streams.
+option(LLMQUANT_ENABLE_CHANDE_OSC "Build SignalChandeOscillator: CMO overbought/oversold momentum oscillator" ON)
+if(LLMQUANT_ENABLE_CHANDE_OSC)
+    target_sources(llmquant PRIVATE src/SignalChandeOscillator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CHANDE_OSC_ENABLED)
+    message(STATUS "Feature: SignalChandeOscillator ENABLED (CMO [-100,+100], overbought/oversold callbacks)")
+else()
+    message(STATUS "Feature: SignalChandeOscillator DISABLED (LLMQUANT_ENABLE_CHANDE_OSC=OFF)")
+endif()
+
+# TokenBiasHistogram: fixed-bin histogram with mode and entropy tracking.
+option(LLMQUANT_ENABLE_BIAS_HISTOGRAM "Build TokenBiasHistogram: fixed-bin bias distribution histogram with mode change detection" ON)
+if(LLMQUANT_ENABLE_BIAS_HISTOGRAM)
+    target_sources(llmquant PRIVATE src/TokenBiasHistogram.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_HISTOGRAM_ENABLED)
+    message(STATUS "Feature: TokenBiasHistogram ENABLED (n-bin histogram, mode change and entropy)")
+else()
+    message(STATUS "Feature: TokenBiasHistogram DISABLED (LLMQUANT_ENABLE_BIAS_HISTOGRAM=OFF)")
+endif()
+
+# NarrativePolarityShift: rolling polarity (positive fraction) with bullish/bearish callbacks.
+option(LLMQUANT_ENABLE_POLARITY_SHIFT "Build NarrativePolarityShift: rolling sign-fraction tracker with regime shift callbacks" ON)
+if(LLMQUANT_ENABLE_POLARITY_SHIFT)
+    target_sources(llmquant PRIVATE src/NarrativePolarityShift.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POLARITY_SHIFT_ENABLED)
+    message(STATUS "Feature: NarrativePolarityShift ENABLED (bullish/bearish fraction, regime shift callbacks)")
+else()
+    message(STATUS "Feature: NarrativePolarityShift DISABLED (LLMQUANT_ENABLE_POLARITY_SHIFT=OFF)")
+endif()
+
+# BiasExponentialSmoothing: Holt double-EMA (level + trend) with forecast error callbacks.
+option(LLMQUANT_ENABLE_EXP_SMOOTHING "Build BiasExponentialSmoothing: Holt double-EMA level+trend forecaster" ON)
+if(LLMQUANT_ENABLE_EXP_SMOOTHING)
+    target_sources(llmquant PRIVATE src/BiasExponentialSmoothing.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_EXP_SMOOTHING_ENABLED)
+    message(STATUS "Feature: BiasExponentialSmoothing ENABLED (Holt EMA level/trend, forecast error callback)")
+else()
+    message(STATUS "Feature: BiasExponentialSmoothing DISABLED (LLMQUANT_ENABLE_EXP_SMOOTHING=OFF)")
+endif()
 
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)

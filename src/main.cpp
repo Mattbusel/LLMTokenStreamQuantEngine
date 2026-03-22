@@ -543,6 +543,21 @@
 #ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
 #  include "TokenInfluenceDecay.h"
 #endif
+#ifdef LLMQUANT_POLARITY_SHIFT_ENABLED
+#  include "NarrativePolarityShift.h"
+#endif
+#ifdef LLMQUANT_CHANDE_OSC_ENABLED
+#  include "SignalChandeOscillator.h"
+#endif
+#ifdef LLMQUANT_DONCHIAN_CHANNEL_ENABLED
+#  include "SignalDonchianChannel.h"
+#endif
+#ifdef LLMQUANT_BIAS_HISTOGRAM_ENABLED
+#  include "TokenBiasHistogram.h"
+#endif
+#ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
+#  include "BiasExponentialSmoothing.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3891,6 +3906,98 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_POLARITY_SHIFT_ENABLED
+    // NarrativePolarityShift: tracks positive-bias fraction over rolling window.
+    // Bullish shift = narrative turning positive; bearish shift = narrative turning negative.
+    llmquant::NarrativePolarityShift polarity_shift;
+    {
+        llmquant::NarrativePolarityShift::Config ps_cfg;
+        ps_cfg.window          = 20;
+        ps_cfg.min_samples     = 5;
+        ps_cfg.bull_threshold  = 0.65;
+        ps_cfg.bear_threshold  = 0.35;
+        ps_cfg.on_bullish = [](double frac) {
+            spdlog::info("[polarity] BULLISH SHIFT pos_frac={:.3f} (majority bias now positive)", frac);
+        };
+        ps_cfg.on_bearish = [](double frac) {
+            spdlog::info("[polarity] BEARISH SHIFT pos_frac={:.3f} (majority bias now negative)", frac);
+        };
+        polarity_shift.update_config(ps_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CHANDE_OSC_ENABLED
+    // SignalChandeOscillator: CMO = 100*(ΣUp-ΣDown)/(ΣUp+ΣDown).
+    // >+50 overbought, <-50 oversold in narrative momentum.
+    llmquant::SignalChandeOscillator chande_osc;
+    {
+        llmquant::SignalChandeOscillator::Config co_cfg;
+        co_cfg.window               = 14;
+        co_cfg.min_samples          = 5;
+        co_cfg.overbought_threshold = 50.0;
+        co_cfg.oversold_threshold   = -50.0;
+        co_cfg.on_overbought = [](double cmo) {
+            spdlog::warn("[chande] OVERBOUGHT cmo={:.1f} (narrative momentum overextended up)", cmo);
+        };
+        co_cfg.on_oversold = [](double cmo) {
+            spdlog::warn("[chande] OVERSOLD cmo={:.1f} (narrative momentum overextended down)", cmo);
+        };
+        chande_osc.update_config(co_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_DONCHIAN_CHANNEL_ENABLED
+    // SignalDonchianChannel: rolling high/low bands over bias window.
+    // Breakout above upper band = new bias high; below lower = new bias low.
+    llmquant::SignalDonchianChannel donchian_ch;
+    {
+        llmquant::SignalDonchianChannel::Config dc_cfg;
+        dc_cfg.window      = 20;
+        dc_cfg.min_samples = 5;
+        dc_cfg.on_upper_breakout = [](double new_hi, double prev_hi) {
+            spdlog::info("[donchian] UPPER BREAKOUT {:.4f} > prev {:.4f} (bias new high)", new_hi, prev_hi);
+        };
+        dc_cfg.on_lower_breakout = [](double new_lo, double prev_lo) {
+            spdlog::info("[donchian] LOWER BREAKOUT {:.4f} < prev {:.4f} (bias new low)", new_lo, prev_lo);
+        };
+        donchian_ch.update_config(dc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BIAS_HISTOGRAM_ENABLED
+    // TokenBiasHistogram: fixed-bin histogram of bias distribution.
+    // Mode changes = distributional shift in narrative bias.
+    llmquant::TokenBiasHistogram bias_histogram;
+    {
+        llmquant::TokenBiasHistogram::Config bh_cfg;
+        bh_cfg.n_bins      = 20;
+        bh_cfg.lo          = -1.0;
+        bh_cfg.hi          =  1.0;
+        bh_cfg.min_samples = 5;
+        bh_cfg.on_mode_change = [](int new_bin, int prev_bin) {
+            spdlog::info("[histogram] MODE CHANGE bin {} → {} (dominant bias region shifted)", prev_bin, new_bin);
+        };
+        bias_histogram.update_config(bh_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
+    // BiasExponentialSmoothing: Holt-Winters level+trend smoothing for bias.
+    // Large forecast error = structural break in bias dynamics.
+    llmquant::BiasExponentialSmoothing exp_smooth;
+    {
+        llmquant::BiasExponentialSmoothing::Config es_cfg;
+        es_cfg.alpha           = 0.2;
+        es_cfg.beta            = 0.1;
+        es_cfg.error_threshold = 0.05;
+        es_cfg.min_samples     = 5;
+        es_cfg.on_large_error = [](double actual, double fc) {
+            spdlog::warn("[exp_smooth] LARGE ERROR actual={:.4f} forecast={:.4f} (bias regime break)", actual, fc);
+        };
+        exp_smooth.update_config(es_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -5134,6 +5241,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
         influence_decay.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_POLARITY_SHIFT_ENABLED
+        polarity_shift.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CHANDE_OSC_ENABLED
+        chande_osc.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_DONCHIAN_CHANNEL_ENABLED
+        donchian_ch.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BIAS_HISTOGRAM_ENABLED
+        bias_histogram.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
+        exp_smooth.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -7436,6 +7558,50 @@ int main(int argc, char* argv[]) {
               << "  -ev=" << influence_decay.negative_dominant_events()
               << "  rec=" << influence_decay.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_POLARITY_SHIFT_ENABLED
+    std::cout << "  Polarity Shift   : "
+              << "pos_frac=" << std::fixed << std::setprecision(3) << polarity_shift.positive_fraction()
+              << "  bull=" << (polarity_shift.is_bullish() ? "Y" : "N")
+              << "  bear=" << (polarity_shift.is_bearish() ? "Y" : "N")
+              << "  bull_ev=" << polarity_shift.bullish_events()
+              << "  bear_ev=" << polarity_shift.bearish_events()
+              << "  rec=" << polarity_shift.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CHANDE_OSC_ENABLED
+    std::cout << "  Chande Osc       : "
+              << "cmo=" << std::fixed << std::setprecision(1) << chande_osc.value()
+              << "  ob=" << (chande_osc.is_overbought() ? "Y" : "N")
+              << "  os=" << (chande_osc.is_oversold() ? "Y" : "N")
+              << "  ob_ev=" << chande_osc.overbought_events()
+              << "  os_ev=" << chande_osc.oversold_events()
+              << "  rec=" << chande_osc.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_DONCHIAN_CHANNEL_ENABLED
+    std::cout << "  Donchian Channel : "
+              << "hi=" << std::fixed << std::setprecision(4) << donchian_ch.upper_band()
+              << "  lo=" << donchian_ch.lower_band()
+              << "  mid=" << donchian_ch.midline()
+              << "  ub_ev=" << donchian_ch.upper_breakouts()
+              << "  lb_ev=" << donchian_ch.lower_breakouts()
+              << "  rec=" << donchian_ch.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_HISTOGRAM_ENABLED
+    std::cout << "  Bias Histogram   : "
+              << "peak_bin=" << bias_histogram.peak_bin()
+              << "  peak_ctr=" << std::fixed << std::setprecision(4) << bias_histogram.peak_center()
+              << "  entropy=" << bias_histogram.entropy()
+              << "  mode_chg=" << bias_histogram.mode_changes()
+              << "  rec=" << bias_histogram.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
+    std::cout << "  Exp Smoothing    : "
+              << "level=" << std::fixed << std::setprecision(4) << exp_smooth.level()
+              << "  trend=" << exp_smooth.trend()
+              << "  fc=" << exp_smooth.forecast()
+              << "  err=" << exp_smooth.last_error()
+              << "  err_ev=" << exp_smooth.error_events()
+              << "  rec=" << exp_smooth.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -8078,6 +8244,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
         std::cout << "  [json:inf_decay]  " << influence_decay.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_POLARITY_SHIFT_ENABLED
+        std::cout << "  [json:polarity]   " << polarity_shift.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CHANDE_OSC_ENABLED
+        std::cout << "  [json:chande]     " << chande_osc.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_DONCHIAN_CHANNEL_ENABLED
+        std::cout << "  [json:donchian]   " << donchian_ch.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_HISTOGRAM_ENABLED
+        std::cout << "  [json:bias_hist]  " << bias_histogram.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_EXP_SMOOTHING_ENABLED
+        std::cout << "  [json:exp_smooth] " << exp_smooth.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";
