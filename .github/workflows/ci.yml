@@ -82,6 +82,66 @@ jobs:
           clang-format --dry-run --Werror \
             src/*.cpp include/*.h
 
+  minimal:
+    name: Minimal build (all optional features OFF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libspdlog-dev libfmt-dev libyaml-cpp-dev \
+            libgtest-dev nlohmann-json3-dev
+      - name: Configure (all optional features disabled)
+        run: |
+          cmake -B build-minimal \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=ON \
+            -DLLMQUANT_ENABLE_PROMETHEUS=OFF \
+            -DLLMQUANT_ENABLE_FIX_OMS=OFF \
+            -DLLMQUANT_ENABLE_REST_OMS=OFF \
+            -DLLMQUANT_ENABLE_DEDUP=OFF \
+            -DLLMQUANT_ENABLE_PROFILING=OFF \
+            -DLLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF
+      - name: Build
+        run: cmake --build build-minimal --parallel $(nproc)
+      - name: Test
+        run: ctest --test-dir build-minimal --output-on-failure --parallel $(nproc)
+
+  feature-flags-matrix:
+    name: Feature flag ${{ matrix.flag }}=OFF
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flag: LLMQUANT_ENABLE_PROMETHEUS
+          - flag: LLMQUANT_ENABLE_FIX_OMS
+          - flag: LLMQUANT_ENABLE_REST_OMS
+          - flag: LLMQUANT_ENABLE_DEDUP
+          - flag: LLMQUANT_ENABLE_PROFILING
+          - flag: LLMQUANT_ENABLE_JSON_STATS_SUMMARY
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libspdlog-dev libfmt-dev libyaml-cpp-dev \
+            libgtest-dev nlohmann-json3-dev \
+            libssl-dev libhiredis-dev
+      - name: Configure (${{ matrix.flag }}=OFF)
+        run: |
+          cmake -B build-flag \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLMQUANT_WARNINGS_AS_ERRORS=ON \
+            -D${{ matrix.flag }}=OFF
+      - name: Build
+        run: cmake --build build-flag --parallel $(nproc)
+      - name: Test
+        run: ctest --test-dir build-flag --output-on-failure --parallel $(nproc)
+
   docs:
     runs-on: ubuntu-latest
     steps:

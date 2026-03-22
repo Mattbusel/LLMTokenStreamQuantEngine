@@ -24,6 +24,8 @@ option(LLMQUANT_ENABLE_REST_OMS   "Build the REST OMS polling adapter (RestOmsAd
 option(LLMQUANT_ENABLE_PROFILING  "Compile latency profiling / percentile tracking"     ON)
 option(LLMQUANT_ENABLE_DEDUP      "Build the token deduplication subsystem"             ON)
 option(LLMQUANT_ENABLE_JSON_STATS_SUMMARY "Emit structured JSON stats lines to stdout on session exit" ON)
+option(LLMQUANT_ENABLE_TLS        "Enable TLS support via OpenSSL in LLMStreamClient (auto-disabled if OpenSSL not found)" ON)
+option(LLMQUANT_ENABLE_REDIS      "Enable Redis-backed deduplication via hiredis (auto-disabled if hiredis not found)"     ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -172,18 +174,28 @@ if(WIN32)
     target_link_libraries(llmquant PUBLIC ws2_32 psapi)
 endif()
 
-if(OpenSSL_FOUND OR OPENSSL_FOUND)
+if(LLMQUANT_ENABLE_TLS AND (OpenSSL_FOUND OR OPENSSL_FOUND))
     target_compile_definitions(llmquant PUBLIC LLMQUANT_TLS_ENABLED)
     target_link_libraries(llmquant PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    message(STATUS "Feature: TLS (OpenSSL) ENABLED")
+elseif(LLMQUANT_ENABLE_TLS)
+    message(STATUS "Feature: TLS requested but OpenSSL not found — TLS disabled")
+else()
+    message(STATUS "Feature: TLS disabled (LLMQUANT_ENABLE_TLS=OFF)")
 endif()
 
-if(hiredis_FOUND OR HIREDIS_FOUND)
+if(LLMQUANT_ENABLE_REDIS AND (hiredis_FOUND OR HIREDIS_FOUND))
     target_compile_definitions(llmquant PUBLIC LLMQUANT_REDIS_ENABLED)
     if(TARGET hiredis::hiredis)
         target_link_libraries(llmquant PUBLIC hiredis::hiredis)
     else()
         target_link_libraries(llmquant PUBLIC hiredis)
     endif()
+    message(STATUS "Feature: Redis (hiredis) ENABLED")
+elseif(LLMQUANT_ENABLE_REDIS)
+    message(STATUS "Feature: Redis requested but hiredis not found — Redis disabled")
+else()
+    message(STATUS "Feature: Redis disabled (LLMQUANT_ENABLE_REDIS=OFF)")
 endif()
 
 # Wire feature flags as compile-time preprocessor symbols.
