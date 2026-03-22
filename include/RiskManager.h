@@ -779,11 +779,13 @@ private:
     GateTripCallback gate_trip_rate_cb_;
     GateTripCallback gate_trip_drawdown_cb_;
     GateTripCallback gate_trip_position_cb_;
+    GateTripCallback gate_trip_pnl_cb_;      ///< Separate callback for pnl_limit gate.
     bool gate_magnitude_last_blocked_{false};
     bool gate_confidence_last_blocked_{false};
     bool gate_rate_last_blocked_{false};
     bool gate_drawdown_last_blocked_{false};
     bool gate_position_last_blocked_{false};
+    bool gate_pnl_last_blocked_{false};      ///< Trip-wire state for pnl_limit gate.
 
     Stats stats_;
 };

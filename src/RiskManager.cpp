@@ -113,16 +113,17 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
                                     // position-limit blocks only; pnl_limit is a separate gate.
                                     sat_increment(stats_.signals_blocked_pnl);
                                     reject_reason = "pnl_limit";
-                                    if (!gate_position_last_blocked_ && gate_trip_position_cb_) {
-                                        trip_cb_copy = gate_trip_position_cb_;
-                                        trip_gate_name = "position";
+                                    if (!gate_pnl_last_blocked_ && gate_trip_pnl_cb_) {
+                                        trip_cb_copy = gate_trip_pnl_cb_;
+                                        trip_gate_name = "pnl";
                                     }
-                                    gate_position_last_blocked_ = true;
+                                    gate_pnl_last_blocked_ = true;
                                 }
                             }
                         }
                         if (reject_reason.empty()) {
                             gate_position_last_blocked_ = false;
+                            gate_pnl_last_blocked_      = false;
                             update_drawdown(signal);
                             signals_in_window_++;
                             sat_increment(stats_.signals_passed);
@@ -243,6 +244,7 @@ void RiskManager::reset_stats() noexcept {
     gate_rate_last_blocked_       = false;
     gate_drawdown_last_blocked_   = false;
     gate_position_last_blocked_   = false;
+    gate_pnl_last_blocked_        = false;
 }
 
 void RiskManager::disable_all_gates() {
@@ -375,6 +377,7 @@ void RiskManager::set_gate_trip_callback(const std::string& gate_name, GateTripC
     else if (gate_name == "rate")       gate_trip_rate_cb_       = std::move(cb);
     else if (gate_name == "drawdown")   gate_trip_drawdown_cb_   = std::move(cb);
     else if (gate_name == "position")   gate_trip_position_cb_   = std::move(cb);
+    else if (gate_name == "pnl")        gate_trip_pnl_cb_        = std::move(cb);
     // Unknown gate names are silently ignored.
 }
 

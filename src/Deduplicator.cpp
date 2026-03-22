@@ -159,7 +159,13 @@ bool RedisDeduplicator::try_connect() {
     size_t colon = url.find(':');
     if (colon != std::string::npos) {
         host = url.substr(0, colon);
-        port = std::stoi(url.substr(colon + 1));
+        try {
+            port = std::stoi(url.substr(colon + 1));
+        } catch (...) {
+            spdlog::warn("RedisDeduplicator: invalid port in URL '{}'; using default 6379",
+                         redis_url_);
+            port = 6379;
+        }
     } else if (!url.empty()) {
         host = url;
     }

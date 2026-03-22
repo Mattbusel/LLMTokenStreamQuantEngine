@@ -208,6 +208,7 @@ int main(int argc, char* argv[]) {
 #endif
                 "  --no-hot-reload   Disable config file hot-reload watcher\n"
                 "  --version         Print version and exit\n"
+                "  --show-flags      Print compile-time feature flags and exit\n"
                 "  --help            Print this help and exit\n"
                 "\n"
                 "Environment:\n"
@@ -228,6 +229,62 @@ int main(int argc, char* argv[]) {
             std::cout << "LLMTokenStreamQuantEngine " << LLMQUANT_VERSION
                       << " (" << LLMQUANT_GIT_COMMIT
                       << ", " << LLMQUANT_BUILD_TIMESTAMP << ")\n";
+            return 0;
+        } else if (arg == "--show-flags") {
+            // Print all compile-time feature flag states and exit.
+            // Useful for verifying embedded/minimal builds have the expected features.
+            std::cout << "Compile-time feature flags:\n"
+#ifdef LLMQUANT_PROMETHEUS_ENABLED
+                      << "  LLMQUANT_ENABLE_PROMETHEUS    ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_PROMETHEUS    OFF\n"
+#endif
+#ifdef LLMQUANT_FIX_OMS_ENABLED
+                      << "  LLMQUANT_ENABLE_FIX_OMS       ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_FIX_OMS       OFF\n"
+#endif
+#ifdef LLMQUANT_REST_OMS_ENABLED
+                      << "  LLMQUANT_ENABLE_REST_OMS      ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_REST_OMS      OFF\n"
+#endif
+#ifdef LLMQUANT_DEDUP_ENABLED
+                      << "  LLMQUANT_ENABLE_DEDUP         ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_DEDUP         OFF\n"
+#endif
+#ifdef LLMQUANT_PROFILING_ENABLED
+                      << "  LLMQUANT_ENABLE_PROFILING     ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_PROFILING     OFF\n"
+#endif
+#ifdef LLMQUANT_JSON_STATS_SUMMARY
+                      << "  LLMQUANT_ENABLE_JSON_STATS    ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_JSON_STATS    OFF\n"
+#endif
+#ifdef LLMQUANT_TLS_ENABLED
+                      << "  LLMQUANT_ENABLE_TLS           ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_TLS           OFF\n"
+#endif
+#ifdef LLMQUANT_REDIS_ENABLED
+                      << "  LLMQUANT_ENABLE_REDIS         ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_REDIS         OFF\n"
+#endif
+#ifdef LLMQUANT_HOT_RELOAD_ENABLED
+                      << "  LLMQUANT_ENABLE_HOT_RELOAD    ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_HOT_RELOAD    OFF\n"
+#endif
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
+                      << "  LLMQUANT_ENABLE_STREAM_CLIENT ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_STREAM_CLIENT OFF\n"
+#endif
+                      ;
             return 0;
 #ifdef LLMQUANT_STREAM_CLIENT_ENABLED
         } else if (arg == "--stream") {
@@ -256,8 +313,12 @@ int main(int argc, char* argv[]) {
         } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
             config_file = argv[++i];
         } else if (arg == "--stats-port" && i + 1 < argc) {
-            try { stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i])); }
-            catch (...) { std::cerr << "error: --stats-port requires an integer\n"; return 1; }
+            try {
+                int p = std::stoi(argv[++i]);
+                if (p <= 0 || p > 65535) throw std::out_of_range("port");
+                stats_port_override = static_cast<uint16_t>(p);
+            }
+            catch (...) { std::cerr << "error: --stats-port requires an integer in range 1-65535\n"; return 1; }
         } else if (arg == "--token-interval" && i + 1 < argc) {
             try { token_interval_override = std::max(1, std::stoi(argv[++i])); }
             catch (...) { std::cerr << "error: --token-interval requires an integer\n"; return 1; }
@@ -605,8 +666,12 @@ int main(int argc, char* argv[]) {
         size_t colon = fix_address.find(':');
         if (colon != std::string::npos) {
             fix_cfg.host = fix_address.substr(0, colon);
-            try { fix_cfg.port = static_cast<uint16_t>(std::stoi(fix_address.substr(colon + 1))); }
-            catch (...) { spdlog::error("--fix: invalid port in '{}'", fix_address); return 1; }
+            try {
+                int p = std::stoi(fix_address.substr(colon + 1));
+                if (p <= 0 || p > 65535) throw std::out_of_range("port");
+                fix_cfg.port = static_cast<uint16_t>(p);
+            }
+            catch (...) { spdlog::error("--fix: invalid port in '{}' (must be 1-65535)", fix_address); return 1; }
         } else {
             fix_cfg.host = fix_address;
         }
@@ -622,8 +687,12 @@ int main(int argc, char* argv[]) {
         size_t colon = endpoint.find(':');
         if (colon != std::string::npos) {
             oms_cfg.host = endpoint.substr(0, colon);
-            try { oms_cfg.port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon + 1))); }
-            catch (...) { spdlog::error("--oms: invalid port in '{}'", endpoint); return 1; }
+            try {
+                int p = std::stoi(endpoint.substr(colon + 1));
+                if (p <= 0 || p > 65535) throw std::out_of_range("port");
+                oms_cfg.port = static_cast<uint16_t>(p);
+            }
+            catch (...) { spdlog::error("--oms: invalid port in '{}' (must be 1-65535)", endpoint); return 1; }
         } else {
             oms_cfg.host = endpoint;
         }
@@ -748,6 +817,13 @@ int main(int argc, char* argv[]) {
 
         auto weight = llm_adapter.map_token_to_weight(text);
 
+#ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
+        spdlog::trace("token seq={} text='{}' sent={:.4f} conf={:.4f} vol={:.4f} bias={:.4f}",
+                      seq_id, text,
+                      weight.sentiment_score, weight.confidence_score,
+                      weight.volatility_score, weight.directional_bias);
+#endif
+
         // Apply per-category semantic weight multipliers (hot-reloadable).
         // Read atomically so hot-reload updates are visible without a mutex.
         weight.sentiment_score  *= sem_mult_sentiment.load(std::memory_order_relaxed);
@@ -760,6 +836,12 @@ int main(int argc, char* argv[]) {
         if (!dry_run) {
             trade_engine.process_semantic_weight(weight);
         }
+#ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
+        spdlog::trace("signal bias={:.4f} vol={:.4f} latency={}us",
+                      trade_engine.get_accumulated_bias(),
+                      trade_engine.get_accumulated_volatility(),
+                      latency_ctrl.get_stats().avg_us);
+#endif
 
         latency_ctrl.end_measurement();
 
