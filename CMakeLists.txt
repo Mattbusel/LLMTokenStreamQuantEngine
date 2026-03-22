@@ -105,6 +105,8 @@ option(LLMQUANT_ENABLE_EXECUTION_QUALITY            "Build ExecutionQualityMonit
 option(LLMQUANT_ENABLE_SENTIMENT_DISPERSION         "Build SentimentDispersionIndex: measures disagreement across sentiment dimensions (bias, vol, confidence)" ON)
 option(LLMQUANT_ENABLE_TOKEN_INFLUENCE              "Build TokenInfluenceAttributor: Shapley-inspired per-token marginal contribution attribution at signal generation time" ON)
 option(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE         "Build SentimentDivergenceDetector: multi-stream pairwise divergence detector that fires when sources disagree" ON)
+option(LLMQUANT_ENABLE_ADVERSARIAL_DETECT           "Build AdversarialInputDetector: z-score + repetition + vocabulary-inflation adversarial token detector" ON)
+option(LLMQUANT_ENABLE_SIGNAL_CI                    "Build SignalConfidenceInterval: rolling jackknife confidence interval estimator for trade signal uncertainty" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -992,6 +994,24 @@ if(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE)
     message(STATUS "Feature: SentimentDivergenceDetector ENABLED (multi-stream divergence)")
 else()
     message(STATUS "Feature: SentimentDivergenceDetector DISABLED (LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE=OFF)")
+endif()
+
+# AdversarialInputDetector: z-score + repetition + vocabulary-inflation anomaly detection.
+if(LLMQUANT_ENABLE_ADVERSARIAL_DETECT)
+    target_sources(llmquant PRIVATE src/AdversarialInputDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADVERSARIAL_DETECT_ENABLED)
+    message(STATUS "Feature: AdversarialInputDetector ENABLED (adversarial token detection)")
+else()
+    message(STATUS "Feature: AdversarialInputDetector DISABLED (LLMQUANT_ENABLE_ADVERSARIAL_DETECT=OFF)")
+endif()
+
+# SignalConfidenceInterval: rolling jackknife CI for signal uncertainty quantification.
+if(LLMQUANT_ENABLE_SIGNAL_CI)
+    target_sources(llmquant PRIVATE src/SignalConfidenceInterval.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_CI_ENABLED)
+    message(STATUS "Feature: SignalConfidenceInterval ENABLED (jackknife CI estimation)")
+else()
+    message(STATUS "Feature: SignalConfidenceInterval DISABLED (LLMQUANT_ENABLE_SIGNAL_CI=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

@@ -183,7 +183,9 @@ jobs:
             -DLLMQUANT_ENABLE_EXECUTION_QUALITY=OFF \
             -DLLMQUANT_ENABLE_SENTIMENT_DISPERSION=OFF \
             -DLLMQUANT_ENABLE_TOKEN_INFLUENCE=OFF \
-            -DLLMQUANT_ENABLE_SENTIMENT_DIVERGENCE=OFF
+            -DLLMQUANT_ENABLE_SENTIMENT_DIVERGENCE=OFF \
+            -DLLMQUANT_ENABLE_ADVERSARIAL_DETECT=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_CI=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -282,6 +284,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_SENTIMENT_DISPERSION
           - flag: LLMQUANT_ENABLE_TOKEN_INFLUENCE
           - flag: LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE
+          - flag: LLMQUANT_ENABLE_ADVERSARIAL_DETECT
+          - flag: LLMQUANT_ENABLE_SIGNAL_CI
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

@@ -1163,6 +1163,15 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_STREAM_HEALTH_ENABLED
     llmquant::TokenStreamHealthMonitor stream_health;
 #endif
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+    llmquant::TokenBiasHeatmap token_bias_heatmap;
+#endif
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+    llmquant::OrderFlowImbalanceDetector order_flow_detector;
+#endif
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+    llmquant::TokenInfluenceAttributor token_influence;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1247,6 +1256,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
         // Track n-gram frequencies; fires on repeated patterns.
         ngram_profiler.push(text);
+#endif
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+        // Attribute per-token marginal contribution to the current bias.
+        token_influence.record(text, weight.directional_bias);
 #endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
@@ -1787,6 +1800,49 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED
+    // SentimentDivergenceDetector: pairwise EMA divergence across bias/vol/conf.
+    // Fires when any pair's |ema_a - ema_b| exceeds the threshold.
+    llmquant::SentimentDivergenceDetector sentiment_divergence;
+    {
+        llmquant::SentimentDivergenceDetector::Config svd_cfg;
+        svd_cfg.divergence_threshold  = 0.4;
+        svd_cfg.recovery_hysteresis   = 0.7;
+        svd_cfg.on_divergence = [](double d, const std::string& a, const std::string& b) {
+            spdlog::warn("[divergence] {} <> {} diverge={:.4f}", a, b, d);
+        };
+        svd_cfg.on_recovery = [](double d) {
+            spdlog::info("[divergence] recovered  diverge={:.4f}", d);
+        };
+        sentiment_divergence.update_config(svd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+    // TokenInfluenceAttributor: Shapley-inspired per-token marginal attribution.
+    // Declared in the pre-lambda block; configure here.
+    {
+        llmquant::TokenInfluenceAttributor::Config ti_cfg;
+        ti_cfg.window_size = 64;
+        ti_cfg.top_n       = 5;
+        token_influence.update_config(ti_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_WALK_FORWARD_ENABLED
+    // WalkForwardValidator: rolling OOS validation — offline tool.
+    // Constructed here; tokens are loaded and run() is called at session end.
+    llmquant::WalkForwardValidator walk_forward;
+    {
+        llmquant::WalkForwardValidator::Config wf_cfg;
+        wf_cfg.train_size = 200;
+        wf_cfg.test_size  = 50;
+        wf_cfg.step_size  = 50;
+        wf_cfg.optimize   = false;  // skip parameter sweep in live mode
+        walk_forward = llmquant::WalkForwardValidator(wf_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -2253,6 +2309,13 @@ int main(int argc, char* argv[]) {
         sentiment_dispersion.record(std::abs(signal.delta_bias_shift),
                                     signal.volatility_adjustment,
                                     signal.confidence);
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED
+        // Track pairwise divergence between bias, vol, and confidence streams.
+        sentiment_divergence.record("bias",       signal.delta_bias_shift);
+        sentiment_divergence.record("vol",        signal.volatility_adjustment);
+        sentiment_divergence.record("confidence", signal.confidence);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3817,6 +3880,32 @@ int main(int argc, char* argv[]) {
               << "  coherent=" << (sentiment_dispersion.is_coherent() ? "YES" : "no")
               << "  events=" << sentiment_dispersion.high_dispersion_events() << "\n";
 #endif
+#ifdef LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED
+    std::cout << "  Sent divergence  : "
+              << "diverge=" << std::fixed << std::setprecision(4) << sentiment_divergence.divergence()
+              << "  active=" << (sentiment_divergence.is_diverged() ? "YES" : "no")
+              << "  events=" << sentiment_divergence.divergence_events()
+              << "  sources=" << sentiment_divergence.source_count() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+    {
+        std::cout << "  Token influence  : "
+                  << "n=" << token_influence.total_recorded()
+                  << "  window=" << token_influence.window_size();
+        auto top = token_influence.attribute();
+        if (!top.empty()) {
+            std::cout << "  top=" << top[0].token
+                      << "(inf=" << std::showpos << std::fixed << std::setprecision(4)
+                      << top[0].influence << std::noshowpos << ")";
+        }
+        std::cout << "\n";
+    }
+#endif
+#ifdef LLMQUANT_WALK_FORWARD_ENABLED
+    std::cout << "  Walk-forward     : "
+              << "folds=" << walk_forward.num_folds()
+              << "  (tokens not loaded in live mode — offline use only)\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -3969,6 +4058,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
         std::cout << "  [json:dispersion] " << sentiment_dispersion.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED
+        std::cout << "  [json:divergence] " << sentiment_divergence.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
+        std::cout << "  [json:influence]  " << token_influence.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
