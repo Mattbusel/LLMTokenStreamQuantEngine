@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#ifdef LLMQUANT_CONTEXT_BUDGET_ENABLED
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
 
 #include "ContextWindowBudget.h"
 
@@ -242,4 +242,4 @@ TEST(ContextWindowBudget, DisabledAtBuildTime) {
     SUCCEED();
 }
 
-#endif  // LLMQUANT_CONTEXT_BUDGET_ENABLED
+#endif  // LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED

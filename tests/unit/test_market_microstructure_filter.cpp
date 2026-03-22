@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#ifdef LLMQUANT_MICROSTRUCTURE_FILTER_ENABLED
+#ifdef LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
 
 #include "MarketMicrostructureFilter.h"
 
@@ -208,4 +208,4 @@ TEST(MarketMicrostructureFilter, DisabledAtBuildTime) {
     SUCCEED();
 }
 
-#endif  // LLMQUANT_MICROSTRUCTURE_FILTER_ENABLED
+#endif  // LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
