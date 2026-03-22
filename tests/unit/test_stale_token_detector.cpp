@@ -1,5 +1,8 @@
-#include "StaleTokenDetector.h"
 #include <gtest/gtest.h>
+
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+
+#include "StaleTokenDetector.h"
 
 #include <atomic>
 #include <chrono>
@@ -154,3 +157,11 @@ TEST(StaleTokenDetector, MultipleRecordTokensKeepFresh) {
 }
 
 } // namespace
+
+#else  // LLMQUANT_STALE_DETECTOR_ENABLED not defined
+
+TEST(StaleTokenDetector, DisabledAtBuildTime) {
+    SUCCEED();
+}
+
+#endif  // LLMQUANT_STALE_DETECTOR_ENABLED

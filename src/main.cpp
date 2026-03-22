@@ -969,6 +969,10 @@ int main(int argc, char* argv[]) {
 
         logger.log_token_received(text, seq_id);
 
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+        stale_detector.record_token();
+#endif
+
         auto weight = llm_adapter.map_token_to_weight(text);
 
 #ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
@@ -1080,17 +1084,7 @@ int main(int argc, char* argv[]) {
     llmquant::RegimeDetector regime_detector;
 #endif
 
-#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
-    // Stale token watchdog: fires an alert when the LLM stream goes silent.
-    llmquant::StaleTokenDetector stale_detector;
-    stale_detector.set_stale_callback([](int64_t gap_ms) {
-        spdlog::warn("[stale_detector] LLM token stream silent for {}ms — check upstream",
-                     gap_ms);
-    });
-    stale_detector.set_recovery_callback([]() {
-        spdlog::info("[stale_detector] LLM token stream recovered");
-    });
-#endif
+// stale_detector already declared above (before the process_token lambda).
 
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
@@ -1133,6 +1127,12 @@ int main(int argc, char* argv[]) {
         if (passed && circuit_breaker.is_open()) {
             passed = false;
         }
+#endif
+
+#ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
+        regime_detector.update(signal.delta_bias_shift,
+                               signal.volatility_adjustment,
+                               !passed);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -1480,6 +1480,10 @@ int main(int argc, char* argv[]) {
         const char* press_colour =
             (pressure.composite < 0.5) ? C("\033[32m") :
             (pressure.composite < 0.8) ? C("\033[33m") : C("\033[31m");
+
+#ifdef LLMQUANT_STALE_DETECTOR_ENABLED
+        stale_detector.check();
+#endif
 
         // Use the LLMAdapter's own token counter for the stats bar — variance_n
         // is reset every 60 seconds (Welford reset) and would undercount after
@@ -2190,6 +2194,12 @@ int main(int argc, char* argv[]) {
     std::cout << "  Stream stale evts: " << stale_detector.stale_events()
               << "  recoveries=" << stale_detector.recovery_events()
               << "  ms_since_last=" << stale_detector.ms_since_last_token() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_DETECTOR_ENABLED
+    std::cout << "  Market regime    : " << regime_detector.current_regime_name()
+              << "  transitions=" << regime_detector.total_transitions()
+              << "  momentum=" << std::fixed << std::setprecision(3)
+              << regime_detector.get_momentum() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
