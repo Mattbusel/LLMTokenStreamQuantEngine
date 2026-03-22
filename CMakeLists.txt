@@ -119,6 +119,9 @@ option(LLMQUANT_ENABLE_SHADOW_PORTFOLIO             "Build SignalShadowPortfolio
 option(LLMQUANT_ENABLE_TOKEN_IB                     "Build TokenInformationBottleneck: per-token IB relevance/complexity scoring for online vocabulary pruning" ON)
 option(LLMQUANT_ENABLE_CONFIDENCE_BAND              "Build LLMConfidenceBandTracker: Kalman-filter confidence bands around sentiment EMA for uncertainty-aware signal gating" ON)
 option(LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER        "Build TokenImportanceDecayScheduler: exponential token weight decay by token age and recency, for temporal relevance weighting" ON)
+option(LLMQUANT_ENABLE_REGIME_ROUTER                "Build RegimeSwitchingSignalRouter: 3-state FSM (trending/ranging/crash) that routes signals to per-regime configurations" ON)
+option(LLMQUANT_ENABLE_STREAM_DIFFERENCER           "Build TokenStreamDifferencer: computes velocity, acceleration, and jerk of the token weight series for early reversal detection" ON)
+option(LLMQUANT_ENABLE_SIGNAL_DRIFT                 "Build SignalDriftMonitor: Wasserstein-1 drift detector comparing recent vs baseline bias-shift distributions" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1131,6 +1134,33 @@ if(LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER)
     message(STATUS "Feature: TokenImportanceDecayScheduler ENABLED (temporal weight decay)")
 else()
     message(STATUS "Feature: TokenImportanceDecayScheduler DISABLED (LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER=OFF)")
+endif()
+
+# RegimeSwitchingSignalRouter: 3-state FSM signal router per market regime.
+if(LLMQUANT_ENABLE_REGIME_ROUTER)
+    target_sources(llmquant PRIVATE src/RegimeSwitchingSignalRouter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_ROUTER_ENABLED)
+    message(STATUS "Feature: RegimeSwitchingSignalRouter ENABLED (trending/ranging/crash signal routing)")
+else()
+    message(STATUS "Feature: RegimeSwitchingSignalRouter DISABLED (LLMQUANT_ENABLE_REGIME_ROUTER=OFF)")
+endif()
+
+# TokenStreamDifferencer: velocity/acceleration/jerk of token weight series.
+if(LLMQUANT_ENABLE_STREAM_DIFFERENCER)
+    target_sources(llmquant PRIVATE src/TokenStreamDifferencer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAM_DIFFERENCER_ENABLED)
+    message(STATUS "Feature: TokenStreamDifferencer ENABLED (jerk-based reversal detection)")
+else()
+    message(STATUS "Feature: TokenStreamDifferencer DISABLED (LLMQUANT_ENABLE_STREAM_DIFFERENCER=OFF)")
+endif()
+
+# SignalDriftMonitor: Wasserstein-1 distribution-drift detection.
+if(LLMQUANT_ENABLE_SIGNAL_DRIFT)
+    target_sources(llmquant PRIVATE src/SignalDriftMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_DRIFT_ENABLED)
+    message(STATUS "Feature: SignalDriftMonitor ENABLED (W1 distribution drift)")
+else()
+    message(STATUS "Feature: SignalDriftMonitor DISABLED (LLMQUANT_ENABLE_SIGNAL_DRIFT=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

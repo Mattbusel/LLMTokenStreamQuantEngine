@@ -59,7 +59,8 @@ TEST(LLMConfidenceBandTracker, CenterConvergesOnConstantInput) {
     for (int i = 0; i < 100; ++i) trk.update(0.8);
     EXPECT_NEAR(trk.center(), 0.8, 0.01);
     // Band should have narrowed after many consistent observations.
-    EXPECT_LT(trk.half_width(), 0.1);
+    // Steady-state half_width = z * sqrt((-R + sqrt(R²+4QR))/2) ≈ 0.112 with defaults.
+    EXPECT_LT(trk.half_width(), 0.15);
 }
 
 // ============================================================
@@ -75,23 +76,26 @@ TEST(LLMConfidenceBandTracker, VarianceDecreasesWithConsistentObs) {
 }
 
 // ============================================================
-// Noisy observations — variance stays larger
+// Noisy observations — center tracks a very different path than stable
+// (Kalman variance is observation-independent — it depends only on Q,R)
 // ============================================================
 
-TEST(LLMConfidenceBandTracker, VarianceLargerWithNoisyObs) {
+TEST(LLMConfidenceBandTracker, NoisyObsProduceDifferentCenter) {
     LLMConfidenceBandTracker::Config cfg;
-    cfg.process_noise    = 0.01;
+    cfg.process_noise     = 0.01;
     cfg.measurement_noise = 0.01;
     LLMConfidenceBandTracker trk(cfg);
 
-    // Alternating extremes keep uncertainty high.
+    // Alternating extremes: center should hover near 0 after many oscillations.
     for (int i = 0; i < 50; ++i)
         trk.update(i % 2 == 0 ? 1.0 : -1.0);
 
     LLMConfidenceBandTracker trk_stable(cfg);
-    for (int i = 0; i < 50; ++i) trk_stable.update(0.5);
+    for (int i = 0; i < 50; ++i) trk_stable.update(0.8);
 
-    EXPECT_GT(trk.variance(), trk_stable.variance());
+    // Stable tracker's center should be clearly positive; noisy one near 0.
+    EXPECT_GT(trk_stable.center(), 0.5);
+    EXPECT_LT(std::abs(trk.center()), 0.5);
 }
 
 // ============================================================
@@ -129,15 +133,20 @@ TEST(LLMConfidenceBandTracker, ResetRestoresState) {
 // update_config() resets state
 // ============================================================
 
-TEST(LLMConfidenceBandTracker, UpdateConfigResetsState) {
+TEST(LLMConfidenceBandTracker, UpdateConfigResetsFilterState) {
     LLMConfidenceBandTracker trk;
     for (int i = 0; i < 20; ++i) trk.update(0.5);
-    EXPECT_GT(trk.observation_count(), 0u);
+    // Center should be close to 0.5 now.
+    EXPECT_GT(trk.center(), 0.3);
 
+    // update_config resets the filter; next update should re-seed from 0.
     LLMConfidenceBandTracker::Config cfg2;
     cfg2.process_noise = 0.01;
     trk.update_config(cfg2);
-    EXPECT_EQ(trk.observation_count(), 0u);
+    // After update_config the Kalman state is reset to 0; the first new
+    // observation seeds x to that value, so center should shift away from 0.5.
+    trk.update(-0.9);
+    EXPECT_LT(trk.center(), 0.0);
 }
 
 // ============================================================

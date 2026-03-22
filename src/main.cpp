@@ -246,6 +246,15 @@
 #ifdef LLMQUANT_TOKEN_DECAY_SCHEDULER_ENABLED
 #  include "TokenImportanceDecayScheduler.h"
 #endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+#  include "SignalDriftMonitor.h"
+#endif
+#ifdef LLMQUANT_REGIME_ROUTER_ENABLED
+#  include "RegimeSwitchingSignalRouter.h"
+#endif
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+#  include "TokenStreamDifferencer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1958,6 +1967,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+    // SignalDriftMonitor: Wasserstein-1 drift detector — fires when the recent
+    // bias-shift distribution diverges significantly from the baseline window.
+    llmquant::SignalDriftMonitor signal_drift;
+    {
+        llmquant::SignalDriftMonitor::Config sd_cfg;
+        sd_cfg.baseline_size   = 128;
+        sd_cfg.recent_size     = 32;
+        sd_cfg.drift_threshold = 0.08;
+        sd_cfg.on_drift_detected = [](double w1) {
+            spdlog::warn("[drift] W1={:.4f} — signal distribution has shifted", w1);
+        };
+        sd_cfg.on_drift_cleared = [](double w1) {
+            spdlog::info("[drift] W1={:.4f} — distribution stabilised", w1);
+        };
+        signal_drift.update_config(sd_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
     // SignalConfidenceInterval: jackknife CI on rolling signal window; narrow
     // CI = high-confidence environment, wide CI = noisy / uncertain signals.
@@ -2156,6 +2184,70 @@ int main(int argc, char* argv[]) {
             spdlog::warn("[decay_sched] sentiment sign flip {:.4f} → {:.4f}", old_s, new_s);
         };
         decay_scheduler.update_config(tds_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REGIME_ROUTER_ENABLED
+    // RegimeSwitchingSignalRouter: 3-state FSM (Trending/Ranging/Crash) that
+    // routes signals to per-regime configs.  Trending → amplified signals;
+    // Ranging → dampened; Crash → minimal position with tight cooldown.
+    llmquant::RegimeSwitchingSignalRouter regime_router;
+    {
+        llmquant::RegimeSwitchingSignalRouter::Config rr_cfg;
+        rr_cfg.trend_threshold     = 0.05;
+        rr_cfg.crash_vol_threshold = 0.10;
+        rr_cfg.hysteresis          = 0.15;
+        rr_cfg.vol_alpha           = 0.20;
+        rr_cfg.momentum_alpha      = 0.15;
+        rr_cfg.trending_cfg  = {1.30, 1.00, 400};
+        rr_cfg.ranging_cfg   = {0.70, 0.60, 800};
+        rr_cfg.crash_cfg     = {0.20, 0.15, 2000};
+        rr_cfg.on_regime_change = [](llmquant::RegimeSwitchingSignalRouter::Regime old_r,
+                                     llmquant::RegimeSwitchingSignalRouter::Regime new_r,
+                                     double mult) {
+            static const char* names[] = {"Trending", "Ranging", "Crash"};
+            spdlog::warn("[regime_router] {} → {}  bias_mult={:.2f}",
+                         names[static_cast<int>(old_r)],
+                         names[static_cast<int>(new_r)], mult);
+        };
+        regime_router.update_config(rr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
+    // TokenStreamDifferencer: tracks velocity, acceleration, and jerk of the
+    // token weight series.  Jerk spike = abrupt narrative reversal — fires
+    // one derivative earlier than a momentum peak.
+    llmquant::TokenStreamDifferencer stream_differencer;
+    {
+        llmquant::TokenStreamDifferencer::Config sd_cfg;
+        sd_cfg.ema_alpha       = 0.20;
+        sd_cfg.jerk_threshold  = 0.10;
+        sd_cfg.hysteresis      = 0.30;
+        sd_cfg.on_jerk_spike = [](double raw_jerk, double ema_jerk) {
+            spdlog::warn("[differencer] JERK SPIKE raw={:.4f} ema={:.4f}", raw_jerk, ema_jerk);
+        };
+        stream_differencer.update_config(sd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+    // SignalDriftMonitor: Wasserstein-1 drift detector comparing recent vs
+    // baseline bias-shift distributions.  W1 > threshold → regime shift.
+    llmquant::SignalDriftMonitor signal_drift_monitor;
+    {
+        llmquant::SignalDriftMonitor::Config sdm_cfg;
+        sdm_cfg.baseline_size    = 128;
+        sdm_cfg.recent_size      = 32;
+        sdm_cfg.drift_threshold  = 0.10;
+        sdm_cfg.clear_hysteresis = 0.70;
+        sdm_cfg.on_drift_detected = [](double w1) {
+            spdlog::warn("[drift_monitor] DISTRIBUTION DRIFT W1={:.4f}", w1);
+        };
+        sdm_cfg.on_drift_cleared = [](double w1) {
+            spdlog::info("[drift_monitor] drift cleared W1={:.4f}", w1);
+        };
+        signal_drift_monitor.update_config(sdm_cfg);
     }
 #endif
 
@@ -2642,6 +2734,11 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         // Feed each signal's bias shift into the Markov state chain.
         sentiment_persistence.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+        // Track distribution drift between baseline and recent bias-shift windows.
+        signal_drift.record(signal.delta_bias_shift);
 #endif
 
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
@@ -4306,6 +4403,13 @@ int main(int argc, char* argv[]) {
               << "  flagged=" << token_ib.flagged_count()
               << "  records=" << token_ib.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+    std::cout << "  Signal drift     : "
+              << "W1=" << std::fixed << std::setprecision(5) << signal_drift.last_w1()
+              << "  drifting=" << (signal_drift.is_drifting() ? "YES" : "no")
+              << "  events=" << signal_drift.drift_events()
+              << "  records=" << signal_drift.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
     std::cout << "  Markov chain     : "
               << "state=" << sentiment_persistence.current_state()
@@ -4557,6 +4661,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_TOKEN_IB_ENABLED
         std::cout << "  [json:token_ib]   " << token_ib.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
+        std::cout << "  [json:drift]      " << signal_drift.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         std::cout << "  [json:markov]     " << sentiment_persistence.to_stats_json() << "\n";
