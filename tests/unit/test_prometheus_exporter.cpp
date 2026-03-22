@@ -284,6 +284,41 @@ TEST(PrometheusExporterTest, test_format_info_empty_labels_produces_empty_braces
         << "format_info with no labels must produce empty label set {}";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 35: label value escaping in format_info
+// ---------------------------------------------------------------------------
+
+TEST(PrometheusExporterTest, test_format_info_escapes_double_quote_in_label_value) {
+    // A label value containing '"' must be escaped to '\"' per Prometheus text
+    // format spec — otherwise the output is unparseable.
+    std::map<std::string, std::string> labels = {{"desc", "say \"hello\""}};
+    auto result = PrometheusExporter::format_info("llmquant_info", labels);
+    // The raw double-quote must NOT appear unescaped inside the label set.
+    EXPECT_EQ(result.find("say \"hello\""), std::string::npos)
+        << "unescaped double-quote must not appear in label value";
+    // The escaped form must be present.
+    EXPECT_NE(result.find("say \\\"hello\\\""), std::string::npos)
+        << "escaped double-quote must appear in label value";
+}
+
+TEST(PrometheusExporterTest, test_format_info_escapes_backslash_in_label_value) {
+    std::map<std::string, std::string> labels = {{"path", "C:\\Users\\foo"}};
+    auto result = PrometheusExporter::format_info("llmquant_info", labels);
+    // Each backslash must be doubled.
+    EXPECT_NE(result.find("C:\\\\Users\\\\foo"), std::string::npos)
+        << "backslashes in label values must be doubled";
+}
+
+TEST(PrometheusExporterTest, test_format_info_escapes_newline_in_label_value) {
+    std::map<std::string, std::string> labels = {{"multi", "line1\nline2"}};
+    auto result = PrometheusExporter::format_info("llmquant_info", labels);
+    // A raw newline in a label value would break the line-oriented format.
+    EXPECT_EQ(result.find("line1\nline2"), std::string::npos)
+        << "raw newline must not appear in label value";
+    EXPECT_NE(result.find("line1\\nline2"), std::string::npos)
+        << "newline must be escaped as \\n in label value";
+}
+
 TEST(PrometheusExporterTest, test_scrape_count_zero_before_start) {
     PrometheusExporter::Config cfg;
     cfg.port = 19901;

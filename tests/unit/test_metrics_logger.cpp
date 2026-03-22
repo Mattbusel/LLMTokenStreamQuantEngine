@@ -528,3 +528,70 @@ TEST(MetricsLoggerTest, test_log_risk_rejection_csv_reason_in_token_column) {
         << "Rejection reason must be in the token column (index 2)";
     std::remove(path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 35: JSON string escaping — token/key/reason/path must be escaped
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_json_token_with_double_quote_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_token_escape.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        // Token with embedded double-quote — without escaping this would break JSON.
+        logger.log_token_received("say \"hi\"", 1);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    // The escaped form must appear; a raw unescaped '"' between "token":"..."
+    // would make the JSON unparseable.
+    EXPECT_NE(content.find("say \\\"hi\\\""), std::string::npos)
+        << "double-quote in token must be escaped as \\\" in JSON output";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_json_token_with_backslash_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_token_bs.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_token_received("C:\\foo", 1);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("C:\\\\foo"), std::string::npos)
+        << "backslash in token must be doubled in JSON output";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_json_dedup_key_with_quote_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_dedup_escape.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_dedup_event("key\"val", false);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("key\\\"val"), std::string::npos)
+        << "double-quote in dedup key must be escaped in JSON output";
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_json_config_reload_path_with_backslash_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_reload_escape.log";
+    {
+        MetricsLogger logger(make_json_config(path));
+        logger.log_config_reload("C:\\config\\llmquant.yaml", true);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_NE(content.find("C:\\\\config\\\\llmquant.yaml"), std::string::npos)
+        << "backslash in config reload path must be doubled in JSON output";
+    std::remove(path.c_str());
+}
