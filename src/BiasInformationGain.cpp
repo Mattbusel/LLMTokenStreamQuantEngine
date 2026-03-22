@@ -157,6 +157,10 @@ void BiasInformationGain::update_config(const Config& cfg) {
     seeded_    = false;
     prev_bin_  = -1;
     prev_nmi_  = -1.0;
+    mi_.store(0.0,            std::memory_order_relaxed);
+    nmi_.store(0.0,           std::memory_order_relaxed);
+    change_events_.store(0,   std::memory_order_relaxed);
+    total_.store(0,           std::memory_order_relaxed);
 }
 
 } // namespace llmquant

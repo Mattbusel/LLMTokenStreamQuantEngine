@@ -92,9 +92,12 @@ void NarrativeDriftDetector::update_config(const Config& cfg) {
     cfg_ = cfg;
     U_ = D_ = sum_ = 0.0;
     n_ = 0;
-    up_.store(0.0, std::memory_order_relaxed);
-    dn_.store(0.0, std::memory_order_relaxed);
-    mean_.store(0.0, std::memory_order_relaxed);
+    up_.store(0.0,        std::memory_order_relaxed);
+    dn_.store(0.0,        std::memory_order_relaxed);
+    mean_.store(0.0,      std::memory_order_relaxed);
+    up_alarms_.store(0,   std::memory_order_relaxed);
+    dn_alarms_.store(0,   std::memory_order_relaxed);
+    total_.store(0,       std::memory_order_relaxed);
 }
 
 } // namespace llmquant

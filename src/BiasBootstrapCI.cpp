@@ -129,6 +129,11 @@ void BiasBootstrapCI::update_config(const Config& cfg) {
     win_buf_.assign(static_cast<std::size_t>(w), 0.0);
     win_head_ = win_fill_ = 0;
     rng_.seed(42);
+    lo_.store(0.0,          std::memory_order_relaxed);
+    hi_.store(0.0,          std::memory_order_relaxed);
+    mean_.store(0.0,        std::memory_order_relaxed);
+    wide_events_.store(0,   std::memory_order_relaxed);
+    total_.store(0,         std::memory_order_relaxed);
 }
 
 } // namespace llmquant

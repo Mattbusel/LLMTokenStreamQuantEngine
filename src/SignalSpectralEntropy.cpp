@@ -124,6 +124,11 @@ void SignalSpectralEntropy::update_config(const Config& cfg) {
     win_buf_.assign(static_cast<std::size_t>(w), 0.0);
     win_head_ = win_fill_ = 0;
     prev_hs_  = -1.0;
+    hs_.store(0.0,          std::memory_order_relaxed);
+    hs_norm_.store(0.0,     std::memory_order_relaxed);
+    change_events_.store(0, std::memory_order_relaxed);
+    total_.store(0,         std::memory_order_relaxed);
 }
+
 
 } // namespace llmquant

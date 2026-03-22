@@ -74,7 +74,7 @@ public:
 
     /// Kalman-smoothed state estimate x̂_t.
     [[nodiscard]] double filtered_bias() const noexcept {
-        return x_hat_.load(std::memory_order_relaxed);
+        return x_hat_a_.load(std::memory_order_relaxed);
     }
 
     /// Innovation ν_t = z_t − x̂_{t|t-1}.

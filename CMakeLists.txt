@@ -1701,6 +1701,86 @@ else()
     message(STATUS "Feature: BiasBootstrapCI DISABLED (LLMQUANT_ENABLE_BOOTSTRAP_CI=OFF)")
 endif()
 
+# WaveletSignalDecomposer: multi-resolution Haar wavelet decomposition of sentiment stream.
+option(LLMQUANT_ENABLE_WAVELET_DECOMPOSER "Build WaveletSignalDecomposer: multi-resolution Haar DWT separates sentiment into J frequency bands; fires on_high_freq_spike when detail energy exceeds threshold" ON)
+if(LLMQUANT_ENABLE_WAVELET_DECOMPOSER)
+    target_sources(llmquant PRIVATE src/WaveletSignalDecomposer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_WAVELET_DECOMPOSER_ENABLED)
+    message(STATUS "Feature: WaveletSignalDecomposer ENABLED (Haar DWT, multi-level detail energy, spike callbacks)")
+else()
+    message(STATUS "Feature: WaveletSignalDecomposer DISABLED (LLMQUANT_ENABLE_WAVELET_DECOMPOSER=OFF)")
+endif()
+
+# ReinforcementSignalWeighter: UCB1 bandit for adaptive signal component weighting.
+option(LLMQUANT_ENABLE_RL_SIGNAL_WEIGHTER "Build ReinforcementSignalWeighter: UCB1 multi-armed bandit dynamically weights N signal arms by realised reward; fires on_dominant_arm_change" ON)
+if(LLMQUANT_ENABLE_RL_SIGNAL_WEIGHTER)
+    target_sources(llmquant PRIVATE src/ReinforcementSignalWeighter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED)
+    message(STATUS "Feature: ReinforcementSignalWeighter ENABLED (UCB1 bandit, softmax weights, dominant arm tracking)")
+else()
+    message(STATUS "Feature: ReinforcementSignalWeighter DISABLED (LLMQUANT_ENABLE_RL_SIGNAL_WEIGHTER=OFF)")
+endif()
+
+# SignalConvexityMeter: second-derivative regime classifier (momentum vs mean-reversion).
+option(LLMQUANT_ENABLE_SIGNAL_CONVEXITY "Build SignalConvexityMeter: tracks d2 of signal stream; classifies ACCELERATING/DECELERATING/STABLE regime; fires transition callbacks" ON)
+if(LLMQUANT_ENABLE_SIGNAL_CONVEXITY)
+    target_sources(llmquant PRIVATE src/SignalConvexityMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_CONVEXITY_ENABLED)
+    message(STATUS "Feature: SignalConvexityMeter ENABLED (d1/d2 EMA, regime classification, transition callbacks)")
+else()
+    message(STATUS "Feature: SignalConvexityMeter DISABLED (LLMQUANT_ENABLE_SIGNAL_CONVEXITY=OFF)")
+endif()
+
+# BiasGarchEstimator: GARCH(1,1) conditional variance estimator for bias stream clustering.
+option(LLMQUANT_ENABLE_GARCH_ESTIMATOR "Build BiasGarchEstimator: GARCH(1,1) conditional vol; fires on_vol_spike when vol jumps by vol_spike_ratio" ON)
+if(LLMQUANT_ENABLE_GARCH_ESTIMATOR)
+    target_sources(llmquant PRIVATE src/BiasGarchEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_GARCH_ESTIMATOR_ENABLED)
+    message(STATUS "Feature: BiasGarchEstimator ENABLED (GARCH(1,1), conditional vol, persistence = α+β)")
+else()
+    message(STATUS "Feature: BiasGarchEstimator DISABLED (LLMQUANT_ENABLE_GARCH_ESTIMATOR=OFF)")
+endif()
+
+# SignalRegimeHMM: two-state HMM for online bullish/bearish regime classification.
+option(LLMQUANT_ENABLE_REGIME_HMM "Build SignalRegimeHMM: forward-algorithm two-state HMM; fires on_regime_change when hard state flips" ON)
+if(LLMQUANT_ENABLE_REGIME_HMM)
+    target_sources(llmquant PRIVATE src/SignalRegimeHMM.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_HMM_ENABLED)
+    message(STATUS "Feature: SignalRegimeHMM ENABLED (2-state HMM, P(bullish), on_regime_change)")
+else()
+    message(STATUS "Feature: SignalRegimeHMM DISABLED (LLMQUANT_ENABLE_REGIME_HMM=OFF)")
+endif()
+
+# NarrativePolarityIndex: EMA bull/bear pressure composite NPI score in (−1, +1).
+option(LLMQUANT_ENABLE_POLARITY_INDEX "Build NarrativePolarityIndex: bull_ema vs bear_ema ratio → NPI; fires on_polarity_flip and on_extreme" ON)
+if(LLMQUANT_ENABLE_POLARITY_INDEX)
+    target_sources(llmquant PRIVATE src/NarrativePolarityIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POLARITY_INDEX_ENABLED)
+    message(STATUS "Feature: NarrativePolarityIndex ENABLED (NPI, polarity flip, extreme event)")
+else()
+    message(STATUS "Feature: NarrativePolarityIndex DISABLED (LLMQUANT_ENABLE_POLARITY_INDEX=OFF)")
+endif()
+
+# SignalResidualAnalyser: AR(1) residual Durbin-Watson autocorrelation diagnostics.
+option(LLMQUANT_ENABLE_RESIDUAL_ANALYSER "Build SignalResidualAnalyser: EMA-based AR(1) residuals + Durbin-Watson DW statistic; fires on_residual_autocorr when DW leaves [lo, hi]" ON)
+if(LLMQUANT_ENABLE_RESIDUAL_ANALYSER)
+    target_sources(llmquant PRIVATE src/SignalResidualAnalyser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_RESIDUAL_ANALYSER_ENABLED)
+    message(STATUS "Feature: SignalResidualAnalyser ENABLED (AR(1) residuals, Durbin-Watson, autocorr alarms)")
+else()
+    message(STATUS "Feature: SignalResidualAnalyser DISABLED (LLMQUANT_ENABLE_RESIDUAL_ANALYSER=OFF)")
+endif()
+
+# TokenSaliencyRanker: per-token SNR saliency = mean_contribution / std_contribution.
+option(LLMQUANT_ENABLE_SALIENCY_RANKER "Build TokenSaliencyRanker: EMA SNR-based token saliency ranking; tracks top-K bullish/bearish tokens; fires on_top_token_change" ON)
+if(LLMQUANT_ENABLE_SALIENCY_RANKER)
+    target_sources(llmquant PRIVATE src/TokenSaliencyRanker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SALIENCY_RANKER_ENABLED)
+    message(STATUS "Feature: TokenSaliencyRanker ENABLED (per-token saliency SNR, top-K bull/bear, on_top_token_change)")
+else()
+    message(STATUS "Feature: TokenSaliencyRanker DISABLED (LLMQUANT_ENABLE_SALIENCY_RANKER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

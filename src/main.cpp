@@ -417,6 +417,30 @@
 #ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
 #  include "BiasBootstrapCI.h"
 #endif
+#ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
+#  include "WaveletSignalDecomposer.h"
+#endif
+#ifdef LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED
+#  include "ReinforcementSignalWeighter.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
+#  include "SignalConvexityMeter.h"
+#endif
+#ifdef LLMQUANT_GARCH_ESTIMATOR_ENABLED
+#  include "BiasGarchEstimator.h"
+#endif
+#ifdef LLMQUANT_REGIME_HMM_ENABLED
+#  include "SignalRegimeHMM.h"
+#endif
+#ifdef LLMQUANT_POLARITY_INDEX_ENABLED
+#  include "NarrativePolarityIndex.h"
+#endif
+#ifdef LLMQUANT_RESIDUAL_ANALYSER_ENABLED
+#  include "SignalResidualAnalyser.h"
+#endif
+#ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
+#  include "TokenSaliencyRanker.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3090,6 +3114,145 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_GARCH_ESTIMATOR_ENABLED
+    // BiasGarchEstimator: GARCH(1,1) conditional volatility for bias stream.
+    // Captures vol clustering; fires on_vol_spike when σ_t jumps by vol_spike_ratio.
+    llmquant::BiasGarchEstimator garch_est;
+    {
+        llmquant::BiasGarchEstimator::Config ge_cfg;
+        ge_cfg.alpha          = 0.10;
+        ge_cfg.beta           = 0.85;
+        ge_cfg.sigma2_init    = 0.01;
+        ge_cfg.vol_spike_ratio = 1.5;
+        ge_cfg.on_vol_spike = [](double sigma) {
+            spdlog::warn("[garch] vol spike σ={:.4f} — volatility clustering event", sigma);
+        };
+        garch_est.update_config(ge_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REGIME_HMM_ENABLED
+    // SignalRegimeHMM: 2-state HMM online forward-algorithm regime classifier.
+    // Produces soft P(bullish) probability; fires on_regime_change on hard state flip.
+    llmquant::SignalRegimeHMM regime_hmm;
+    {
+        llmquant::SignalRegimeHMM::Config rh_cfg;
+        rh_cfg.state_mean     = {-0.05, 0.05};
+        rh_cfg.state_std      = {0.12,  0.12};
+        rh_cfg.bullish_threshold = 0.60;
+        rh_cfg.on_regime_change = [](int from, int to) {
+            spdlog::info("[hmm] regime: {} → {} (0=bear,1=bull)", from, to);
+        };
+        regime_hmm.update_config(rh_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_POLARITY_INDEX_ENABLED
+    // NarrativePolarityIndex: EMA bull/bear pressure → NPI ∈ (−1,+1).
+    // +1 = purely bullish; −1 = purely bearish; fires on flip and extreme events.
+    llmquant::NarrativePolarityIndex polarity_idx;
+    {
+        llmquant::NarrativePolarityIndex::Config pi_cfg;
+        pi_cfg.alpha              = 0.05;
+        pi_cfg.extreme_threshold  = 0.7;
+        pi_cfg.on_polarity_flip = [](double old_npi, double new_npi) {
+            spdlog::info("[polarity] NPI flip {:.3f} → {:.3f}", old_npi, new_npi);
+        };
+        pi_cfg.on_extreme = [](double npi) {
+            spdlog::warn("[polarity] EXTREME NPI={:.3f}", npi);
+        };
+        polarity_idx.update_config(pi_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_RESIDUAL_ANALYSER_ENABLED
+    // SignalResidualAnalyser: AR(1) residuals + Durbin-Watson DW statistic.
+    // DW ≈ 2 → well-specified; DW near 0 or 4 → residual autocorrelation.
+    llmquant::SignalResidualAnalyser residual_analyser;
+    {
+        llmquant::SignalResidualAnalyser::Config ra_cfg;
+        ra_cfg.ar_alpha    = 0.10;
+        ra_cfg.window      = 50;
+        ra_cfg.dw_lo       = 1.5;
+        ra_cfg.dw_hi       = 2.5;
+        ra_cfg.on_residual_autocorr = [](double dw) {
+            spdlog::warn("[residual] DW={:.3f} outside [1.5,2.5] — AR residual structure", dw);
+        };
+        residual_analyser.update_config(ra_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
+    // TokenSaliencyRanker: per-token SNR saliency score — bullish/bearish top-K.
+    // Ranks tokens by mean_contribution / std_contribution (signal-to-noise ratio).
+    llmquant::TokenSaliencyRanker saliency_ranker;
+    {
+        llmquant::TokenSaliencyRanker::Config sr_cfg;
+        sr_cfg.ema_alpha        = 0.10;
+        sr_cfg.min_token_count  = 3;
+        sr_cfg.on_top_token_change = [](int tok_id, double sal) {
+            spdlog::info("[saliency] new top token id={} saliency={:.3f}", tok_id, sal);
+        };
+        saliency_ranker.update_config(sr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
+    // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
+    // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
+    llmquant::WaveletSignalDecomposer wavelet_decomp;
+    {
+        llmquant::WaveletSignalDecomposer::Config wd_cfg;
+        wd_cfg.levels          = 4;
+        wd_cfg.window          = 64;
+        wd_cfg.spike_threshold = 0.02;
+        wd_cfg.on_high_freq_spike = [](int lvl, double energy) {
+            spdlog::warn("[wavelet] detail spike at level {} energy={:.4f}", lvl, energy);
+        };
+        wd_cfg.on_spike_clear = []() {
+            spdlog::info("[wavelet] detail energy back to normal");
+        };
+        wavelet_decomp.update_config(wd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED
+    // ReinforcementSignalWeighter: UCB1 bandit adaptively weights signal components.
+    // Arms: primary LLM output ("llm_primary") and technical indicators ("technical").
+    llmquant::ReinforcementSignalWeighter rl_weighter;
+    {
+        llmquant::ReinforcementSignalWeighter::Config rw_cfg;
+        rw_cfg.arms = {{"llm_primary", 1.0}, {"technical", 1.0}};
+        rw_cfg.exploration_c = 1.414;
+        rw_cfg.on_dominant_arm_change = [](const std::string& arm) {
+            spdlog::info("[rl_weighter] dominant arm → '{}'", arm);
+        };
+        rl_weighter.update_config(rw_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
+    // SignalConvexityMeter: tracks d2 of bias stream to classify acceleration regime.
+    llmquant::SignalConvexityMeter convexity_meter;
+    {
+        llmquant::SignalConvexityMeter::Config cm_cfg;
+        cm_cfg.alpha_d1         = 0.3;
+        cm_cfg.alpha_d2         = 0.15;
+        cm_cfg.convex_threshold = 0.005;
+        cm_cfg.min_samples      = 5;
+        cm_cfg.on_accelerating = [](double d2) {
+            spdlog::info("[convexity] ACCELERATING (d2={:.4f}) — momentum trade", d2);
+        };
+        cm_cfg.on_decelerating = [](double d2) {
+            spdlog::info("[convexity] DECELERATING (d2={:.4f}) — mean-reversion alert", d2);
+        };
+        cm_cfg.on_stabilized = []() {
+            spdlog::info("[convexity] regime STABLE — reduce directional exposure");
+        };
+        convexity_meter.update_config(cm_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     // TokenWeightHistogram: 20-bucket histogram of bias values [-1, 1].
     // Tracks mode bucket and entropy; fires on_distribution_shift on mode change.
@@ -4096,8 +4259,7 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_GRAPH_ENABLED
         {
-            int tok_id = static_cast<int>(
-                std::hash<std::string>{}(text) & 0xFFu); // modulo kMaxTokens=256
+            int tok_id = static_cast<int>(signal.timestamp_ns & 0xFFu); // modulo kMaxTokens=256
             sentiment_graph.record(tok_id, signal.delta_bias_shift);
         }
 #endif
@@ -4109,6 +4271,36 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
         bootstrap_ci.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_GARCH_ESTIMATOR_ENABLED
+        garch_est.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REGIME_HMM_ENABLED
+        regime_hmm.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_POLARITY_INDEX_ENABLED
+        polarity_idx.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_RESIDUAL_ANALYSER_ENABLED
+        residual_analyser.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
+        {
+            int tok_id = static_cast<int>(
+                std::hash<std::string>{}(text) % llmquant::TokenSaliencyRanker::kMaxTokens);
+            saliency_ranker.record(tok_id, signal.delta_bias_shift);
+        }
+#endif
+#ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
+        wavelet_decomp.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
+        convexity_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED
+        // Reward = |bias_shift| * confidence: larger, higher-confidence signals are better.
+        rl_weighter.update("llm_primary",
+            std::abs(signal.delta_bias_shift) * signal.confidence);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -6102,6 +6294,48 @@ int main(int argc, char* argv[]) {
               << "  wide_events=" << bootstrap_ci.wide_events()
               << "  obs=" << bootstrap_ci.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_GARCH_ESTIMATOR_ENABLED
+    std::cout << "  GARCH(1,1)       : "
+              << "σ=" << std::fixed << std::setprecision(4) << garch_est.conditional_vol()
+              << "  σ²=" << garch_est.conditional_var()
+              << "  persist=" << std::setprecision(3) << garch_est.persistence()
+              << "  spikes=" << garch_est.spike_events()
+              << "  obs=" << garch_est.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_HMM_ENABLED
+    std::cout << "  HMM Regime       : "
+              << "P(bull)=" << std::fixed << std::setprecision(3) << regime_hmm.p_bullish()
+              << "  state=" << regime_hmm.current_state()
+              << "  changes=" << regime_hmm.regime_changes()
+              << "  obs=" << regime_hmm.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_POLARITY_INDEX_ENABLED
+    std::cout << "  Polarity Index   : "
+              << "NPI=" << std::fixed << std::setprecision(4) << polarity_idx.npi()
+              << "  bull=" << polarity_idx.bull_ema()
+              << "  bear=" << polarity_idx.bear_ema()
+              << "  flips=" << polarity_idx.flip_events()
+              << "  extremes=" << polarity_idx.extreme_events()
+              << "  obs=" << polarity_idx.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_RESIDUAL_ANALYSER_ENABLED
+    std::cout << "  Residual (DW)    : "
+              << "DW=" << std::fixed << std::setprecision(3) << residual_analyser.durbin_watson()
+              << "  AR1=" << residual_analyser.ar1_coeff()
+              << "  last_ε=" << std::setprecision(4) << residual_analyser.last_residual()
+              << "  alarms=" << residual_analyser.alarm_events()
+              << "  obs=" << residual_analyser.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
+    {
+        auto top_b = saliency_ranker.top_bullish();
+        auto top_r = saliency_ranker.top_bearish();
+        std::cout << "  Saliency Ranker  : "
+                  << "top_bull=[" << top_b[0] << "," << top_b[1] << "," << top_b[2] << "]"
+                  << "  top_bear=[" << top_r[0] << "," << top_r[1] << "," << top_r[2] << "]"
+                  << "  obs=" << saliency_ranker.total_records() << "\n";
+    }
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
               << "mode=" << weight_histogram.mode_bucket()
@@ -6590,6 +6824,30 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_BOOTSTRAP_CI_ENABLED
         std::cout << "  [json:bootstrap]  " << bootstrap_ci.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_GARCH_ESTIMATOR_ENABLED
+        std::cout << "  [json:garch]      " << garch_est.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_REGIME_HMM_ENABLED
+        std::cout << "  [json:regime_hmm] " << regime_hmm.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_POLARITY_INDEX_ENABLED
+        std::cout << "  [json:polarity]   " << polarity_idx.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_RESIDUAL_ANALYSER_ENABLED
+        std::cout << "  [json:residual]   " << residual_analyser.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
+        std::cout << "  [json:saliency]   " << saliency_ranker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
+        std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED
+        std::cout << "  [json:rl_weighter] " << rl_weighter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
+        std::cout << "  [json:convexity]  " << convexity_meter.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

@@ -184,6 +184,7 @@ void TokenSentimentGraphBuilder::update_config(const Config& cfg) {
     std::fill(edge_count_.begin(), edge_count_.end(), 0);
     ring_head_ = ring_fill_ = 0;
     prev_token_ = -1;
+    total_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

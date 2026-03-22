@@ -2,6 +2,9 @@
 #include <thread>
 #include <vector>
 #include <cmath>
+#ifndef M_PI
+#  define M_PI 3.14159265358979323846
+#endif
 
 #ifdef LLMQUANT_SPECTRAL_ENTROPY_ENABLED
 #include "SignalSpectralEntropy.h"

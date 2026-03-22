@@ -107,6 +107,11 @@ void BiasKalmanFilter::update_config(const Config& cfg) {
     R_est_     = cfg_.R;
     innov_ema_ = 0.0;
     x_hat_a_.store(x_hat_, std::memory_order_relaxed);
+    innovation_.store(0.0,    std::memory_order_relaxed);
+    nis_.store(0.0,           std::memory_order_relaxed);
+    K_.store(0.0,             std::memory_order_relaxed);
+    mismatch_events_.store(0, std::memory_order_relaxed);
+    total_.store(0,           std::memory_order_relaxed);
 }
 
 } // namespace llmquant
