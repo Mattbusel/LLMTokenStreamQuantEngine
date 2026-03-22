@@ -122,7 +122,8 @@ jobs:
             -DLLMQUANT_ENABLE_STALE_DETECTOR=OFF \
             -DLLMQUANT_ENABLE_REGIME_DETECTOR=OFF \
             -DLLMQUANT_ENABLE_TOKEN_REPLAY=OFF \
-            -DLLMQUANT_ENABLE_PARAMETER_SWEEP=OFF
+            -DLLMQUANT_ENABLE_PARAMETER_SWEEP=OFF \
+            -DLLMQUANT_ENABLE_ALERT_DISPATCHER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -160,6 +161,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_REGIME_DETECTOR
           - flag: LLMQUANT_ENABLE_TOKEN_REPLAY
           - flag: LLMQUANT_ENABLE_PARAMETER_SWEEP
+          - flag: LLMQUANT_ENABLE_ALERT_DISPATCHER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

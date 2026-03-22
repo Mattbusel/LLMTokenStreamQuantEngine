@@ -70,7 +70,7 @@ void ParameterSweep::apply_axis_values(BacktestRunner::Config& cfg,
 
         if      (name == "spread_cost")         cfg.sim.spread_cost              = v;
         else if (name == "price_impact")        cfg.sim.price_impact_per_bias    = v;
-        else if (name == "signal_threshold")    cfg.engine.signal_threshold      = v;
+        else if (name == "signal_threshold")    cfg.engine.bias_sensitivity      = v;
         else if (name == "signal_decay_rate")   cfg.engine.signal_decay_rate     = v;
         else if (name == "min_bias_threshold")  cfg.engine.min_bias_threshold    = v;
         else if (name == "min_confidence")      cfg.risk.min_confidence          = v;

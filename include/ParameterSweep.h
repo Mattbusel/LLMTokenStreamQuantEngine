@@ -159,7 +159,7 @@ public:
      * Supported axis names:
      *   "spread_cost"        — SimParams::spread_cost
      *   "price_impact"       — SimParams::price_impact_per_bias
-     *   "signal_threshold"   — TradeSignalEngine::Config::signal_threshold
+     *   "signal_threshold"   — TradeSignalEngine::Config::bias_sensitivity
      *   "signal_decay_rate"  — TradeSignalEngine::Config::signal_decay_rate
      *   "min_bias_threshold" — TradeSignalEngine::Config::min_bias_threshold
      *   "min_confidence"     — RiskManager::Config::min_confidence

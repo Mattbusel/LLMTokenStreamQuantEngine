@@ -41,9 +41,11 @@ option(LLMQUANT_ENABLE_KELLY_SIZER       "Build KellyPositionSizer: Kelly Criter
 option(LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN "Build AdaptiveCooldownController: latency-aware dynamic signal cooldown" ON)
 option(LLMQUANT_ENABLE_SIGNAL_BLEND      "Build SignalBlendLayer: multi-source confidence-weighted signal blending" ON)
 option(LLMQUANT_ENABLE_STALE_DETECTOR    "Build StaleTokenDetector: watchdog that fires alerts when the LLM token stream goes silent" ON)
+option(LLMQUANT_ENABLE_POSITION_TRACKER  "Build PositionTracker: real P&L accounting that auto-feeds outcomes into KellyPositionSizer" ON)
 option(LLMQUANT_ENABLE_REGIME_DETECTOR   "Build RegimeDetector: EMA-based regime classifier (Bull/Bear/Volatile/RiskOff/Neutral)" ON)
 option(LLMQUANT_ENABLE_TOKEN_REPLAY      "Build TokenReplayRecorder: binary token stream recorder and deterministic replay engine" ON)
 option(LLMQUANT_ENABLE_PARAMETER_SWEEP   "Build ParameterSweep: grid-search optimiser over BacktestRunner configurations (requires BACKTEST)" ON)
+option(LLMQUANT_ENABLE_ALERT_DISPATCHER  "Build AlertDispatcher: async non-blocking alert delivery with dedup window and pluggable sinks" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -264,6 +266,15 @@ else()
     message(STATUS "Feature: StaleTokenDetector DISABLED (LLMQUANT_ENABLE_STALE_DETECTOR=OFF)")
 endif()
 
+# PositionTracker: real-time P&L accounting with automatic Kelly feedback.
+if(LLMQUANT_ENABLE_POSITION_TRACKER)
+    target_sources(llmquant PRIVATE src/PositionTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POSITION_TRACKER_ENABLED)
+    message(STATUS "Feature: PositionTracker ENABLED (real P&L + Kelly feedback)")
+else()
+    message(STATUS "Feature: PositionTracker DISABLED (LLMQUANT_ENABLE_POSITION_TRACKER=OFF)")
+endif()
+
 # ParameterSweep: grid-search optimiser over BacktestRunner configs.
 if(LLMQUANT_ENABLE_PARAMETER_SWEEP AND LLMQUANT_ENABLE_BACKTEST)
     target_sources(llmquant PRIVATE src/ParameterSweep.cpp)
@@ -408,13 +419,6 @@ if(LLMQUANT_ENABLE_ALERT_DISPATCHER)
     message(STATUS "Feature: AlertDispatcher ENABLED (async alert delivery)")
 else()
     message(STATUS "Feature: AlertDispatcher DISABLED (LLMQUANT_ENABLE_ALERT_DISPATCHER=OFF)")
-endif()
-if(LLMQUANT_ENABLE_PARAMETER_SWEEP)
-    target_sources(llmquant PRIVATE src/ParameterSweep.cpp)
-    target_compile_definitions(llmquant PUBLIC LLMQUANT_PARAMETER_SWEEP_ENABLED)
-    message(STATUS "Feature: ParameterSweep ENABLED (backtest grid-search optimizer)")
-else()
-    message(STATUS "Feature: ParameterSweep DISABLED (LLMQUANT_ENABLE_PARAMETER_SWEEP=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
