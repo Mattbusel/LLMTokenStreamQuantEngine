@@ -1567,7 +1567,7 @@ TEST(LLMAdapterTest, test_export_hot_tokens_high_freq_high_bias_tops_list) {
     adapter.add_token_mapping("medium", {0.5, 0.6, 0.2, 0.5});  // medium bias
 
     // Make "hot" heavily hit
-    for (int i = 0; i < 10; ++i) adapter.map_token_to_weight("hot");
+    for (int i = 0; i < 10; ++i) (void)adapter.map_token_to_weight("hot");
     (void)adapter.map_token_to_weight("cold");
 
     auto top = adapter.export_hot_tokens(3);

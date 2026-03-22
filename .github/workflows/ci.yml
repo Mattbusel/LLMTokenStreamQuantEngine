@@ -110,7 +110,9 @@ jobs:
             -DLLMQUANT_ENABLE_STREAM_CLIENT=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_TRACE=OFF \
             -DLLMQUANT_ENABLE_SIMD=OFF \
-            -DLLMQUANT_ENABLE_MOCK_OMS=OFF
+            -DLLMQUANT_ENABLE_MOCK_OMS=OFF \
+            -DLLMQUANT_ENABLE_AUDIT_LOG=OFF \
+            -DLLMQUANT_ENABLE_SENTIMENT_TRAJECTORY=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -136,6 +138,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_SIGNAL_TRACE
           - flag: LLMQUANT_ENABLE_SIMD
           - flag: LLMQUANT_ENABLE_MOCK_OMS
+          - flag: LLMQUANT_ENABLE_AUDIT_LOG
+          - flag: LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

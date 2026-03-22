@@ -67,6 +67,13 @@ public:
         bool disable_drawdown_gate{false};
         /// When true, the position/PnL gate is bypassed (for testing only).
         bool disable_position_gate{false};
+
+        /// When true, shadow/dry-run mode is active: all gates are still evaluated
+        /// (stats, alert callbacks, and trip-wire callbacks all fire as normal) but
+        /// evaluate() always returns true so no signal is blocked.  Use this to
+        /// observe what a new risk config *would* block before enabling it in production.
+        /// Runtime override: LLMQUANT_SHADOW_MODE=1 (applied during Config hot-reload).
+        bool dry_run_mode{false};
     };
 
     /**

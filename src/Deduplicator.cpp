@@ -58,8 +58,8 @@ DedupResult InProcessDeduplicator::check_and_register(const DedupKey& key,
     auto now = std::chrono::steady_clock::now();
 
     auto it = table_.find(key);
-    if (it != table_.end()) {
-        if (it->second.expires_at > now) {
+    if (it != table_.end()) [[unlikely]] {
+        if (it->second.expires_at > now) [[likely]] {
             total_duplicates_++;
             return DedupResult::Duplicate;
         }

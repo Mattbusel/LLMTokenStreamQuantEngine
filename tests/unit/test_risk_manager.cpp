@@ -2050,6 +2050,74 @@ TEST(RiskManagerTest, test_gate_trip_fires_after_gate_reenabled_via_update_confi
 }
 
 // ============================================================
+// Cycle 46: shadow/dry-run mode — gates evaluate but never block.
+// ============================================================
+
+TEST(RiskManagerTest, test_dry_run_mode_blocked_signal_returns_true) {
+    // Even a signal that would be blocked by the magnitude gate must return
+    // true when dry_run_mode is active.
+    RiskManager::Config cfg = default_config();
+    cfg.dry_run_mode = true;
+    RiskManager rm(cfg);
+
+    // Signal well above the magnitude limit.
+    auto sig = make_signal(5.0, 0.1, 0.05, 0.8);
+    bool result = rm.evaluate(sig);
+
+    EXPECT_TRUE(result) << "evaluate() must return true in shadow mode even when magnitude is exceeded";
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 1u)
+        << "blocked counter must still increment in shadow mode";
+    EXPECT_EQ(rm.get_stats().signals_passed.load(), 0u)
+        << "signals_passed must NOT increment for a shadowed block";
+}
+
+TEST(RiskManagerTest, test_dry_run_mode_stats_still_increment_on_each_gate) {
+    // All gate-specific blocked counters must increment normally in shadow mode.
+    RiskManager::Config cfg = default_config();
+    cfg.max_signals_per_second = 1;
+    cfg.dry_run_mode           = true;
+    RiskManager rm(cfg);
+
+    // Magnitude block
+    (void)rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 1u);
+
+    // Confidence block — reset rate window first
+    rm.reset();
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.0));
+    EXPECT_EQ(rm.get_stats().signals_blocked_confidence.load(), 1u);
+}
+
+TEST(RiskManagerTest, test_dry_run_mode_off_blocks_signals_normally) {
+    // Sanity check: dry_run_mode=false (default) must still block signals.
+    RiskManager::Config cfg = default_config();
+    cfg.dry_run_mode = false;
+    RiskManager rm(cfg);
+
+    bool result = rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8));
+    EXPECT_FALSE(result) << "evaluate() must return false in normal mode when magnitude is exceeded";
+}
+
+TEST(RiskManagerTest, test_dry_run_mode_hot_reload_toggles_shadow) {
+    // Verify that update_config() with dry_run_mode toggled mid-session works.
+    RiskManager::Config cfg = default_config();
+    cfg.dry_run_mode = false;
+    RiskManager rm(cfg);
+
+    // Normal mode: magnitude breach blocks.
+    EXPECT_FALSE(rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8)));
+    rm.reset_stats();
+
+    // Enable shadow mode via update_config().
+    cfg.dry_run_mode = true;
+    rm.update_config(cfg);
+
+    // Shadow mode: same breach returns true.
+    EXPECT_TRUE(rm.evaluate(make_signal(5.0, 0.1, 0.05, 0.8)));
+    EXPECT_EQ(rm.get_stats().signals_blocked_magnitude.load(), 1u);
+}
+
+// ============================================================
 // Test: enable_all_gates() resets stale gate last_blocked_ flags.
 // ============================================================
 TEST(RiskManagerTest, test_gate_trip_fires_after_enable_all_gates) {

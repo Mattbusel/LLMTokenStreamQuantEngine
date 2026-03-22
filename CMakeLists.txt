@@ -32,6 +32,8 @@ option(LLMQUANT_ENABLE_STREAM_CLIENT "Build the LLMStreamClient live-streaming a
 option(LLMQUANT_ENABLE_SIGNAL_TRACE  "Emit per-token spdlog::trace lines in the hot path (high verbosity, disable for production)" OFF)
 option(LLMQUANT_ENABLE_SIMD          "Use SSE2 intrinsics in LLMAdapter::map_sequence_simd (disable for ARM/non-SSE2 targets or reproducibility testing)" ON)
 option(LLMQUANT_ENABLE_MOCK_OMS      "Build MockOmsAdapter (deterministic test double); disable for production/minimal builds" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY "Build SentimentTrajectoryAnalyzer (online linear-regression trend detector for token sentiment streams)" ON)
+option(LLMQUANT_ENABLE_AUDIT_LOG     "Build the async NDJSON signal audit log (SignalAuditLog)" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -42,6 +44,9 @@ if(MSVC)
         list(APPEND _warn_flags /WX)
     endif()
     add_compile_options(${_warn_flags})
+    # Suppress MSVC C4996 "deprecated" warnings for standard CRT functions
+    # (fopen, strerror, etc.) that are valid C++ standard library calls.
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     # Do NOT set CMAKE_CXX_FLAGS_RELEASE / CMAKE_CXX_FLAGS_DEBUG here — that
     # would overwrite CMake's default /MD CRT linkage flag, causing a CRT
     # mismatch with pre-built spdlog and yaml-cpp packages.  Per-target
@@ -149,6 +154,24 @@ add_library(llmquant STATIC
     src/FixOmsAdapter.cpp
     src/PrometheusExporter.cpp
 )
+
+# SentimentTrajectoryAnalyzer: optional online trend-detection module.
+if(LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY)
+    target_sources(llmquant PRIVATE src/SentimentTrajectoryAnalyzer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+    message(STATUS "Feature: SentimentTrajectoryAnalyzer ENABLED (online linear-regression trend detector)")
+else()
+    message(STATUS "Feature: SentimentTrajectoryAnalyzer DISABLED (LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY=OFF)")
+endif()
+
+# SignalAuditLog: async NDJSON audit log — feature-flagged for minimal builds.
+if(LLMQUANT_ENABLE_AUDIT_LOG)
+    target_sources(llmquant PRIVATE src/SignalAuditLog.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_AUDIT_LOG_ENABLED)
+    message(STATUS "Feature: SignalAuditLog ENABLED (async NDJSON signal audit log)")
+else()
+    message(STATUS "Feature: SignalAuditLog DISABLED (LLMQUANT_ENABLE_AUDIT_LOG=OFF)")
+endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).
 # Disable for production builds to strip the test double from the binary.

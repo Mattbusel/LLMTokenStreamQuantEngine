@@ -28,10 +28,29 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     if (stats_.tokens_processed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
         stats_.tokens_processed.fetch_add(1, std::memory_order_relaxed);
 
+    // Time-based exponential decay: if time_decay_half_life_ms > 0, decay
+    // accumulated bias/vol by pow(0.5, elapsed_ms / half_life) to prevent
+    // stale sentiment from persisting during quiet token-stream periods.
+    if (config_.time_decay_half_life_ms > 0.0) {
+        auto now = processing_start_;
+        double elapsed_ms = static_cast<double>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                now - last_token_time_).count()) / 1000.0;
+        if (elapsed_ms > 0.0) {
+            double time_decay = std::pow(0.5, elapsed_ms / config_.time_decay_half_life_ms);
+            // Apply time decay to accumulators before per-token decay.
+            double bias_val = accumulated_bias_.load(std::memory_order_relaxed);
+            accumulated_bias_.store(bias_val * time_decay, std::memory_order_relaxed);
+            double vol_val = accumulated_volatility_.load(std::memory_order_relaxed);
+            accumulated_volatility_.store(vol_val * time_decay, std::memory_order_relaxed);
+        }
+    }
+    last_token_time_ = processing_start_;
+
     // Apply sensitivity scaling
     double bias_contribution = weight.directional_bias * weight.confidence_score * config_.bias_sensitivity;
     double vol_contribution = weight.volatility_score * weight.confidence_score * config_.volatility_sensitivity;
-    
+
     // Accumulate signals with decay using CAS loops for linearisable RMW.
     // Yield after 8 failed retries to avoid livelock under high contention.
     double expected_bias = accumulated_bias_.load(std::memory_order_relaxed);
@@ -74,6 +93,21 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     double current_bias = desired_bias;
     double current_vol  = desired_vol;
 
+    // Bias reversal detection: count zero-crossings of accumulated_bias_.
+    // A reversal is recorded when the sign changes from non-zero to the
+    // opposite non-zero sign (pure decays toward zero are not counted).
+    {
+        int new_sign = (current_bias > 0.0) ? 1 : (current_bias < 0.0) ? -1 : 0;
+        if (new_sign != 0) {
+            int old_sign = last_bias_sign_.exchange(new_sign, std::memory_order_relaxed);
+            if (old_sign != 0 && old_sign != new_sign) {
+                if (stats_.bias_reversals.load(std::memory_order_relaxed)
+                        < std::numeric_limits<uint64_t>::max() - 1)
+                    stats_.bias_reversals.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+
     // Track peak |bias| for observability — lock-free CAS max update.
     {
         double abs_bias = std::fabs(current_bias);
@@ -89,8 +123,14 @@ void TradeSignalEngine::process_semantic_weight(const SemanticWeight& weight) {
     last_confidence_ = weight.confidence_score;
 
     // Noise filter: suppress signals too weak to act on.
-    if (config_.min_bias_threshold > 0.0 &&
-        std::fabs(current_bias) < config_.min_bias_threshold) {
+    // Bias threshold: |accumulated_bias| must exceed min_bias_threshold.
+    // Vol threshold: |accumulated_vol| must exceed min_vol_threshold.
+    // Both gates are independent — either alone can suppress the signal.
+    const bool bias_filtered = (config_.min_bias_threshold > 0.0 &&
+                                std::fabs(current_bias) < config_.min_bias_threshold);
+    const bool vol_filtered  = (config_.min_vol_threshold > 0.0 &&
+                                std::fabs(current_vol) < config_.min_vol_threshold);
+    if (bias_filtered || vol_filtered) [[unlikely]] {
         if (stats_.signals_suppressed.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
             stats_.signals_suppressed.fetch_add(1, std::memory_order_relaxed);
         if (stats_.noise_filtered.load(std::memory_order_relaxed) < std::numeric_limits<uint64_t>::max() - 1)
@@ -163,6 +203,10 @@ void TradeSignalEngine::set_signal_cooldown(std::chrono::microseconds cooldown) 
 
 void TradeSignalEngine::set_min_bias_threshold(double threshold) {
     config_.min_bias_threshold = (threshold < 0.0) ? 0.0 : threshold;
+}
+
+void TradeSignalEngine::set_min_vol_threshold(double threshold) {
+    config_.min_vol_threshold = (threshold < 0.0) ? 0.0 : threshold;
 }
 
 void TradeSignalEngine::set_signal_callback(TradeSignalCallback callback) {
@@ -280,9 +324,13 @@ void TradeSignalEngine::drain_pending() {
     double bias = accumulated_bias_.load(std::memory_order_relaxed);
     double vol  = accumulated_volatility_.load(std::memory_order_relaxed);
 
-    bool above_threshold = (config_.min_bias_threshold > 0.0)
+    const bool bias_ok = (config_.min_bias_threshold > 0.0)
         ? (std::fabs(bias) >= config_.min_bias_threshold)
         : (bias != 0.0);
+    const bool vol_ok  = (config_.min_vol_threshold > 0.0)
+        ? (std::fabs(vol) >= config_.min_vol_threshold)
+        : true;
+    bool above_threshold = bias_ok && vol_ok;
 
     if (above_threshold) {
         processing_start_ = std::chrono::high_resolution_clock::now();
@@ -315,9 +363,12 @@ void TradeSignalEngine::reset() noexcept {
     stats_.peak_bias.store(0.0, std::memory_order_relaxed);
     stats_.avg_signal_quality.store(0.0, std::memory_order_relaxed);
     stats_.signal_quality_ema.store(-1.0, std::memory_order_relaxed);
+    stats_.bias_reversals.store(0, std::memory_order_relaxed);
+    last_bias_sign_.store(0, std::memory_order_relaxed);
     last_signal_quality_.store(0.0, std::memory_order_relaxed);
     last_signal_timestamp_ns_.store(0, std::memory_order_relaxed);
-    reset_time_ = std::chrono::high_resolution_clock::now();
+    reset_time_       = std::chrono::high_resolution_clock::now();
+    last_token_time_  = reset_time_;
 }
 
 void TradeSignalEngine::add_output_sink(std::shared_ptr<OutputSink> sink) {
@@ -432,7 +483,8 @@ std::string TradeSignalEngine::format_stats() const {
         << stats_.quality_bucket_40_60.load(std::memory_order_relaxed) << ","
         << stats_.quality_bucket_60_80.load(std::memory_order_relaxed) << ","
         << stats_.quality_bucket_80_100.load(std::memory_order_relaxed) << "]"
-        << " quality_ema=" << stats_.signal_quality_ema.load(std::memory_order_relaxed);
+        << " quality_ema=" << stats_.signal_quality_ema.load(std::memory_order_relaxed)
+        << " bias_reversals=" << stats_.bias_reversals.load(std::memory_order_relaxed);
     return oss.str();
 }
 

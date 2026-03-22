@@ -24,6 +24,9 @@
 #ifdef LLMQUANT_PROMETHEUS_ENABLED
 #  include "PrometheusExporter.h"
 #endif
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+#  include "SignalAuditLog.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -178,6 +181,9 @@ int main(int argc, char* argv[]) {
     bool        no_dedup       = false;         // disable deduplication at runtime
 #endif
     bool        no_hot_reload  = false;         // skip config file watcher
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+    std::string audit_log_path;                  // non-empty = enable audit log at this path
+#endif
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -209,6 +215,9 @@ int main(int argc, char* argv[]) {
                 "  --no-dedup        Disable token deduplication (all tokens treated as novel)\n"
 #endif
                 "  --no-hot-reload   Disable config file hot-reload watcher\n"
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+                "  --audit-log FILE  Write per-signal NDJSON audit log to FILE\n"
+#endif
                 "  --version         Print version and exit\n"
                 "  --show-flags      Print compile-time feature flags and exit\n"
                 "  --help            Print this help and exit\n"
@@ -221,6 +230,9 @@ int main(int argc, char* argv[]) {
 #endif
                 "  LLMQUANT_NO_HOT_RELOAD  Set to 1/true/yes to disable config hot-reload\n"
                 "  LLMQUANT_DRY_RUN        Set to 1/true/yes for dry-run (signal only, no OMS)\n"
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+                "  LLMQUANT_AUDIT_LOG_PATH Path to NDJSON audit log file\n"
+#endif
                 "  LLMQUANT_QUIET          Set to 1/true/yes to suppress console output\n"
                 "  LLMQUANT_BACKTEST       Set to 1/true/yes to enable backtest mode\n"
                 "\n"
@@ -358,6 +370,10 @@ int main(int argc, char* argv[]) {
             oms_address = argv[++i];
         } else if (arg == "--fix" && i + 1 < argc) {
             fix_address = argv[++i];
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+        } else if (arg == "--audit-log" && i + 1 < argc) {
+            audit_log_path = argv[++i];
+#endif
         }
     }
 
@@ -392,6 +408,21 @@ int main(int argc, char* argv[]) {
         if (!dry_run        && env_flag("LLMQUANT_DRY_RUN"))        dry_run        = true;
         if (!quiet          && env_flag("LLMQUANT_QUIET"))          quiet          = true;
         if (!backtest_mode  && env_flag("LLMQUANT_BACKTEST"))       backtest_mode  = true;
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+        // LLMQUANT_AUDIT_LOG_PATH=<file>  set audit log path when --audit-log was not passed
+        if (audit_log_path.empty()) {
+#ifdef _WIN32
+            char env_buf[512] = {};
+            size_t env_sz = 0;
+            if (getenv_s(&env_sz, env_buf, sizeof(env_buf), "LLMQUANT_AUDIT_LOG_PATH") == 0
+                    && env_sz > 0)
+                audit_log_path = env_buf;
+#else
+            const char* env_p = std::getenv("LLMQUANT_AUDIT_LOG_PATH");
+            if (env_p && env_p[0] != '\0') audit_log_path = env_p;
+#endif
+        }
+#endif
     }
 
     // Apply log level before any spdlog calls so early warnings are visible.
@@ -646,6 +677,7 @@ int main(int argc, char* argv[]) {
         .signal_cooldown      = std::chrono::microseconds(sys_config.trading.signal_cooldown_us),
         .max_signal_age_us    = sys_config.trading.max_signal_age_us,
         .min_bias_threshold   = sys_config.trading.min_bias_threshold,
+        .min_vol_threshold    = sys_config.trading.min_vol_threshold,
         .max_accumulated_bias = sys_config.trading.max_accumulated_bias
     });
 
@@ -681,6 +713,7 @@ int main(int argc, char* argv[]) {
     risk_cfg.disable_rate_gate        = sys_config.risk_overrides.disable_rate_gate;
     risk_cfg.disable_drawdown_gate    = sys_config.risk_overrides.disable_drawdown_gate;
     risk_cfg.disable_position_gate    = sys_config.risk_overrides.disable_position_gate;
+    risk_cfg.dry_run_mode             = sys_config.risk_overrides.dry_run_mode;
     llmquant::RiskManager risk_mgr(risk_cfg);
     risk_mgr.set_metrics_logger(&logger);
     // Register gate trip-wire callbacks for real-time alerting on first block.
@@ -804,6 +837,7 @@ int main(int argc, char* argv[]) {
         new_risk_cfg.disable_rate_gate        = updated.risk_overrides.disable_rate_gate;
         new_risk_cfg.disable_drawdown_gate    = updated.risk_overrides.disable_drawdown_gate;
         new_risk_cfg.disable_position_gate    = updated.risk_overrides.disable_position_gate;
+        new_risk_cfg.dry_run_mode             = updated.risk_overrides.dry_run_mode;
         risk_mgr.update_config(new_risk_cfg);
         llmquant::TradeSignalEngine::Config new_eng_cfg;
         new_eng_cfg.bias_sensitivity       = updated.trading.bias_sensitivity;
@@ -812,6 +846,7 @@ int main(int argc, char* argv[]) {
         new_eng_cfg.signal_cooldown        = std::chrono::microseconds(updated.trading.signal_cooldown_us);
         new_eng_cfg.max_signal_age_us      = updated.trading.max_signal_age_us;
         new_eng_cfg.min_bias_threshold     = updated.trading.min_bias_threshold;
+        new_eng_cfg.min_vol_threshold      = updated.trading.min_vol_threshold;
         new_eng_cfg.max_accumulated_bias   = updated.trading.max_accumulated_bias;
         trade_engine.update_config(new_eng_cfg);
         // Update semantic weight multipliers atomically — visible to process_token
@@ -934,6 +969,21 @@ int main(int argc, char* argv[]) {
     std::string last_block_reason;
     std::mutex  block_reason_mutex;
 
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+    std::unique_ptr<llmquant::SignalAuditLog> audit_log;
+    if (!audit_log_path.empty()) {
+        llmquant::SignalAuditLog::Config audit_cfg;
+        audit_cfg.filepath = audit_log_path;
+        audit_log = std::make_unique<llmquant::SignalAuditLog>(audit_cfg);
+        spdlog::info("[audit_log] started — writing to '{}'", audit_log_path);
+    }
+#endif
+
+    // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
+    constexpr int kSparkSlots = 24;
+    std::array<double, kSparkSlots> spark_ring{};
+    std::atomic<int> spark_head{0};
+
     risk_mgr.set_oms_callback([&](const std::string& event,
                                    const llmquant::RiskManager::PositionState&,
                                    const llmquant::TradeSignal&) {
@@ -949,6 +999,12 @@ int main(int argc, char* argv[]) {
                           ).count();
 
         bool passed = risk_mgr.evaluate(signal);
+
+        // Record bias value in sparkline ring (lock-free: only one writer thread).
+        {
+            int idx = spark_head.fetch_add(1, std::memory_order_relaxed) % kSparkSlots;
+            spark_ring[idx] = signal.delta_bias_shift;
+        }
 
         // Capture the rejection reason once, under the lock, so it is available
         // for both the console gate_str and the structured log call below.
@@ -994,6 +1050,12 @@ int main(int argc, char* argv[]) {
                                       signal.delta_bias_shift,
                                       signal.confidence);
         }
+
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+        if (audit_log) {
+            audit_log->log_signal(signal, passed, passed ? "" : block_reason_copy);
+        }
+#endif
     });
 
     // Load test tokens for simulator path.
@@ -1348,6 +1410,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_dry_run Whether the engine is running in dry-run mode (1=yes)\n"
                  << "# TYPE llmquant_dry_run gauge\n"
                  << "llmquant_dry_run " << (dry_run ? 1 : 0) << "\n"
+                 << "# HELP llmquant_shadow_mode_active 1 when RiskManager shadow/dry-run mode is active (gates evaluate but never block)\n"
+                 << "# TYPE llmquant_shadow_mode_active gauge\n"
+                 << "llmquant_shadow_mode_active " << (risk_mgr.get_config().dry_run_mode ? 1 : 0) << "\n"
                  << "# HELP llmquant_backtest_mode Whether the engine is running in backtest mode (1=yes)\n"
                  << "# TYPE llmquant_backtest_mode gauge\n"
                  << "llmquant_backtest_mode " << (backtest_mode ? 1 : 0) << "\n"
@@ -1379,6 +1444,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_min_bias_threshold Configured noise-filter minimum |bias| threshold (0=disabled)\n"
                  << "# TYPE llmquant_min_bias_threshold gauge\n"
                  << "llmquant_min_bias_threshold " << trade_engine.get_config().min_bias_threshold << "\n"
+                 << "# HELP llmquant_min_vol_threshold Configured noise-filter minimum |vol| threshold (0=disabled)\n"
+                 << "# TYPE llmquant_min_vol_threshold gauge\n"
+                 << "llmquant_min_vol_threshold " << trade_engine.get_config().min_vol_threshold << "\n"
                  << "# HELP llmquant_max_accumulated_bias Configured accumulator cap (0=disabled)\n"
                  << "# TYPE llmquant_max_accumulated_bias gauge\n"
                  << "llmquant_max_accumulated_bias " << trade_engine.get_config().max_accumulated_bias << "\n"
@@ -1418,6 +1486,19 @@ int main(int argc, char* argv[]) {
                         uint64_t total = novel + dupes;
                         return (total > 0) ? (static_cast<double>(dupes) / static_cast<double>(total)) : 0.0;
                     }() << "\n"
+#endif
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+                 << [&]() -> std::string {
+                        if (!audit_log) return "";
+                        std::ostringstream o;
+                        o << "# HELP llmquant_audit_records_written_total Total signal audit records written to disk\n"
+                          << "# TYPE llmquant_audit_records_written_total counter\n"
+                          << "llmquant_audit_records_written_total " << audit_log->records_written() << "\n"
+                          << "# HELP llmquant_audit_records_dropped_total Signal audit records dropped (queue full)\n"
+                          << "# TYPE llmquant_audit_records_dropped_total counter\n"
+                          << "llmquant_audit_records_dropped_total " << audit_log->records_dropped() << "\n";
+                        return o.str();
+                    }()
 #endif
                 ;
             // Signal quality histogram — per-bucket counts emitted as a Prometheus histogram.
@@ -1480,6 +1561,9 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_noise_filtered_total Tokens suppressed by the min-bias noise gate\n"
                  << "# TYPE llmquant_noise_filtered_total counter\n"
                  << "llmquant_noise_filtered_total " << eng_stats.noise_filtered.load() << "\n"
+                 << "# HELP llmquant_bias_reversals_total Number of times accumulated_bias changed direction (sign reversal / momentum crossover)\n"
+                 << "# TYPE llmquant_bias_reversals_total counter\n"
+                 << "llmquant_bias_reversals_total " << eng_stats.bias_reversals.load() << "\n"
                  << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
                  << "# TYPE llmquant_risk_healthy gauge\n"
                  << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n"
@@ -1571,6 +1655,34 @@ int main(int argc, char* argv[]) {
                             std::ostringstream o;
                             o << "  Q-EMA:" << std::fixed << std::setprecision(2) << q_ema;
                             return o.str();
+                         }()
+                      << [&]() -> std::string {
+                            // Render 24-slot sparkline of recent delta_bias_shift values.
+                            // Values are clamped to [-1, 1] and mapped to 8 block levels.
+                            // Slots not yet written (head < kSparkSlots) render as '·'.
+                            static const char* kBlocks[] = {
+                                "▁","▂","▃","▄","▅","▆","▇","█"
+                            };
+                            int head = spark_head.load(std::memory_order_relaxed);
+                            if (head == 0) return "";
+                            std::string out = "  BIAS:";
+                            int filled = std::min(head, kSparkSlots);
+                            int start  = (head >= kSparkSlots) ? (head % kSparkSlots) : 0;
+                            for (int i = 0; i < kSparkSlots; ++i) {
+                                if (i >= filled) { out += C("\033[90m"); out += "·"; out += C("\033[0m"); continue; }
+                                int slot = (start + i) % kSparkSlots;
+                                double v = spark_ring[slot];
+                                // Map [-1,1] → [0,7]; neutral (0) → level 3 (▄)
+                                double clamped = std::max(-1.0, std::min(1.0, v));
+                                int level = static_cast<int>((clamped + 1.0) / 2.0 * 7.0 + 0.5);
+                                // Colour: positive=green, negative=red, near-zero=yellow
+                                if (v > 0.05)       out += C("\033[32m");
+                                else if (v < -0.05) out += C("\033[31m");
+                                else                out += C("\033[33m");
+                                out += kBlocks[level];
+                                out += C("\033[0m");
+                            }
+                            return out;
                          }()
                       << std::flush;
 
@@ -1674,6 +1786,14 @@ int main(int argc, char* argv[]) {
         std::cout << "  Uptime           : " << uptime_s << "s\n";
     }
     std::cout << "  Log entries      : " << logger.get_log_entry_count() << "\n";
+#ifdef LLMQUANT_AUDIT_LOG_ENABLED
+    if (audit_log) {
+        std::cout << "  Audit written    : " << audit_log->records_written()
+                  << "  (dropped=" << audit_log->records_dropped()
+                  << "  rot=" << audit_log->rotations() << ")\n";
+        std::cout << "  Audit log file   : " << audit_log_path << "\n";
+    }
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";

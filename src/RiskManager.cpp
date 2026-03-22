@@ -40,14 +40,16 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
     std::string    trip_gate_name;
     MetricsLogger* logger_copy = nullptr;
     PositionState  pos_copy;
-    bool hard_breach = false;
-    bool soft_warn   = false;
-    bool pnl_breach  = false;
+    bool hard_breach    = false;
+    bool soft_warn      = false;
+    bool pnl_breach     = false;
+    bool dry_run_active = false;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        dry_run_active = config_.dry_run_mode;
 
-        if (!config_.disable_magnitude_gate && !check_magnitude(signal)) {
+        if (!config_.disable_magnitude_gate && !check_magnitude(signal)) [[unlikely]] {
             sat_increment(stats_.signals_blocked_magnitude);
             reject_reason = "magnitude_exceeded";
             if (!gate_magnitude_last_blocked_ && gate_trip_magnitude_cb_) {
@@ -173,6 +175,9 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
             catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
         }
         if (logger_copy)   { logger_copy->log_risk_rejection(reject_reason, signal.delta_bias_shift, signal.confidence); }
+        // Shadow / dry-run mode: all gate checks ran (stats and callbacks fired)
+        // but the signal is not actually blocked — return true so it passes through.
+        if (dry_run_active) return true;
         return false;
     }
     return true;

@@ -49,6 +49,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (t["signal_cooldown_us"]) tmp.trading.signal_cooldown_us = t["signal_cooldown_us"].as<int>();
             if (t["max_signal_age_us"])      tmp.trading.max_signal_age_us      = t["max_signal_age_us"].as<double>();
             if (t["min_bias_threshold"])     tmp.trading.min_bias_threshold     = t["min_bias_threshold"].as<double>();
+            if (t["min_vol_threshold"])      tmp.trading.min_vol_threshold      = t["min_vol_threshold"].as<double>();
             if (t["max_accumulated_bias"])   tmp.trading.max_accumulated_bias   = t["max_accumulated_bias"].as<double>();
         }
 
@@ -81,6 +82,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (r["disable_rate_gate"])       tmp.risk_overrides.disable_rate_gate       = r["disable_rate_gate"].as<bool>();
             if (r["disable_drawdown_gate"])   tmp.risk_overrides.disable_drawdown_gate   = r["disable_drawdown_gate"].as<bool>();
             if (r["disable_position_gate"])   tmp.risk_overrides.disable_position_gate   = r["disable_position_gate"].as<bool>();
+            if (r["dry_run_mode"])            tmp.risk_overrides.dry_run_mode            = r["dry_run_mode"].as<bool>();
         }
 
         // Metrics / observability endpoint settings
@@ -294,6 +296,7 @@ std::string Config::to_yaml_string() const {
     yaml["trading"]["signal_cooldown_us"]    = snap.trading.signal_cooldown_us;
     yaml["trading"]["max_signal_age_us"]     = snap.trading.max_signal_age_us;
     yaml["trading"]["min_bias_threshold"]    = snap.trading.min_bias_threshold;
+    yaml["trading"]["min_vol_threshold"]     = snap.trading.min_vol_threshold;
     yaml["trading"]["max_accumulated_bias"]  = snap.trading.max_accumulated_bias;
 
     // Latency
@@ -331,6 +334,7 @@ std::string Config::to_yaml_string() const {
     yaml["risk"]["disable_rate_gate"]       = snap.risk_overrides.disable_rate_gate;
     yaml["risk"]["disable_drawdown_gate"]   = snap.risk_overrides.disable_drawdown_gate;
     yaml["risk"]["disable_position_gate"]   = snap.risk_overrides.disable_position_gate;
+    yaml["risk"]["dry_run_mode"]            = snap.risk_overrides.dry_run_mode;
 
     // Semantic weight multipliers
     yaml["semantic_weights"]["sentiment_multiplier"]  = snap.semantic_weights.sentiment_multiplier;
@@ -501,6 +505,8 @@ int Config::load_from_env() {
         { config_.trading.max_signal_age_us = d; ++applied; }
     if (get_double("LLMQUANT_MIN_BIAS_THRESHOLD", d) && d >= 0.0)
         { config_.trading.min_bias_threshold = d; ++applied; }
+    if (get_double("LLMQUANT_MIN_VOL_THRESHOLD", d) && d >= 0.0)
+        { config_.trading.min_vol_threshold = d; ++applied; }
     if (get_double("LLMQUANT_MAX_ACCUMULATED_BIAS", d) && d >= 0.0)
         { config_.trading.max_accumulated_bias = d; ++applied; }
     if (get_double("LLMQUANT_MAX_DRAWDOWN", d) && d >= 0.0)
@@ -535,6 +541,15 @@ int Config::load_from_env() {
         const char* v = std::getenv("LLMQUANT_DEDUP_REDIS_URL");
         if (v && v[0] != '\0') {
             config_.token_stream.redis_url = v;
+            ++applied;
+        }
+    }
+
+    // Shadow / dry-run mode — set LLMQUANT_SHADOW_MODE=1 to enable.
+    {
+        const char* v = std::getenv("LLMQUANT_SHADOW_MODE");
+        if (v && (v[0] == '1' || std::string(v) == "true" || std::string(v) == "yes")) {
+            config_.risk_overrides.dry_run_mode = true;
             ++applied;
         }
     }
@@ -576,6 +591,8 @@ std::vector<std::string> Config::validate() const {
         errors.emplace_back("trading.max_signal_age_us must be >= 0");
     if (!std::isfinite(tr.min_bias_threshold) || tr.min_bias_threshold < 0.0)
         errors.emplace_back("trading.min_bias_threshold must be >= 0");
+    if (!std::isfinite(tr.min_vol_threshold) || tr.min_vol_threshold < 0.0)
+        errors.emplace_back("trading.min_vol_threshold must be >= 0");
     if (!std::isfinite(tr.max_accumulated_bias) || tr.max_accumulated_bias < 0.0)
         errors.emplace_back("trading.max_accumulated_bias must be >= 0");
     if (lat.target_latency_us <= 0)
@@ -643,6 +660,7 @@ std::string Config::to_summary_string() const {
        << "  cooldown_us=" << config_.trading.signal_cooldown_us << "\n"
        << "[trading]  max_signal_age_us=" << config_.trading.max_signal_age_us
        << "  min_bias_threshold=" << config_.trading.min_bias_threshold
+       << "  min_vol_threshold=" << config_.trading.min_vol_threshold
        << "  max_accumulated_bias=" << config_.trading.max_accumulated_bias << "\n"
        << "[risk]     max_bias=" << config_.risk_thresholds.max_bias_magnitude
        << "  max_vol=" << config_.risk_thresholds.max_volatility_magnitude
@@ -735,6 +753,7 @@ std::vector<std::string> Config::diff_from_defaults() const {
     i32("trading.signal_cooldown_us",    snap.trading.signal_cooldown_us,    def.trading.signal_cooldown_us);
     dbl("trading.max_signal_age_us",     snap.trading.max_signal_age_us,     def.trading.max_signal_age_us);
     dbl("trading.min_bias_threshold",    snap.trading.min_bias_threshold,    def.trading.min_bias_threshold);
+    dbl("trading.min_vol_threshold",     snap.trading.min_vol_threshold,     def.trading.min_vol_threshold);
     dbl("trading.max_accumulated_bias",  snap.trading.max_accumulated_bias,  def.trading.max_accumulated_bias);
 
     // latency

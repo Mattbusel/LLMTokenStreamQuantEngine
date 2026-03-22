@@ -1765,5 +1765,115 @@ TEST(TradeSignalEngineTest, test_signals_suppressed_increments_on_noise_filter) 
         << "signals_suppressed must increment after a noise-filtered token";
 }
 
+// ---------------------------------------------------------------------------
+// Tests for min_vol_threshold (volatility dead-band filter)
+// ---------------------------------------------------------------------------
+
+TEST(TradeSignalEngineTest, test_min_vol_threshold_suppresses_low_vol_signals) {
+    // A high min_vol_threshold should suppress signals where accumulated_vol
+    // is below the threshold, even if bias is above its threshold.
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 0.0;    // bias gate disabled
+    cfg.min_vol_threshold  = 100.0;  // extremely high — nothing will pass
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    // Feed several tokens with non-zero bias and some vol — but vol << 100.0.
+    for (int i = 0; i < 5; ++i)
+        engine.process_semantic_weight({0.5, 0.3, 0.1, 0.8});
+
+    EXPECT_EQ(emitted.load(), 0)
+        << "min_vol_threshold=100 must suppress all signals regardless of bias";
+    EXPECT_GT(engine.get_stats().signals_suppressed.load(), 0u)
+        << "signals_suppressed must be > 0 when vol threshold suppresses tokens";
+}
+
+TEST(TradeSignalEngineTest, test_min_vol_threshold_zero_is_disabled) {
+    // With min_vol_threshold=0 the vol gate is disabled; signals with bias
+    // and vol should pass through.
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.min_bias_threshold = 0.0;
+    cfg.min_vol_threshold  = 0.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+
+    std::atomic<int> emitted{0};
+    engine.set_signal_callback([&emitted](const TradeSignal&) { ++emitted; });
+
+    engine.process_semantic_weight({0.5, 0.3, 0.1, 0.8});
+    EXPECT_GT(emitted.load(), 0)
+        << "min_vol_threshold=0 must not suppress any signals";
+}
+
+TEST(TradeSignalEngineTest, test_set_min_vol_threshold_setter) {
+    TradeSignalEngine::Config cfg = make_config();
+    TradeSignalEngine engine(cfg);
+    engine.set_min_vol_threshold(5.0);
+    EXPECT_DOUBLE_EQ(engine.get_config().min_vol_threshold, 5.0);
+}
+
+TEST(TradeSignalEngineTest, test_set_min_vol_threshold_clamps_negative) {
+    TradeSignalEngine::Config cfg = make_config();
+    TradeSignalEngine engine(cfg);
+    engine.set_min_vol_threshold(-3.0);  // must be clamped to 0
+    EXPECT_DOUBLE_EQ(engine.get_config().min_vol_threshold, 0.0);
+}
+
 } // namespace
 } // namespace llmquant
+
+// ---------------------------------------------------------------------------
+// Time-based bias decay tests (time_decay_half_life_ms feature)
+// ---------------------------------------------------------------------------
+TEST(TradeSignalEngineTest, test_time_decay_disabled_zero_half_life) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.signal_decay_rate       = 1.0;   // no per-token decay — isolate time decay
+    cfg.time_decay_half_life_ms = 0.0;   // disabled
+    cfg.min_bias_threshold      = 0.0;
+    cfg.max_accumulated_bias    = 0.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    engine.process_semantic_weight({0.5, 1.0, 0.5, 0.0});
+    double bias_initial = engine.get_accumulated_bias();
+    ASSERT_GT(bias_initial, 0.0);
+
+    // Pause 60 ms — with time decay disabled, bias must survive unchanged.
+    std::this_thread::sleep_for(std::chrono::milliseconds{60});
+    engine.process_semantic_weight({0.0, 0.0, 0.0, 0.0});
+    double bias_after_wait = engine.get_accumulated_bias();
+
+    // signal_decay_rate=1.0 means no per-token decay; zero contribution adds 0.
+    // time_decay_half_life_ms=0 means no time decay.
+    EXPECT_NEAR(bias_after_wait, bias_initial, 1e-6)
+        << "With time decay disabled, bias must not change between zero-contribution tokens";
+}
+
+TEST(TradeSignalEngineTest, test_time_decay_reduces_bias_over_elapsed_time) {
+    TradeSignalEngine::Config cfg = make_config();
+    cfg.signal_decay_rate       = 1.0;   // no per-token decay — isolate time decay
+    cfg.time_decay_half_life_ms = 20.0;  // 20 ms half-life
+    cfg.min_bias_threshold      = 0.0;
+    cfg.max_accumulated_bias    = 0.0;
+    TradeSignalEngine engine(cfg);
+    engine.set_backtest_mode(true);
+    engine.set_signal_callback([](const TradeSignal&) {});
+
+    engine.process_semantic_weight({0.8, 1.0, 0.0, 0.0});
+    double bias_initial = engine.get_accumulated_bias();
+    ASSERT_GT(bias_initial, 0.0);
+
+    // Sleep 60 ms (3× the 20 ms half-life); after 3 half-lives bias < initial/8.
+    // Use a loose check (< initial/2) to tolerate OS sleep imprecision.
+    std::this_thread::sleep_for(std::chrono::milliseconds{60});
+    engine.process_semantic_weight({0.0, 0.0, 0.0, 0.0});
+    double bias_decayed = engine.get_accumulated_bias();
+
+    EXPECT_LT(bias_decayed, bias_initial / 2.0)
+        << "After ≥1 half-life elapsed, bias must have decayed by at least 50%;"
+        << " initial=" << bias_initial << " decayed=" << bias_decayed;
+}

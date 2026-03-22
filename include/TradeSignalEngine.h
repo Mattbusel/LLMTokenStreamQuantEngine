@@ -143,11 +143,25 @@ public:
         /// and suppressed (counted in signals_suppressed).
         /// Set to 0.0 to disable (default).
         double min_bias_threshold{0.0};
+        /// Minimum absolute volatility adjustment required to emit a signal.
+        /// Complements min_bias_threshold: both bias AND volatility must exceed
+        /// their respective thresholds when both are non-zero.
+        /// Set to 0.0 to disable (default).
+        double min_vol_threshold{0.0};
         /// Maximum absolute value of the accumulated bias.
         /// The accumulator is clamped to [-max_accumulated_bias, +max_accumulated_bias]
         /// after every token update to prevent runaway compounding.
         /// Set to 0.0 to disable (default).
         double max_accumulated_bias{0.0};
+        /// Half-life for time-based exponential decay of accumulated bias/volatility,
+        /// in milliseconds.  Unlike signal_decay_rate (which decays per token),
+        /// this decays the accumulators based on wall-clock time between tokens.
+        /// At every process_semantic_weight() call the accumulators are multiplied
+        /// by pow(0.5, elapsed_ms / time_decay_half_life_ms) before the new
+        /// contribution is added — preventing stale sentiment from persisting
+        /// during quiet periods between token bursts.
+        /// Set to 0.0 to disable time-based decay (default).
+        double time_decay_half_life_ms{0.0};
     };
 
     /**
@@ -260,6 +274,10 @@ public:
         /// Exponential moving average of signal_quality (alpha = SIGNAL_QUALITY_EMA_ALPHA).
         /// Initialised to -1.0 so callers can detect "no signals yet".
         std::atomic<double>   signal_quality_ema{-1.0};
+        /// Number of accumulated_bias sign reversals (zero-crossings) since last reset().
+        /// A reversal is counted when the bias changes from positive to negative (or vice
+        /// versa) after any non-zero prior state — indicates momentum direction changes.
+        std::atomic<uint64_t> bias_reversals{0};
 
         Stats() = default;
 
@@ -280,7 +298,8 @@ public:
             , quality_bucket_40_60{other.quality_bucket_40_60.load()}
             , quality_bucket_60_80{other.quality_bucket_60_80.load()}
             , quality_bucket_80_100{other.quality_bucket_80_100.load()}
-            , signal_quality_ema{other.signal_quality_ema.load()} {}
+            , signal_quality_ema{other.signal_quality_ema.load()}
+            , bias_reversals{other.bias_reversals.load()} {}
 
         /// @brief Explicit copy assignment: stores each atomic value individually.
         Stats& operator=(const Stats& other) {
@@ -301,6 +320,7 @@ public:
                 quality_bucket_60_80.store(other.quality_bucket_60_80.load());
                 quality_bucket_80_100.store(other.quality_bucket_80_100.load());
                 signal_quality_ema.store(other.signal_quality_ema.load());
+                bias_reversals.store(other.bias_reversals.load());
             }
             return *this;
         }
@@ -392,6 +412,20 @@ public:
      *                  Negative values are clamped to 0.0.
      */
     void set_min_bias_threshold(double threshold);
+
+    /**
+     * @brief Set the minimum volatility adjustment required to emit a signal.
+     *
+     * Complements set_min_bias_threshold(): when both thresholds are non-zero,
+     * a signal is only emitted when BOTH accumulated bias and accumulated
+     * volatility exceed their respective minimums.  Prevents micro-adjustments
+     * from saturating the downstream execution layer during low-volatility
+     * periods.  Negative values are clamped to 0.0.
+     *
+     * @param threshold New minimum absolute vol required to emit a signal.
+     *                  Negative values are clamped to 0.0.
+     */
+    void set_min_vol_threshold(double threshold);
 
     /**
      * @brief Return a copy of the current engine configuration.
@@ -884,6 +918,11 @@ private:
     /// Set at construction and reset() to support get_tokens_per_second().
     std::chrono::high_resolution_clock::time_point reset_time_{
         std::chrono::high_resolution_clock::now()};
+    /// Wall-clock time of the most recent process_semantic_weight() call.
+    /// Used to compute time-based bias decay (time_decay_half_life_ms).
+    /// Single-threaded: do NOT access from any other thread.
+    std::chrono::high_resolution_clock::time_point last_token_time_{
+        std::chrono::high_resolution_clock::now()};
     Stats stats_;
     /// signal_quality of the last emitted signal; updated by emit_signal().
     std::atomic<double>   last_signal_quality_{0.0};
@@ -891,6 +930,10 @@ private:
     std::atomic<uint64_t> last_signal_timestamp_ns_{0};
     std::vector<std::shared_ptr<OutputSink>> output_sinks_;
     std::vector<std::pair<std::shared_ptr<OutputSink>, SinkPredicate>> filtered_sinks_;
+    /// Sign (+1/-1) of the most recently observed non-zero accumulated_bias_.
+    /// 0 = unset (no non-zero bias seen yet). Used for reversal detection.
+    /// Single-threaded: only written inside process_semantic_weight().
+    std::atomic<int> last_bias_sign_{0};
 };
 
 } // namespace llmquant
