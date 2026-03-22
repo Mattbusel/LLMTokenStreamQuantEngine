@@ -533,15 +533,37 @@ int main(int argc, char* argv[]) {
 
 #ifdef LLMQUANT_DEDUP_ENABLED
     // Deduplication layer: skip repeated tokens within a sliding TTL window.
-    auto dedup_backend = std::make_shared<llmquant::InProcessDeduplicator>();
     // Dedup TTL: use config value when set (> 0), else default to 10× the token interval.
-    int dedup_ttl_ms = (sys_config.token_stream.dedup_ttl_ms > 0)
+    const int dedup_ttl_ms = (sys_config.token_stream.dedup_ttl_ms > 0)
         ? sys_config.token_stream.dedup_ttl_ms
         : sys_config.token_stream.token_interval_ms * 10;
+    // Backend selection: Redis (distributed) when redis_url is configured and
+    // LLMQUANT_ENABLE_REDIS=ON; otherwise fall back to in-process.
+    std::shared_ptr<llmquant::DeduplicatorBackend> dedup_backend;
+#if defined(LLMQUANT_REDIS_ENABLED)
+    if (!sys_config.token_stream.redis_url.empty()) {
+        auto redis_backend = std::make_shared<llmquant::RedisDeduplicator>(
+            sys_config.token_stream.redis_url);
+        if (redis_backend->is_connected()) {
+            spdlog::info("[dedup] using Redis backend: {}", sys_config.token_stream.redis_url);
+            redis_backend->set_disconnect_callback([](const std::string& err) {
+                spdlog::warn("[dedup] Redis disconnected: {}; falling back to in-process", err);
+            });
+            dedup_backend = std::move(redis_backend);
+        } else {
+            spdlog::warn("[dedup] Redis connection failed ({}); falling back to in-process",
+                         sys_config.token_stream.redis_url);
+        }
+    }
+#endif
+    if (!dedup_backend) {
+        auto ip = std::make_shared<llmquant::InProcessDeduplicator>();
+        // Prevent unbounded memory growth: purge expired entries every 60 s.
+        ip->start_background_purge(60);
+        dedup_backend = std::move(ip);
+    }
     llmquant::Deduplicator deduplicator(dedup_backend,
         std::chrono::milliseconds(dedup_ttl_ms));
-    // Prevent unbounded memory growth: purge expired entries every 60 s.
-    dedup_backend->start_background_purge(60);
 #endif
 
     // Initialize subsystem components.

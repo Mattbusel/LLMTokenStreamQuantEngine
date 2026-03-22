@@ -16,6 +16,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
 
+### Added (Cycle 41 — 2026-03-21)
+- **Feature** `Config.token_stream.redis_url`: expose Redis URL directly in
+  `config.yaml` and `TokenStreamConfig` struct. Previously the URL was only
+  settable via the `Deduplicator::Config` at runtime; now it can be loaded from
+  YAML on startup and overridden at runtime via `LLMQUANT_DEDUP_REDIS_URL` env
+  var. Serialised to `token_stream.redis_url` in `save_to_yaml()`.
+- **Fuzz** `fuzz/fuzz_pipeline.cpp`: new LibFuzzer harness driving the full
+  5-stage signal pipeline (LLMAdapter → RiskManager → TradeSignalEngine →
+  LatencyController) with fuzz-derived token text and risk config values. Added
+  to `fuzz/CMakeLists.txt`; exercises stateful accumulation across iterations.
+- **Tests**: regression test `test_parse_position_oversized_body_returns_false`
+  in `test_oms_adapter.cpp` — verifies the 4 MB cap in RestOmsAdapter does not
+  crash `parse_position()` on an oversized payload.
+
 ### Fixed (Cycle 40 — 2026-03-21)
 - **Bug fix** `LatencyController::get_stats()`: TOCTOU race between
   `total_measurements_.fetch_add()` and the `min_latency_us_` CAS in

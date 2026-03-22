@@ -516,3 +516,18 @@ TEST(RestOmsAdapterParsingTest, test_error_rate_plus_success_rate_equals_one) {
     EXPECT_DOUBLE_EQ(sum, 0.0)
         << "error_rate + success_rate must be 0 when no requests made";
 }
+
+// ---------------------------------------------------------------------------
+// Test: parse_position handles an oversized body without crashing.
+// Regression for: unbounded response accumulation in poller_thread.
+// ---------------------------------------------------------------------------
+TEST(RestOmsAdapterParsingTest, test_parse_position_oversized_body_returns_false) {
+    TestableRestOmsAdapter adapter(make_rest_config());
+    // Construct a body that is larger than the 4 MB cap used in poller_thread.
+    // parse_position itself must not crash on any input size — the cap prevents
+    // accumulation but parse_position must still handle large payloads safely.
+    std::string big_body(5 * 1024 * 1024, 'x');  // 5 MB of 'x'
+    RiskManager::PositionState out{};
+    EXPECT_FALSE(adapter.test_parse_position(big_body, out))
+        << "A 5 MB body of garbage must not parse as a valid position response";
+}

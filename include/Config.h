@@ -25,6 +25,12 @@ struct TokenStreamConfig {
     bool use_memory_stream{false};
     /** @brief TTL for the in-process deduplicator in milliseconds (0 = 10× token_interval_ms). */
     int dedup_ttl_ms{0};
+    /**
+     * @brief Redis URL for distributed deduplication (e.g. "redis://127.0.0.1:6379").
+     *        Empty string (default) uses the in-process deduplicator.
+     *        Only effective when built with LLMQUANT_ENABLE_REDIS=ON.
+     */
+    std::string redis_url{};
 };
 
 /**

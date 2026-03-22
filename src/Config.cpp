@@ -37,6 +37,7 @@ bool Config::load_from_yaml_string(const std::string& yaml_content) {
             if (ts["buffer_size"]) tmp.token_stream.buffer_size = ts["buffer_size"].as<size_t>();
             if (ts["use_memory_stream"]) tmp.token_stream.use_memory_stream = ts["use_memory_stream"].as<bool>();
             if (ts["dedup_ttl_ms"]) tmp.token_stream.dedup_ttl_ms = ts["dedup_ttl_ms"].as<int>();
+            if (ts["redis_url"])    tmp.token_stream.redis_url    = ts["redis_url"].as<std::string>();
         }
 
         // Trading settings
@@ -283,6 +284,8 @@ std::string Config::to_yaml_string() const {
     yaml["token_stream"]["buffer_size"]       = snap.token_stream.buffer_size;
     yaml["token_stream"]["use_memory_stream"] = snap.token_stream.use_memory_stream;
     yaml["token_stream"]["dedup_ttl_ms"]      = snap.token_stream.dedup_ttl_ms;
+    if (!snap.token_stream.redis_url.empty())
+        yaml["token_stream"]["redis_url"]     = snap.token_stream.redis_url;
 
     // Trading
     yaml["trading"]["bias_sensitivity"]      = snap.trading.bias_sensitivity;
@@ -521,6 +524,15 @@ int Config::load_from_env() {
             std::transform(fmt.begin(), fmt.end(), fmt.begin(),
                            [](unsigned char c){ return std::toupper(c); });
             config_.logging.format = fmt;
+            ++applied;
+        }
+    }
+
+    // Redis dedup URL — override dedup backend at startup.
+    {
+        const char* v = std::getenv("LLMQUANT_DEDUP_REDIS_URL");
+        if (v && v[0] != '\0') {
+            config_.token_stream.redis_url = v;
             ++applied;
         }
     }
