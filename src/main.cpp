@@ -229,10 +229,12 @@ int main(int argc, char* argv[]) {
                       << " (" << LLMQUANT_GIT_COMMIT
                       << ", " << LLMQUANT_BUILD_TIMESTAMP << ")\n";
             return 0;
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
         } else if (arg == "--stream") {
             stream_mode = true;
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 stream_api_key = argv[++i];  // explicit key provided on CLI
+#endif
         } else if (arg == "--no-color") {
             no_color = true;
         } else if (arg == "--debug-raw") {
@@ -910,6 +912,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  TIME(ms)     BIAS      VOL       LATENCY   GATE\n";
     std::cout << DIV2;
 
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
     std::unique_ptr<llmquant::LLMStreamClient> stream_client;
     if (stream_mode) {
         llmquant::LLMStreamClient::Config stream_cfg;
@@ -945,6 +948,15 @@ int main(int argc, char* argv[]) {
     } else {
         token_sim.start();
     }
+#else
+    // LLMStreamClient compiled out: always use the token simulator.
+    if (stream_mode) {
+        spdlog::warn("--stream requested but LLMStreamClient was compiled out "
+                     "(-DLLMQUANT_ENABLE_STREAM_CLIENT=OFF); falling back to simulator.");
+        stream_mode = false;
+    }
+    token_sim.start();
+#endif
 
     // Prometheus metrics endpoint on port 9100.
     // The snapshot is built once per second in the monitoring loop so the
