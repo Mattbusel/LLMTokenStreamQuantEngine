@@ -632,3 +632,51 @@ TEST(MetricsLoggerTest, test_csv_token_with_double_quote_is_escaped) {
         << "embedded double-quotes must be doubled in CSV; line: " << lines.back();
     std::remove(path.c_str());
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 32: control character escaping in JSON output
+// ---------------------------------------------------------------------------
+
+TEST(MetricsLoggerTest, test_json_token_with_tab_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_tab.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path        = path;
+        cfg.format               = MetricsLogger::OutputFormat::JSON;
+        cfg.enable_token_logging = true;
+        MetricsLogger logger(cfg);
+        logger.log_token_received("bull\tish", 99);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    // Raw '\t' must not appear in the JSON token field.
+    EXPECT_EQ(content.find("bull\tish"), std::string::npos)
+        << "raw tab in token must be escaped in JSON output";
+    // Escaped form '\t' must appear.
+    EXPECT_NE(content.find("bull\\tish"), std::string::npos)
+        << "tab must be escaped as \\t in JSON output; content=" << content;
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_json_token_with_newline_is_escaped) {
+    const std::string path = "/tmp/test_metrics_json_newline_token.log";
+    {
+        MetricsLogger::Config cfg;
+        cfg.log_file_path        = path;
+        cfg.format               = MetricsLogger::OutputFormat::JSON;
+        cfg.enable_token_logging = true;
+        MetricsLogger logger(cfg);
+        logger.log_token_received("line1\nline2", 7);
+        logger.flush();
+    }
+    std::ifstream f(path);
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+    EXPECT_EQ(content.find("line1\nline2"), std::string::npos)
+        << "raw newline in token must be escaped in JSON output";
+    EXPECT_NE(content.find("line1\\nline2"), std::string::npos)
+        << "newline must be escaped as \\n; content=" << content;
+    std::remove(path.c_str());
+}

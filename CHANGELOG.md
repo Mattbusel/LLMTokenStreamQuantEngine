@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 32 — 2026-03-21)
+- **Tests**: 2 new `MetricsLogger` JSON control-character escape tests — verify
+  that `\t` (tab) and `\n` (newline) in token text are escaped as `\\t` /
+  `\\n` in JSON output, not emitted as raw control characters
+  (`test_metrics_logger.cpp`).
+- **Docs**: README test count badge updated 907 → 914.
+
 ### Fixed (Cycle 37 — 2026-03-21)
 - **Bug fix / security** `FixOmsAdapter` receive buffer: no cap existed on the
   accumulation buffer. A misbehaving FIX counterparty that never sent a valid
