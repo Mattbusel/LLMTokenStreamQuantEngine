@@ -90,6 +90,7 @@ option(LLMQUANT_ENABLE_STREAM_HEALTH                "Build TokenStreamHealthMoni
 option(LLMQUANT_ENABLE_REGIME_SIZER                 "Build RegimeAwareSizer: integrates Hurst exponent and volatility to dynamically scale trade notional" ON)
 option(LLMQUANT_ENABLE_CONFIDENCE_DECAY             "Build ConfidenceDecayTracker: fits exponential decay model to confidence series to estimate signal half-life" ON)
 option(LLMQUANT_ENABLE_CROSS_ASSET_CORR             "Build CrossAssetCorrelationMonitor: rolling Pearson correlation between sentiment signals across asset symbols" ON)
+option(LLMQUANT_ENABLE_VELOCITY_TRACKER             "Build TokenVelocityTracker: first and second time-derivatives of bias stream for momentum and regime detection" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -842,6 +843,15 @@ if(LLMQUANT_ENABLE_CROSS_ASSET_CORR)
     message(STATUS "Feature: CrossAssetCorrelationMonitor ENABLED (multi-asset signal correlation)")
 else()
     message(STATUS "Feature: CrossAssetCorrelationMonitor DISABLED (LLMQUANT_ENABLE_CROSS_ASSET_CORR=OFF)")
+endif()
+
+# TokenVelocityTracker: first and second time-derivatives of the bias stream.
+if(LLMQUANT_ENABLE_VELOCITY_TRACKER)
+    target_sources(llmquant PRIVATE src/TokenVelocityTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VELOCITY_TRACKER_ENABLED)
+    message(STATUS "Feature: TokenVelocityTracker ENABLED (bias velocity + acceleration)")
+else()
+    message(STATUS "Feature: TokenVelocityTracker DISABLED (LLMQUANT_ENABLE_VELOCITY_TRACKER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

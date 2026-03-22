@@ -74,6 +74,7 @@ add_executable(tests
     unit/test_regime_aware_sizer.cpp
     unit/test_confidence_decay_tracker.cpp
     unit/test_cross_asset_correlation_monitor.cpp
+    unit/test_token_velocity_tracker.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

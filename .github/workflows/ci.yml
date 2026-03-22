@@ -168,7 +168,8 @@ jobs:
             -DLLMQUANT_ENABLE_STREAM_HEALTH=OFF \
             -DLLMQUANT_ENABLE_REGIME_SIZER=OFF \
             -DLLMQUANT_ENABLE_CONFIDENCE_DECAY=OFF \
-            -DLLMQUANT_ENABLE_CROSS_ASSET_CORR=OFF
+            -DLLMQUANT_ENABLE_CROSS_ASSET_CORR=OFF \
+            -DLLMQUANT_ENABLE_VELOCITY_TRACKER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -252,6 +253,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_REGIME_SIZER
           - flag: LLMQUANT_ENABLE_CONFIDENCE_DECAY
           - flag: LLMQUANT_ENABLE_CROSS_ASSET_CORR
+          - flag: LLMQUANT_ENABLE_VELOCITY_TRACKER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
