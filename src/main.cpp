@@ -284,6 +284,21 @@ int main(int argc, char* argv[]) {
 #else
                       << "  LLMQUANT_ENABLE_STREAM_CLIENT OFF\n"
 #endif
+#ifdef LLMQUANT_SIMD_DISABLED
+                      << "  LLMQUANT_ENABLE_SIMD          OFF\n"
+#else
+                      << "  LLMQUANT_ENABLE_SIMD          ON (SSE2"
+#  ifdef LLMQUANT_HAVE_SSE2
+                      << " active)\n"
+#  else
+                      << " not detected — scalar fallback)\n"
+#  endif
+#endif
+#ifdef LLMQUANT_SIGNAL_TRACE_ENABLED
+                      << "  LLMQUANT_ENABLE_SIGNAL_TRACE  ON\n"
+#else
+                      << "  LLMQUANT_ENABLE_SIGNAL_TRACE  OFF\n"
+#endif
                       ;
             return 0;
 #ifdef LLMQUANT_STREAM_CLIENT_ENABLED

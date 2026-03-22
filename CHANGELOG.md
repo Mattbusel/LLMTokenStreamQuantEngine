@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 31 — 2026-03-21)
+- **Feature flag** `LLMQUANT_ENABLE_SIMD` (CMake option, default ON): added to
+  README feature flags table; gates SSE2 batch path in
+  `LLMAdapter::map_sequence_simd`. Set OFF for ARM, 32-bit x86, or reproducibility
+  testing; the scalar fallback path is automatically used.
+- **CI badge** for coverage workflow added to README.
+- **README**: test count badge updated 904 → 907.
+- **SIMD to CI**: `LLMQUANT_ENABLE_SIMD` added to `minimal` build and
+  `feature-flags-matrix` job to verify scalar fallback compiles and passes tests.
+
 ### Fixed (Cycle 31 — 2026-03-21)
 - **Bug fix** `LLMStreamClient::stream_reader`: HTTP 429 rate-limit back-off
   used a 10-second blocking `sleep_for`, and the general HTTP error retry used a
