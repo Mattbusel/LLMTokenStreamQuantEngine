@@ -88,6 +88,7 @@ option(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT            "Build SignalBlindSpotDetect
 option(LLMQUANT_ENABLE_SIGNAL_SURPRISE              "Build SignalSurpriseIndex: Shannon self-information of bias signals relative to their empirical distribution" ON)
 option(LLMQUANT_ENABLE_STREAM_HEALTH                "Build TokenStreamHealthMonitor: watchdog detecting feed stalls and token floods via inter-arrival rate tracking" ON)
 option(LLMQUANT_ENABLE_REGIME_SIZER                 "Build RegimeAwareSizer: integrates Hurst exponent and volatility to dynamically scale trade notional" ON)
+option(LLMQUANT_ENABLE_CONFIDENCE_DECAY             "Build ConfidenceDecayTracker: fits exponential decay model to confidence series to estimate signal half-life" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -822,6 +823,15 @@ if(LLMQUANT_ENABLE_REGIME_SIZER)
     message(STATUS "Feature: RegimeAwareSizer ENABLED (regime + vol position sizing)")
 else()
     message(STATUS "Feature: RegimeAwareSizer DISABLED (LLMQUANT_ENABLE_REGIME_SIZER=OFF)")
+endif()
+
+# ConfidenceDecayTracker: exponential decay fitting for signal confidence half-life.
+if(LLMQUANT_ENABLE_CONFIDENCE_DECAY)
+    target_sources(llmquant PRIVATE src/ConfidenceDecayTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONFIDENCE_DECAY_ENABLED)
+    message(STATUS "Feature: ConfidenceDecayTracker ENABLED (signal confidence half-life)")
+else()
+    message(STATUS "Feature: ConfidenceDecayTracker DISABLED (LLMQUANT_ENABLE_CONFIDENCE_DECAY=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

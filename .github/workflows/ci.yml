@@ -166,7 +166,8 @@ jobs:
             -DLLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_SURPRISE=OFF \
             -DLLMQUANT_ENABLE_STREAM_HEALTH=OFF \
-            -DLLMQUANT_ENABLE_REGIME_SIZER=OFF
+            -DLLMQUANT_ENABLE_REGIME_SIZER=OFF \
+            -DLLMQUANT_ENABLE_CONFIDENCE_DECAY=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -248,6 +249,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_SIGNAL_SURPRISE
           - flag: LLMQUANT_ENABLE_STREAM_HEALTH
           - flag: LLMQUANT_ENABLE_REGIME_SIZER
+          - flag: LLMQUANT_ENABLE_CONFIDENCE_DECAY
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

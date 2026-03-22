@@ -156,6 +156,9 @@
 #ifdef LLMQUANT_STREAM_HEALTH_ENABLED
 #  include "TokenStreamHealthMonitor.h"
 #endif
+#ifdef LLMQUANT_REGIME_SIZER_ENABLED
+#  include "RegimeAwareSizer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1512,6 +1515,20 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_REGIME_SIZER_ENABLED
+    // RegimeAwareSizer: scales notional by Hurst exponent × vol-targeting factor.
+    // update_hurst() and update_vol() should be called after each signal.
+    llmquant::RegimeAwareSizer regime_sizer;
+    {
+        llmquant::RegimeAwareSizer::Config rs_cfg;
+        rs_cfg.target_vol = 0.20;
+        rs_cfg.on_size_change = [](double nw, double old) {
+            spdlog::info("[regime_sizer] multiplier {:.3f}→{:.3f}", old, nw);
+        };
+        regime_sizer.update_config(rs_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -1914,6 +1931,16 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_SURPRISE_ENABLED
         // Compute self-information of this signal relative to learned distribution.
         signal_surprise.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_REGIME_SIZER_ENABLED
+        // Feed Hurst exponent and volatility into the regime-aware position sizer.
+#  ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+        regime_sizer.update_hurst(fractal_dim.hurst());
+#  endif
+#  ifdef LLMQUANT_VOLATILITY_FORECASTER_ENABLED
+        regime_sizer.update_vol(vol_forecaster.annualised_vol());
+#  endif
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3292,6 +3319,15 @@ int main(int argc, char* argv[]) {
                   << "  stalls=" << stream_health.stall_count()
                   << "  floods=" << stream_health.flood_count() << "\n";
     }
+#endif
+#ifdef LLMQUANT_REGIME_SIZER_ENABLED
+    std::cout << "  Regime sizer     : "
+              << "mult=" << std::fixed << std::setprecision(3) << regime_sizer.size_multiplier()
+              << "  H=" << regime_sizer.current_hurst()
+              << "  vol=" << regime_sizer.current_vol()
+              << "  regime_f=" << regime_sizer.regime_factor()
+              << "  vol_f=" << regime_sizer.vol_factor()
+              << "  changes=" << regime_sizer.change_events() << "\n";
 #endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
