@@ -25,7 +25,7 @@ bool AdaptiveVelocityBreaker::record(double bias) noexcept {
         }
 
         double dt_s = std::chrono::duration<double>(now - prev_time_).count();
-        if (dt_s >= cfg_.min_dt_s) {
+        if (dt_s > 0.0 && dt_s >= cfg_.min_dt_s) {
             double instant_vel = std::abs(bias - prev_bias_) / dt_s;
             double cur_ema     = velocity_ema_.load(std::memory_order_relaxed);
             new_vel = cur_ema + cfg_.velocity_alpha * (instant_vel - cur_ema);

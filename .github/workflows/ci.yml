@@ -187,7 +187,9 @@ jobs:
             -DLLMQUANT_ENABLE_ADVERSARIAL_DETECT=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_CI=OFF \
             -DLLMQUANT_ENABLE_TOKEN_RECORDER=OFF \
-            -DLLMQUANT_ENABLE_ENSEMBLE_VOTER=OFF
+            -DLLMQUANT_ENABLE_ENSEMBLE_VOTER=OFF \
+            -DLLMQUANT_ENABLE_SENTIMENT_PERSISTENCE=OFF \
+            -DLLMQUANT_ENABLE_CAUSAL_IMPACT=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -290,6 +292,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_SIGNAL_CI
           - flag: LLMQUANT_ENABLE_TOKEN_RECORDER
           - flag: LLMQUANT_ENABLE_ENSEMBLE_VOTER
+          - flag: LLMQUANT_ENABLE_SENTIMENT_PERSISTENCE
+          - flag: LLMQUANT_ENABLE_CAUSAL_IMPACT
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

@@ -109,6 +109,8 @@ option(LLMQUANT_ENABLE_ADVERSARIAL_DETECT           "Build AdversarialInputDetec
 option(LLMQUANT_ENABLE_SIGNAL_CI                    "Build SignalConfidenceInterval: rolling jackknife confidence interval estimator for trade signal uncertainty" ON)
 option(LLMQUANT_ENABLE_TOKEN_RECORDER               "Build TokenStreamRecorder: append-only binary audit log with CRC-32 integrity and auto-rotation for regulatory compliance" ON)
 option(LLMQUANT_ENABLE_ENSEMBLE_VOTER               "Build EnsembleSignalVoter: weighted vote aggregation (majority/confidence/rank) across multiple named signal sub-models" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_PERSISTENCE        "Build SentimentPersistenceMatrix: Markov-chain model of discretised bias states with transition-probability matrix and stationary distribution" ON)
+option(LLMQUANT_ENABLE_CAUSAL_IMPACT                "Build CausalImpactEstimator: CUSUM structural-break detector that attributes return regime shifts to preceding sentiment events" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1032,6 +1034,24 @@ if(LLMQUANT_ENABLE_ENSEMBLE_VOTER)
     message(STATUS "Feature: EnsembleSignalVoter ENABLED (multi-model consensus)")
 else()
     message(STATUS "Feature: EnsembleSignalVoter DISABLED (LLMQUANT_ENABLE_ENSEMBLE_VOTER=OFF)")
+endif()
+
+# SentimentPersistenceMatrix: Markov-chain transition model for bias states.
+if(LLMQUANT_ENABLE_SENTIMENT_PERSISTENCE)
+    target_sources(llmquant PRIVATE src/SentimentPersistenceMatrix.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED)
+    message(STATUS "Feature: SentimentPersistenceMatrix ENABLED (Markov sentiment-state transitions)")
+else()
+    message(STATUS "Feature: SentimentPersistenceMatrix DISABLED (LLMQUANT_ENABLE_SENTIMENT_PERSISTENCE=OFF)")
+endif()
+
+# CausalImpactEstimator: CUSUM structural-break detector for return series.
+if(LLMQUANT_ENABLE_CAUSAL_IMPACT)
+    target_sources(llmquant PRIVATE src/CausalImpactEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CAUSAL_IMPACT_ENABLED)
+    message(STATUS "Feature: CausalImpactEstimator ENABLED (CUSUM sentiment→return causality)")
+else()
+    message(STATUS "Feature: CausalImpactEstimator DISABLED (LLMQUANT_ENABLE_CAUSAL_IMPACT=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

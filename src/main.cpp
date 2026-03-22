@@ -216,6 +216,12 @@
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
 #  include "SignalConfidenceInterval.h"
 #endif
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+#  include "SentimentPersistenceMatrix.h"
+#endif
+#ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
+#  include "CausalImpactEstimator.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1181,6 +1187,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
     llmquant::TokenNgramProfiler ngram_profiler;
 #endif
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+    llmquant::AdversarialInputDetector adversarial_detector;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1855,7 +1864,7 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
     // AdversarialInputDetector: monitors token stream for weight anomalies,
     // repetition attacks, and vocabulary inflation in real time.
-    llmquant::AdversarialInputDetector adversarial_detector;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::AdversarialInputDetector::Config ad_cfg;
         ad_cfg.anomaly_threshold    = 4.0;
@@ -1892,6 +1901,41 @@ int main(int argc, char* argv[]) {
             spdlog::warn("[signal_ci] WIDE   mean={:.4f} hw={:.4f}", mean, hw);
         };
         signal_ci.update_config(ci_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+    // SentimentPersistenceMatrix: Markov chain over N discretized bias states.
+    // Tracks N×N transition counts, row-normalised probabilities, stickiness,
+    // and a stationary-distribution estimate.  Fires on state transitions.
+    llmquant::SentimentPersistenceMatrix sentiment_persistence;
+    {
+        llmquant::SentimentPersistenceMatrix::Config mp_cfg;
+        mp_cfg.n_states      = 5;
+        mp_cfg.min_row_count = 4;
+        mp_cfg.on_state_change = [](int from, int to, double p) {
+            spdlog::info("[markov] state {} → {} p={:.3f}", from, to, p);
+        };
+        sentiment_persistence.update_config(mp_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
+    // CausalImpactEstimator: CUSUM structural-break detector — attributes
+    // return regime shifts to preceding LLM sentiment events.
+    // Record signals via record_event() and returns via record_return().
+    llmquant::CausalImpactEstimator causal_impact;
+    {
+        llmquant::CausalImpactEstimator::Config ci_causal_cfg;
+        ci_causal_cfg.warmup_window  = 50;
+        ci_causal_cfg.sensitivity    = 0.001;
+        ci_causal_cfg.threshold      = 0.05;
+        ci_causal_cfg.event_lookback = 20;
+        ci_causal_cfg.on_break = [](double stat, const std::string& label, double impact) {
+            spdlog::warn("[causal] break stat={:.4f} event=\"{}\" impact={:.5f}",
+                         stat, label.empty() ? "<none>" : label, impact);
+        };
+        causal_impact.update_config(ci_causal_cfg);
     }
 #endif
 
@@ -2373,6 +2417,17 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
         // Track jackknife CI on bias stream; narrow=reliable, wide=uncertain.
         signal_ci.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+        // Feed each signal's bias shift into the Markov state chain.
+        sentiment_persistence.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
+        // Record the signal as a sentiment event sentinel for causal attribution.
+        // Return observations should be fed from the OMS P&L callback in production.
+        causal_impact.record_event("signal:" + std::to_string(signal.delta_bias_shift));
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3488,6 +3543,20 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+                      << [&]() -> std::string {
+                            int cur  = sentiment_persistence.current_state();
+                            int pred = sentiment_persistence.predicted_state();
+                            std::ostringstream o;
+                            o << "  MKV:";
+                            if (cur < 0) { o << C("\033[90m") << "---" << C("\033[0m"); return o.str(); }
+                            // colour: lower states bearish (red), upper states bullish (green)
+                            const char* col = (cur >= 3) ? "\033[32m" : (cur <= 1) ? "\033[31m" : "\033[33m";
+                            o << C(col) << cur << C("\033[0m");
+                            if (pred >= 0) o << C("\033[90m") << "→" << pred << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -3976,6 +4045,21 @@ int main(int argc, char* argv[]) {
               << "  [" << signal_ci.lower() << ", " << signal_ci.upper() << "]"
               << "  narrow=" << (signal_ci.is_narrow() ? "yes" : "no") << "\n";
 #endif
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+    std::cout << "  Markov chain     : "
+              << "state=" << sentiment_persistence.current_state()
+              << "  predicted=" << sentiment_persistence.predicted_state()
+              << "  stickiness=" << std::fixed << std::setprecision(4) << sentiment_persistence.stickiness()
+              << "  transitions=" << sentiment_persistence.state_changes()
+              << "  records=" << sentiment_persistence.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
+    std::cout << "  Causal impact    : "
+              << "cusum=" << std::fixed << std::setprecision(4) << causal_impact.cusum_stat()
+              << "  break=" << (causal_impact.break_detected() ? "YES" : "no")
+              << "  breaks=" << causal_impact.break_count()
+              << "  obs=" << causal_impact.observation_count() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4140,6 +4224,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
         std::cout << "  [json:signal_ci]  " << signal_ci.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
+        std::cout << "  [json:markov]     " << sentiment_persistence.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
