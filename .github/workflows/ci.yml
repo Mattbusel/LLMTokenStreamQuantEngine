@@ -116,7 +116,9 @@ jobs:
             -DLLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF \
             -DLLMQUANT_ENABLE_BACKTEST=OFF \
             -DLLMQUANT_ENABLE_HEALTH_SERVER=OFF \
-            -DLLMQUANT_ENABLE_KELLY_SIZER=OFF
+            -DLLMQUANT_ENABLE_KELLY_SIZER=OFF \
+            -DLLMQUANT_ENABLE_ADAPTIVE_COOLDOWN=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_BLEND=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -148,6 +150,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_BACKTEST
           - flag: LLMQUANT_ENABLE_HEALTH_SERVER
           - flag: LLMQUANT_ENABLE_KELLY_SIZER
+          - flag: LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN
+          - flag: LLMQUANT_ENABLE_SIGNAL_BLEND
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

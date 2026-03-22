@@ -38,6 +38,8 @@ option(LLMQUANT_ENABLE_CIRCUIT_BREAKER   "Build the pipeline circuit-breaker (au
 option(LLMQUANT_ENABLE_BACKTEST          "Build BacktestRunner: full-pipeline token-sequence replay with PnL statistics" ON)
 option(LLMQUANT_ENABLE_HEALTH_SERVER     "Build the HTTP /health JSON endpoint for Kubernetes liveness/readiness probes" ON)
 option(LLMQUANT_ENABLE_KELLY_SIZER       "Build KellyPositionSizer: Kelly Criterion adaptive position sizing" ON)
+option(LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN "Build AdaptiveCooldownController: latency-aware dynamic signal cooldown" ON)
+option(LLMQUANT_ENABLE_SIGNAL_BLEND      "Build SignalBlendLayer: multi-source confidence-weighted signal blending" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -211,6 +213,24 @@ if(LLMQUANT_ENABLE_KELLY_SIZER)
     message(STATUS "Feature: KellyPositionSizer ENABLED (Kelly Criterion position sizing)")
 else()
     message(STATUS "Feature: KellyPositionSizer DISABLED (LLMQUANT_ENABLE_KELLY_SIZER=OFF)")
+endif()
+
+# AdaptiveCooldownController: latency-aware dynamic signal emission cooldown.
+if(LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN)
+    target_sources(llmquant PRIVATE src/AdaptiveCooldownController.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADAPTIVE_COOLDOWN_ENABLED)
+    message(STATUS "Feature: AdaptiveCooldownController ENABLED (latency-aware cooldown)")
+else()
+    message(STATUS "Feature: AdaptiveCooldownController DISABLED (LLMQUANT_ENABLE_ADAPTIVE_COOLDOWN=OFF)")
+endif()
+
+# SignalBlendLayer: multi-source confidence-weighted signal blending.
+if(LLMQUANT_ENABLE_SIGNAL_BLEND)
+    target_sources(llmquant PRIVATE src/SignalBlendLayer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_BLEND_ENABLED)
+    message(STATUS "Feature: SignalBlendLayer ENABLED (multi-source signal blending)")
+else()
+    message(STATUS "Feature: SignalBlendLayer DISABLED (LLMQUANT_ENABLE_SIGNAL_BLEND=OFF)")
 endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).

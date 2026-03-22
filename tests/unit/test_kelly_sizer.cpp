@@ -1,5 +1,8 @@
+#include <gtest/gtest.h>
+
+#ifdef LLMQUANT_KELLY_SIZER_ENABLED
+
 #include "KellyPositionSizer.h"
-#include "gtest/gtest.h"
 
 #include <cmath>
 #include <string>
@@ -175,3 +178,11 @@ TEST(KellyPositionSizer, ToStatsJsonIsValidJson) {
 }
 
 } // namespace
+
+#else  // LLMQUANT_KELLY_SIZER_ENABLED not defined
+
+TEST(KellySizer, DisabledAtBuildTime) {
+    SUCCEED();
+}
+
+#endif  // LLMQUANT_KELLY_SIZER_ENABLED

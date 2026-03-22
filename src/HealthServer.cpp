@@ -146,6 +146,16 @@ void HealthServer::server_thread() {
             break;
         }
 
+        // Accepted sockets inherit the listen socket's non-blocking flag on
+        // Windows. Reset to blocking so recv waits for the full request before
+        // we decide which response to send.
+#ifdef _WIN32
+        {
+            u_long blocking = 0;
+            ioctlsocket(client, FIONBIO, &blocking);
+        }
+#endif
+
         // Read the HTTP request (we only care about the first line).
         char buf[1024] = {};
         int  n = static_cast<int>(::recv(client, buf, sizeof(buf) - 1, 0));
@@ -171,8 +181,9 @@ void HealthServer::server_thread() {
         if (is_health) {
             response = build_response(ok, body);
             requests_served_.fetch_add(1, std::memory_order_relaxed);
-        } else if (request.find("GET /") != std::string::npos) {
-            // 302 redirect to /health for convenience.
+        } else if (request.find("GET / ") != std::string::npos
+                   || request.find("GET /\r") != std::string::npos) {
+            // 302 redirect to /health only for bare root path.
             response =
                 "HTTP/1.0 302 Found\r\n"
                 "Location: /health\r\n"

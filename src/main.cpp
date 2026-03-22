@@ -36,6 +36,12 @@
 #ifdef LLMQUANT_HEALTH_SERVER_ENABLED
 #  include "HealthServer.h"
 #endif
+#ifdef LLMQUANT_ADAPTIVE_COOLDOWN_ENABLED
+#  include "AdaptiveCooldownController.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_BLEND_ENABLED
+#  include "SignalBlendLayer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1037,6 +1043,12 @@ int main(int argc, char* argv[]) {
     llmquant::KellyPositionSizer kelly_sizer;
 #endif
 
+#ifdef LLMQUANT_ADAPTIVE_COOLDOWN_ENABLED
+    // Adaptive cooldown: widens signal cooldown when P99 latency exceeds budget,
+    // narrows it again during recovery.  Updated by the stats ticker.
+    llmquant::AdaptiveCooldownController adaptive_cooldown;
+#endif
+
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
     std::array<double, kSparkSlots> spark_ring{};
@@ -1385,6 +1397,23 @@ int main(int argc, char* argv[]) {
 
         double backoff = latency_ctrl.get_backoff_multiplier();
         double cpu_fraction = get_process_cpu_fraction();  // sampled once per loop tick
+
+#ifdef LLMQUANT_ADAPTIVE_COOLDOWN_ENABLED
+        // Feed current P99 to the adaptive cooldown controller.
+        // If pressure is detected, update the trade engine's cooldown on the fly.
+        {
+            double p99_us_f = static_cast<double>(stats.p99_latency.count());
+            adaptive_cooldown.update_p99(p99_us_f);
+            if (adaptive_cooldown.is_under_pressure()) {
+                auto new_cd = adaptive_cooldown.get_cooldown();
+                auto te_cfg = trade_engine.get_config();
+                if (te_cfg.signal_cooldown != new_cd) {
+                    te_cfg.signal_cooldown = new_cd;
+                    trade_engine.update_config(te_cfg);
+                }
+            }
+        }
+#endif
 
         // Colour the P99 value: green < 10μs, yellow < 50μs, red otherwise.
         auto p99 = stats.p99_latency.count();
