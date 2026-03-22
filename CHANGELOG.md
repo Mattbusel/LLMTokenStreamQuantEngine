@@ -10,6 +10,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 29 — 2026-03-21)
+- **Docs**: README badge updated 895 → 904; CLAUDE.md test table updated with
+  accurate per-file counts.
+- **Feature flag** `LLMQUANT_ENABLE_SIGNAL_TRACE` (CMake option, default OFF):
+  gates two `spdlog::trace` calls in the `process_token` hot path — one after
+  `map_token_to_weight` (logs token text + raw weights) and one after signal
+  emission (logs accumulated bias/vol + latency). Zero overhead when OFF
+  (compile-time `#ifdef`). Enable with `-DLLMQUANT_ENABLE_SIGNAL_TRACE=ON` for
+  deep debugging; leave OFF in production to avoid trace I/O in the hot path.
+
+### Added (Cycle 29 — 2026-03-21 — hook additions)
 - **Feature flag** `LLMQUANT_ENABLE_STREAM_CLIENT` (CMake option, default ON):
   gates the entire `LLMStreamClient` live-streaming path. When OFF:
   - `LLMStreamClient.h` is not included in `main.cpp`

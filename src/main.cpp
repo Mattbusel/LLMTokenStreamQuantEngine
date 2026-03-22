@@ -840,7 +840,7 @@ int main(int argc, char* argv[]) {
         spdlog::trace("signal bias={:.4f} vol={:.4f} latency={}us",
                       trade_engine.get_accumulated_bias(),
                       trade_engine.get_accumulated_volatility(),
-                      latency_ctrl.get_stats().avg_us);
+                      latency_ctrl.get_stats().avg_latency.count());
 #endif
 
         latency_ctrl.end_measurement();
