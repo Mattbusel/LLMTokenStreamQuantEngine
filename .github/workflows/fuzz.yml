@@ -23,10 +23,12 @@ jobs:
       - name: Configure
         run: CC=clang CXX=clang++ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLLMQUANT_ENABLE_FUZZING=ON -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
       - name: Build
-        run: cmake --build build -j$(nproc) --target fuzz_pipeline fuzz_deduplicator fuzz_token_stream
+        run: cmake --build build -j$(nproc) --target fuzz_pipeline fuzz_deduplicator fuzz_token_stream fuzz_config
       - name: Smoke test (pipeline)
         run: ./build/fuzz_pipeline -runs=500 -max_total_time=30
       - name: Smoke test (deduplicator)
         run: ./build/fuzz_deduplicator -runs=500 -max_total_time=30
       - name: Smoke test (token stream)
         run: ./build/fuzz_token_stream -runs=500 -max_total_time=30
+      - name: Smoke test (config YAML parser)
+        run: ./build/fuzz_config -runs=500 -max_total_time=30

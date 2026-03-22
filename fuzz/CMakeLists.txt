@@ -16,7 +16,7 @@ cmake_minimum_required(VERSION 3.20)
 
 if(LLMQUANT_ENABLE_FUZZING OR ENABLE_FUZZING)
 
-    foreach(_fuzz_target fuzz_deduplicator fuzz_token_stream)
+    foreach(_fuzz_target fuzz_deduplicator fuzz_token_stream fuzz_config)
         add_executable(${_fuzz_target} ${_fuzz_target}.cpp)
 
         target_include_directories(${_fuzz_target}
