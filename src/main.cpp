@@ -2055,6 +2055,32 @@ int main(int argc, char* argv[]) {
                             else                                      col = "\033[90m";
                             return std::string("  MORPH:") + C(col) + current_morphology + C("\033[0m");
                          }()
+                      << [&]() -> std::string {
+                            // Bias Sharpe: mean(bias)/stddev(bias) over the sparkline window.
+                            // Signal-to-noise ratio. |SHP|>1.0=directional, <0.5=noise.
+                            int sh_n = std::min(spark_head.load(std::memory_order_relaxed), kSparkSlots);
+                            if (sh_n < 4) return "";
+                            int sh_start = (spark_head.load(std::memory_order_relaxed) >= kSparkSlots)
+                                           ? (spark_head.load(std::memory_order_relaxed) % kSparkSlots) : 0;
+                            double sh_mean = 0.0, sh_m2 = 0.0;
+                            for (int i = 0; i < sh_n; ++i) {
+                                double x = spark_ring[(sh_start + i) % kSparkSlots];
+                                double d = x - sh_mean;
+                                sh_mean += d / (i + 1);
+                                sh_m2   += d * (x - sh_mean);
+                            }
+                            double sh_std = (sh_n > 1 && sh_m2 > 1e-12)
+                                            ? std::sqrt(sh_m2 / (sh_n - 1)) : 0.0;
+                            if (sh_std < 1e-9) return "";
+                            double sharpe = sh_mean / sh_std;
+                            std::ostringstream o;
+                            o << "  SHP:";
+                            if      (sharpe >  1.0) o << C("\033[32m");
+                            else if (sharpe < -1.0) o << C("\033[31m");
+                            else                    o << C("\033[90m");
+                            o << std::showpos << std::fixed << std::setprecision(2) << sharpe << C("\033[0m");
+                            return o.str();
+                         }()
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
