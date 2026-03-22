@@ -153,6 +153,13 @@ option(LLMQUANT_ENABLE_CLIP_MONITOR                 "Build BiasClipMonitor: trac
 option(LLMQUANT_ENABLE_INTENSITY_RAMP               "Build NarrativeIntensityRamp: detects sustained upward or downward ramp in bias magnitude; fires on_ramp_start/stop" ON)
 option(LLMQUANT_ENABLE_ZSCORE_TRACKER               "Build SentimentZScoreTracker: rolling Z-score of bias relative to expanding or rolling mean/std; fires on_extreme_zscore" ON)
 option(LLMQUANT_ENABLE_CONFLUENCE_DETECTOR          "Build SignalConfluenceDetector: detects when multiple independent signal dimensions agree simultaneously; fires on_confluence" ON)
+option(LLMQUANT_ENABLE_MULTI_FEED_AGGREGATOR        "Build MultiFeedSignalAggregator: weighted consensus aggregation across N concurrent LLM feeds with inter-feed divergence detection" ON)
+option(LLMQUANT_ENABLE_SIGNAL_CUSUM                 "Build SignalCUSUMController: CUSUM control chart for detecting sustained step-changes in signal mean; complements z-score spike detection" ON)
+option(LLMQUANT_ENABLE_MOMENTUM_INDEX               "Build BiasMomentumIndex: MACD-style dual-EMA momentum index; fires on_bullish_crossover/on_bearish_crossover on signal line crossings" ON)
+option(LLMQUANT_ENABLE_GAIN_LOSS_RATIO              "Build SignalGainLossRatio: rolling G/L ratio = gain_sum/loss_sum; fires on_high_gain/on_high_loss for directional edge detection" ON)
+option(LLMQUANT_ENABLE_TSMI                         "Build TokenSentimentMomentumIndex: composite ROC+acceleration+SSI momentum index in [-1,1]; fires on_momentum_shift on zero-cross" ON)
+option(LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX     "Build BiasRegimeTransitionMatrix: empirical Markov transition matrix over discretised bias regimes; fires on_likely_transition" ON)
+option(LLMQUANT_ENABLE_REVERSAL_DETECTOR            "Build SignalReversalDetector: price-action-style thrust+counter-move reversal pattern detector; fires on_bullish/bearish_reversal" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1499,6 +1506,69 @@ if(LLMQUANT_ENABLE_CONFLUENCE_DETECTOR)
     message(STATUS "Feature: SignalConfluenceDetector ENABLED (multi-dimension confluence, on_confluence callback)")
 else()
     message(STATUS "Feature: SignalConfluenceDetector DISABLED (LLMQUANT_ENABLE_CONFLUENCE_DETECTOR=OFF)")
+endif()
+
+# MultiFeedSignalAggregator: weighted consensus aggregation across N LLM feeds.
+if(LLMQUANT_ENABLE_MULTI_FEED_AGGREGATOR)
+    target_sources(llmquant PRIVATE src/MultiFeedSignalAggregator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED)
+    message(STATUS "Feature: MultiFeedSignalAggregator ENABLED (weighted multi-feed consensus, divergence detection)")
+else()
+    message(STATUS "Feature: MultiFeedSignalAggregator DISABLED (LLMQUANT_ENABLE_MULTI_FEED_AGGREGATOR=OFF)")
+endif()
+
+# SignalCUSUMController: CUSUM two-sided control chart for step-change detection.
+if(LLMQUANT_ENABLE_SIGNAL_CUSUM)
+    target_sources(llmquant PRIVATE src/SignalCUSUMController.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_CUSUM_ENABLED)
+    message(STATUS "Feature: SignalCUSUMController ENABLED (CUSUM upward/downward shift detection)")
+else()
+    message(STATUS "Feature: SignalCUSUMController DISABLED (LLMQUANT_ENABLE_SIGNAL_CUSUM=OFF)")
+endif()
+
+# BiasMomentumIndex: MACD-style dual-EMA momentum oscillator.
+if(LLMQUANT_ENABLE_MOMENTUM_INDEX)
+    target_sources(llmquant PRIVATE src/BiasMomentumIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MOMENTUM_INDEX_ENABLED)
+    message(STATUS "Feature: BiasMomentumIndex ENABLED (MACD fast/slow/signal EMAs, crossover callbacks)")
+else()
+    message(STATUS "Feature: BiasMomentumIndex DISABLED (LLMQUANT_ENABLE_MOMENTUM_INDEX=OFF)")
+endif()
+
+# SignalGainLossRatio: rolling gain/loss ratio for directional edge detection.
+if(LLMQUANT_ENABLE_GAIN_LOSS_RATIO)
+    target_sources(llmquant PRIVATE src/SignalGainLossRatio.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_GAIN_LOSS_RATIO_ENABLED)
+    message(STATUS "Feature: SignalGainLossRatio ENABLED (rolling G/L ratio, on_high_gain/loss)")
+else()
+    message(STATUS "Feature: SignalGainLossRatio DISABLED (LLMQUANT_ENABLE_GAIN_LOSS_RATIO=OFF)")
+endif()
+
+# TokenSentimentMomentumIndex: composite ROC+acceleration+SSI momentum index.
+if(LLMQUANT_ENABLE_TSMI)
+    target_sources(llmquant PRIVATE src/TokenSentimentMomentumIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TSMI_ENABLED)
+    message(STATUS "Feature: TokenSentimentMomentumIndex ENABLED (composite [-1,1] momentum, on_momentum_shift)")
+else()
+    message(STATUS "Feature: TokenSentimentMomentumIndex DISABLED (LLMQUANT_ENABLE_TSMI=OFF)")
+endif()
+
+# BiasRegimeTransitionMatrix: empirical Markov transition matrix for bias regimes.
+if(LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX)
+    target_sources(llmquant PRIVATE src/BiasRegimeTransitionMatrix.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_TRANSITION_MATRIX_ENABLED)
+    message(STATUS "Feature: BiasRegimeTransitionMatrix ENABLED (empirical Markov transitions, on_likely_transition)")
+else()
+    message(STATUS "Feature: BiasRegimeTransitionMatrix DISABLED (LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX=OFF)")
+endif()
+
+# SignalReversalDetector: thrust+counter-move reversal pattern detector.
+if(LLMQUANT_ENABLE_REVERSAL_DETECTOR)
+    target_sources(llmquant PRIVATE src/SignalReversalDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REVERSAL_DETECTOR_ENABLED)
+    message(STATUS "Feature: SignalReversalDetector ENABLED (price-action reversals, on_bullish/bearish_reversal)")
+else()
+    message(STATUS "Feature: SignalReversalDetector DISABLED (LLMQUANT_ENABLE_REVERSAL_DETECTOR=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

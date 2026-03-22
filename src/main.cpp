@@ -318,6 +318,12 @@
 #ifdef LLMQUANT_COVERAGE_METER_ENABLED
 #  include "SignalCoverageMeter.h"
 #endif
+#ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
+#  include "MultiFeedSignalAggregator.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
+#  include "SignalCUSUMController.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1309,6 +1315,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_LATENCY_JITTER_ENABLED
     llmquant::LatencyJitterMonitor latency_jitter;
+#endif
+#ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
+    llmquant::SignalCUSUMController signal_cusum;
 #endif
 
     // Shared token processing lambda used by both the simulator and the
@@ -2733,6 +2742,46 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
+    // MultiFeedSignalAggregator: weighted consensus across N LLM feeds.
+    // Default config registers a single "primary" feed matching this pipeline.
+    // Additional feeds can be wired in at integration time via update_config().
+    llmquant::MultiFeedSignalAggregator multi_feed_agg;
+    {
+        llmquant::MultiFeedSignalAggregator::Config mf_cfg;
+        mf_cfg.divergence_threshold = 0.5;
+        mf_cfg.clear_hysteresis     = 0.70;
+        mf_cfg.min_feeds_active     = 1;  // single feed — no divergence in default pipeline
+        mf_cfg.feeds = {{"primary", 1.0, 0.20}};
+        mf_cfg.on_divergence = [](double div, const std::string& dom) {
+            spdlog::warn("[multi_feed] DIVERGED div={:.3f} dominant={}", div, dom);
+        };
+        mf_cfg.on_convergence = [](double div) {
+            spdlog::info("[multi_feed] converged div={:.3f}", div);
+        };
+        multi_feed_agg.update_config(mf_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
+    // SignalCUSUMController: CUSUM control chart for step-change detection.
+    // Complements z-score anomaly detection by accumulating small shifts.
+    {
+        llmquant::SignalCUSUMController::Config cusum_cfg;
+        cusum_cfg.target_mean    = 0.0;
+        cusum_cfg.allowance      = 0.05;  // detect shifts > 0.05 from neutral
+        cusum_cfg.threshold      = 3.0;
+        cusum_cfg.reset_on_alarm = true;
+        cusum_cfg.on_upward_shift = [](double s) {
+            spdlog::warn("[cusum] UPWARD SHIFT S+={:.3f} — sustained positive sentiment step change", s);
+        };
+        cusum_cfg.on_downward_shift = [](double s) {
+            spdlog::warn("[cusum] DOWNWARD SHIFT S-={:.3f} — sustained negative sentiment step change", s);
+        };
+        signal_cusum.update_config(cusum_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -3329,6 +3378,14 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_COVERAGE_METER_ENABLED
         // Update rolling bias range coverage.
         coverage_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
+        // Update CUSUM accumulators for step-change detection.
+        signal_cusum.update(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
+        // Feed primary signal into multi-feed aggregator (single-feed mode by default).
+        multi_feed_agg.record("primary", signal.delta_bias_shift, signal.confidence);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -5483,6 +5540,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_COVERAGE_METER_ENABLED
         std::cout << "  [json:coverage]   " << coverage_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MULTI_FEED_AGGREGATOR_ENABLED
+        std::cout << "  [json:multi_feed] " << multi_feed_agg.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CUSUM_ENABLED
+        std::cout << "  [json:cusum]      " << signal_cusum.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
