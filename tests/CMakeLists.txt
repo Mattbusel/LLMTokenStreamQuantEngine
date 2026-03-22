@@ -1,4 +1,4 @@
-add_executable(tests
+﻿add_executable(tests
     unit/test_config.cpp
     unit/test_llm_adapter.cpp
     unit/test_latency_controller.cpp
@@ -75,6 +75,13 @@ add_executable(tests
     unit/test_confidence_decay_tracker.cpp
     unit/test_cross_asset_correlation_monitor.cpp
     unit/test_token_velocity_tracker.cpp
+    unit/test_narrative_momentum_clock.cpp
+    unit/test_adaptive_velocity_breaker.cpp
+    unit/test_signal_calibration_engine.cpp
+    unit/test_token_bias_heatmap.cpp
+    unit/test_walk_forward_validator.cpp
+    unit/test_order_flow_imbalance_detector.cpp
+    unit/test_cross_session_memory.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
@@ -99,7 +106,7 @@ endif()
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests
-    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*:*NarrativeChange*:*PnLAttribution*:*PortfolioHeat*:*TokenBurstDetector*:*SignalPersistence*:*RollingSharpeBias*:*ContextWindowBudget*:*FractalDimension*:*MarketMicrostructure*:*SignalEnsemble*:*SignalMomentum*:*OrderBookSimulator*:*TokenSentimentHeatmap*:*CVaRCalculator*:*TemporalPattern*:*FeedbackLoop*:*SentimentCycle*:*AdaptiveSampling*:*MutualInformation*:*SignalBlindSpot*:*SignalSurprise*:*StreamHealth*:*RegimeSizer*:*ConfidenceDecay*:*CrossAsset*"
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*:*NarrativeChange*:*PnLAttribution*:*PortfolioHeat*:*TokenBurstDetector*:*SignalPersistence*:*RollingSharpeBias*:*ContextWindowBudget*:*FractalDimension*:*MarketMicrostructure*:*SignalEnsemble*:*SignalMomentum*:*OrderBookSimulator*:*TokenSentimentHeatmap*:*CVaRCalculator*:*TemporalPattern*:*FeedbackLoop*:*SentimentCycle*:*AdaptiveSampling*:*MutualInformation*:*SignalBlindSpot*:*SignalSurprise*:*StreamHealth*:*RegimeSizer*:*ConfidenceDecay*:*CrossAsset*:*VelocityTracker*:*NarrativeMomentum*:*AdaptiveVelocity*:*SignalCalibration*:*WalkForward*:*OrderFlowImbalance*:*TokenBiasHeatmap*:*CrossSessionMemory*"
 )
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 

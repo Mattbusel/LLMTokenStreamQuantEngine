@@ -85,15 +85,13 @@ TEST(SignalBlindSpotDetector, BlindSpotDetectedAfterMinSamples) {
 
 TEST(SignalBlindSpotDetector, SlotRecoverAfterWins) {
     SignalBlindSpotDetector::Config cfg;
-    // ema_count with forgetting=0.8 converges to 1/(1-0.8)=5 but never reaches it exactly.
-    // Use min_samples=3 so the EMA count crosses the threshold quickly.
-    cfg.min_samples          = 3;
+    cfg.min_samples          = 5;
     cfg.blind_spot_threshold = 0.3;
-    cfg.forgetting           = 0.8;  // faster forgetting for test speed
+    cfg.forgetting           = 0.9;
     SignalBlindSpotDetector det(cfg);
 
-    // Make slot 2 a blind spot.
-    for (int i = 0; i < 20; ++i) det.record_outcome(2, false);
+    // Make slot 2 a blind spot (30 losses with forgetting=0.9 to guarantee convergence).
+    for (int i = 0; i < 30; ++i) det.record_outcome(2, false);
     EXPECT_TRUE(det.is_blind_spot(2));
 
     // Flood with wins; forgetting factor 0.8 means old losses decay fast.

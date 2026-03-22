@@ -165,6 +165,27 @@
 #ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
 #  include "CrossAssetCorrelationMonitor.h"
 #endif
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+#  include "TokenVelocityTracker.h"
+#endif
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+#  include "NarrativeMomentumClock.h"
+#endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+#  include "AdaptiveVelocityBreaker.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_CALIBRATION_ENABLED
+#  include "SignalCalibrationEngine.h"
+#endif
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+#  include "TokenBiasHeatmap.h"
+#endif
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+#  include "OrderFlowImbalanceDetector.h"
+#endif
+#ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
+#  include "CrossSessionMemory.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1191,6 +1212,14 @@ int main(int argc, char* argv[]) {
         // Reinforce the decay envelope with each token's directional bias.
         signal_decay.reinforce(weight.directional_bias);
 #endif
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+        // Accumulate per-token signed bias so operators can identify dominant tokens.
+        token_bias_heatmap.record(text, weight.directional_bias);
+#endif
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+        // Also feed raw token text into the keyword dictionary matcher.
+        order_flow_detector.record(text);
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -1566,6 +1595,104 @@ int main(int argc, char* argv[]) {
         cross_asset_corr.register_asset("bias");
         cross_asset_corr.register_asset("vol");
         cross_asset_corr.register_asset("confidence");
+    }
+#endif
+
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+    // TokenVelocityTracker: measures first and second time-derivatives of bias.
+    // High velocity = rapid sentiment shift; high acceleration = regime change.
+    llmquant::TokenVelocityTracker velocity_tracker;
+    {
+        llmquant::TokenVelocityTracker::Config vt_cfg;
+        vt_cfg.window_size         = 16;
+        vt_cfg.fast_move_threshold = 0.5;
+        vt_cfg.on_fast_move = [](double vel, double accel) {
+            spdlog::warn("[velocity] fast move  vel={:.4f}  accel={:.4f}", vel, accel);
+        };
+        velocity_tracker.update_config(vt_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+    // NarrativeMomentumClock: four-quadrant investment-clock on smoothed bias.
+    // Rising(Q1)/Fading(Q2)/Falling(Q3)/Recovering(Q4) — fires on rotation.
+    llmquant::NarrativeMomentumClock narrative_clock;
+    {
+        llmquant::NarrativeMomentumClock::Config nc_cfg;
+        nc_cfg.bias_alpha     = 0.10;
+        nc_cfg.velocity_alpha = 0.20;
+        nc_cfg.on_quadrant_change = [](llmquant::NarrativeMomentumClock::Quadrant from,
+                                       llmquant::NarrativeMomentumClock::Quadrant to,
+                                       double b, double v) {
+            static const char* names[] = {"Rising", "Fading", "Falling", "Recovering"};
+            spdlog::info("[clock] {} → {}  bias={:.4f}  vel={:.5f}",
+                         names[static_cast<int>(from)], names[static_cast<int>(to)], b, v);
+        };
+        narrative_clock.update_config(nc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+    // AdaptiveVelocityBreaker: EMA-smoothed circuit-breaker that trips when
+    // bias changes too rapidly, guarding against reflexive LLM feedback loops.
+    llmquant::AdaptiveVelocityBreaker velocity_breaker;
+    {
+        llmquant::AdaptiveVelocityBreaker::Config vb_cfg;
+        vb_cfg.trip_threshold   = 10.0;
+        vb_cfg.recovery_factor  = 0.5;
+        vb_cfg.velocity_alpha   = 0.3;
+        vb_cfg.on_trip = [](double vel) {
+            spdlog::warn("[vel_breaker] TRIPPED  smoothed_vel={:.4f}", vel);
+        };
+        vb_cfg.on_recovery = [](double vel) {
+            spdlog::info("[vel_breaker] RECOVERED  smoothed_vel={:.4f}", vel);
+        };
+        velocity_breaker.update_config(vb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CALIBRATION_ENABLED
+    // SignalCalibrationEngine: online Platt-scaling logistic calibration that
+    // maps raw confidence scores to well-calibrated P(win) probabilities.
+    llmquant::SignalCalibrationEngine signal_calibration;
+#endif
+
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+    // TokenBiasHeatmap: accumulates per-token signed bias contributions so
+    // operators can spot which tokens dominate the signal energy.
+    llmquant::TokenBiasHeatmap token_bias_heatmap;
+#endif
+
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+    // OrderFlowImbalanceDetector: EMA of buy/sell pressure from LLM token
+    // keywords; fires callback when imbalance exceeds the threshold.
+    llmquant::OrderFlowImbalanceDetector order_flow_detector;
+    {
+        llmquant::OrderFlowImbalanceDetector::Config of_cfg;
+        of_cfg.ema_alpha            = 0.1;
+        of_cfg.imbalance_threshold  = 0.6;
+        of_cfg.on_imbalance = [](double imb, bool buy) {
+            spdlog::info("[order_flow] imbalance={:.3f}  side={}", imb, buy ? "BUY" : "SELL");
+        };
+        order_flow_detector.update_config(of_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
+    // CrossSessionMemory: persist Kelly / drawdown state across restarts
+    // so the engine warms up instantly rather than starting cold.
+    llmquant::CrossSessionMemory cross_session_mem;
+    {
+        llmquant::CrossSessionMemory::Config csm_cfg;
+        csm_cfg.ignore_missing = true;
+        csm_cfg.on_load = [](const std::string& path, uint64_t sess) {
+            spdlog::info("[cross_session] loaded session={} from {}", sess, path);
+        };
+        csm_cfg.on_save = [](const std::string& path, uint64_t sess) {
+            spdlog::info("[cross_session] saved  session={} to {}", sess, path);
+        };
+        cross_session_mem.update_config(csm_cfg);
+        cross_session_mem.load();  // warm start
     }
 #endif
 
@@ -1994,6 +2121,31 @@ int main(int argc, char* argv[]) {
         cross_asset_corr.record("vol",        signal.volatility_adjustment);
         cross_asset_corr.record("confidence", signal.confidence);
 #endif
+
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+        velocity_tracker.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+        narrative_clock.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+        // Trip the breaker if bias velocity is excessive; block signal when open.
+        (void)velocity_breaker.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SIGNAL_CALIBRATION_ENABLED
+        // Record a synthetic outcome: positive confidence = treat as win.
+        // In production, wire record_outcome() from the OMS P&L callback.
+        signal_calibration.record_outcome(signal.confidence, signal.confidence > 0.5);
+#endif
+
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+        // Push the raw bias as a signed pressure proxy.
+        order_flow_detector.record_pressure(signal.delta_bias_shift);
+#endif
+
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
@@ -3077,6 +3229,37 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+                      << [&]() -> std::string {
+                            // Bias velocity: green=fast-positive, red=fast-negative, grey=slow.
+                            double v = velocity_tracker.velocity();
+                            bool   fast = velocity_tracker.is_fast_move();
+                            std::ostringstream o;
+                            o << "  VEL:";
+                            if      (fast && v > 0) o << C("\033[32m");   // green  = fast bullish
+                            else if (fast && v < 0) o << C("\033[31m");   // red    = fast bearish
+                            else                    o << C("\033[90m");   // grey   = slow
+                            o << std::showpos << std::fixed << std::setprecision(3) << v << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+                      << [&]() -> std::string {
+                            // Narrative clock quadrant: Q1=Rising/Q2=Fading/Q3=Falling/Q4=Recovering.
+                            auto q = narrative_clock.quadrant();
+                            using Q = llmquant::NarrativeMomentumClock::Quadrant;
+                            std::ostringstream o;
+                            o << "  CLK:";
+                            switch (q) {
+                                case Q::Rising:     o << C("\033[32m") << "Q1"; break;  // green
+                                case Q::Fading:     o << C("\033[33m") << "Q2"; break;  // yellow
+                                case Q::Falling:    o << C("\033[31m") << "Q3"; break;  // red
+                                case Q::Recovering: o << C("\033[36m") << "Q4"; break;  // cyan
+                            }
+                            o << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -3397,6 +3580,27 @@ int main(int argc, char* argv[]) {
               << "  high_events=" << cross_asset_corr.high_corr_events()
               << "  low_events=" << cross_asset_corr.low_corr_events() << "\n";
 #endif
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+    std::cout << "  Bias velocity    : "
+              << "vel=" << std::showpos << std::fixed << std::setprecision(4)
+              << velocity_tracker.velocity()
+              << "  accel=" << velocity_tracker.acceleration()
+              << "  fast_move=" << (velocity_tracker.is_fast_move() ? "YES" : "no")
+              << "  n=" << velocity_tracker.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+    {
+        using Q = llmquant::NarrativeMomentumClock::Quadrant;
+        static const char* qnames[] = {"Rising(Q1)", "Fading(Q2)", "Falling(Q3)", "Recovering(Q4)"};
+        std::cout << "  Narrative clock  : "
+                  << "quadrant=" << qnames[static_cast<int>(narrative_clock.quadrant())]
+                  << "  transitions=" << narrative_clock.quadrant_transitions()
+                  << "  bias_ema=" << std::noshowpos << std::fixed << std::setprecision(5)
+                  << narrative_clock.bias_ema()
+                  << "  vel_ema=" << narrative_clock.velocity_ema()
+                  << "  n=" << narrative_clock.total_records() << "\n";
+    }
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3428,6 +3632,47 @@ int main(int argc, char* argv[]) {
               << "  peak_lag=" << feedback_detector.peak_lag()
               << "  detected=" << (feedback_detector.feedback_detected() ? "YES" : "no")
               << "  events=" << feedback_detector.feedback_events() << "\n";
+#endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+    std::cout << "  Vel breaker      : "
+              << "open=" << (velocity_breaker.is_open() ? "YES" : "no")
+              << "  trips=" << velocity_breaker.trip_count()
+              << "  vel=" << std::fixed << std::setprecision(4) << velocity_breaker.smoothed_velocity() << "\n";
+#endif
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+    std::cout << "  Order flow imb   : "
+              << "imb=" << std::showpos << std::fixed << std::setprecision(3) << order_flow_detector.imbalance()
+              << std::noshowpos
+              << "  events=" << order_flow_detector.imbalance_events()
+              << "  tokens=" << order_flow_detector.total_tokens() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+    {
+        auto top = token_bias_heatmap.top_by_abs_contribution(3);
+        std::cout << "  Token heatmap    : distinct=" << token_bias_heatmap.distinct_tokens()
+                  << "  records=" << token_bias_heatmap.total_records();
+        if (!top.empty()) {
+            std::cout << "  top=[";
+            for (size_t i = 0; i < top.size(); ++i) {
+                if (i > 0) std::cout << ",";
+                std::cout << top[i].token << ":" << std::showpos << std::fixed
+                          << std::setprecision(3) << top[i].total_bias << std::noshowpos;
+            }
+            std::cout << "]";
+        }
+        std::cout << "\n";
+    }
+#endif
+#ifdef LLMQUANT_SIGNAL_CALIBRATION_ENABLED
+    std::cout << "  Sig calibration  : "
+              << "samples=" << signal_calibration.sample_count()
+              << "  ece=" << std::fixed << std::setprecision(4) << signal_calibration.expected_calibration_error()
+              << "  A=" << signal_calibration.platt_a()
+              << "  B=" << signal_calibration.platt_b() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
+    std::cout << "  Cross-session    : session=" << cross_session_mem.session_number()
+              << "  loaded=" << (cross_session_mem.has_loaded_state() ? "yes" : "no") << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
@@ -3545,6 +3790,27 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
         std::cout << "  [json:xcorr]   " << cross_asset_corr.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_VELOCITY_TRACKER_ENABLED
+        std::cout << "  [json:vel]     " << velocity_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_CLOCK_ENABLED
+        std::cout << "  [json:clock]   " << narrative_clock.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+        std::cout << "  [json:vbreaker] " << velocity_breaker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CALIBRATION_ENABLED
+        std::cout << "  [json:sigcal]   " << signal_calibration.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
+        std::cout << "  [json:heatmap]  " << token_bias_heatmap.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
+        std::cout << "  [json:oflow]    " << order_flow_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
+        std::cout << "  [json:session]  " << cross_session_mem.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

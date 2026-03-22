@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(LLMTokenStreamQuantEngine VERSION 1.2.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
@@ -91,6 +91,13 @@ option(LLMQUANT_ENABLE_REGIME_SIZER                 "Build RegimeAwareSizer: int
 option(LLMQUANT_ENABLE_CONFIDENCE_DECAY             "Build ConfidenceDecayTracker: fits exponential decay model to confidence series to estimate signal half-life" ON)
 option(LLMQUANT_ENABLE_CROSS_ASSET_CORR             "Build CrossAssetCorrelationMonitor: rolling Pearson correlation between sentiment signals across asset symbols" ON)
 option(LLMQUANT_ENABLE_VELOCITY_TRACKER             "Build TokenVelocityTracker: first and second time-derivatives of bias stream for momentum and regime detection" ON)
+option(LLMQUANT_ENABLE_NARRATIVE_CLOCK              "Build NarrativeMomentumClock: four-quadrant investment-clock mapping (bias_ema, velocity_ema) to narrative rotation phases" ON)
+option(LLMQUANT_ENABLE_VELOCITY_BREAKER             "Build AdaptiveVelocityBreaker: EMA-smoothed velocity circuit-breaker that trips on runaway bias oscillations" ON)
+option(LLMQUANT_ENABLE_ORDER_FLOW_IMBALANCE        "Build OrderFlowImbalanceDetector: EMA buy/sell pressure from LLM token keywords" ON)
+option(LLMQUANT_ENABLE_WALK_FORWARD                 "Build WalkForwardValidator: rolling walk-forward out-of-sample validation with optional ParameterSweep per fold" ON)
+option(LLMQUANT_ENABLE_SIGNAL_CALIBRATION           "Build SignalCalibrationEngine: online Platt-scaling logistic calibration for raw signal confidence scores" ON)
+option(LLMQUANT_ENABLE_TOKEN_BIAS_HEATMAP           "Build TokenBiasHeatmap: per-token cumulative bias contribution tracker with top-N query and capacity cap" ON)
+option(LLMQUANT_ENABLE_CROSS_SESSION_MEMORY         "Build CrossSessionMemory: persist Kelly/drawdown state across process restarts for warm-start behaviour" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -852,6 +859,69 @@ if(LLMQUANT_ENABLE_VELOCITY_TRACKER)
     message(STATUS "Feature: TokenVelocityTracker ENABLED (bias velocity + acceleration)")
 else()
     message(STATUS "Feature: TokenVelocityTracker DISABLED (LLMQUANT_ENABLE_VELOCITY_TRACKER=OFF)")
+endif()
+
+# NarrativeMomentumClock: four-quadrant investment-clock on smoothed bias+velocity.
+if(LLMQUANT_ENABLE_NARRATIVE_CLOCK)
+    target_sources(llmquant PRIVATE src/NarrativeMomentumClock.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_CLOCK_ENABLED)
+    message(STATUS "Feature: NarrativeMomentumClock ENABLED (four-quadrant narrative rotation)")
+else()
+    message(STATUS "Feature: NarrativeMomentumClock DISABLED (LLMQUANT_ENABLE_NARRATIVE_CLOCK=OFF)")
+endif()
+
+# AdaptiveVelocityBreaker: EMA-smoothed velocity circuit breaker.
+if(LLMQUANT_ENABLE_VELOCITY_BREAKER)
+    target_sources(llmquant PRIVATE src/AdaptiveVelocityBreaker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VELOCITY_BREAKER_ENABLED)
+    message(STATUS "Feature: AdaptiveVelocityBreaker ENABLED (velocity circuit breaker)")
+else()
+    message(STATUS "Feature: AdaptiveVelocityBreaker DISABLED (LLMQUANT_ENABLE_VELOCITY_BREAKER=OFF)")
+endif()
+
+# WalkForwardValidator: rolling OOS validation with optional parameter sweep.
+if(LLMQUANT_ENABLE_WALK_FORWARD)
+    target_sources(llmquant PRIVATE src/WalkForwardValidator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_WALK_FORWARD_ENABLED)
+    message(STATUS "Feature: WalkForwardValidator ENABLED (walk-forward OOS validation)")
+else()
+    message(STATUS "Feature: WalkForwardValidator DISABLED (LLMQUANT_ENABLE_WALK_FORWARD=OFF)")
+endif()
+
+# SignalCalibrationEngine: online Platt-scaling logistic calibration.
+if(LLMQUANT_ENABLE_SIGNAL_CALIBRATION)
+    target_sources(llmquant PRIVATE src/SignalCalibrationEngine.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_CALIBRATION_ENABLED)
+    message(STATUS "Feature: SignalCalibrationEngine ENABLED (Platt confidence calibration)")
+else()
+    message(STATUS "Feature: SignalCalibrationEngine DISABLED (LLMQUANT_ENABLE_SIGNAL_CALIBRATION=OFF)")
+endif()
+
+# OrderFlowImbalanceDetector: EMA of buy/sell pressure from token keywords.
+if(LLMQUANT_ENABLE_ORDER_FLOW_IMBALANCE)
+    target_sources(llmquant PRIVATE src/OrderFlowImbalanceDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED)
+    message(STATUS "Feature: OrderFlowImbalanceDetector ENABLED")
+else()
+    message(STATUS "Feature: OrderFlowImbalanceDetector DISABLED (LLMQUANT_ENABLE_ORDER_FLOW_IMBALANCE=OFF)")
+endif()
+
+# TokenBiasHeatmap: per-token cumulative bias contribution tracker.
+if(LLMQUANT_ENABLE_TOKEN_BIAS_HEATMAP)
+    target_sources(llmquant PRIVATE src/TokenBiasHeatmap.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED)
+    message(STATUS "Feature: TokenBiasHeatmap ENABLED (per-token bias heatmap)")
+else()
+    message(STATUS "Feature: TokenBiasHeatmap DISABLED (LLMQUANT_ENABLE_TOKEN_BIAS_HEATMAP=OFF)")
+endif()
+
+# CrossSessionMemory: persist Kelly / drawdown state across process restarts.
+if(LLMQUANT_ENABLE_CROSS_SESSION_MEMORY)
+    target_sources(llmquant PRIVATE src/CrossSessionMemory.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CROSS_SESSION_MEMORY_ENABLED)
+    message(STATUS "Feature: CrossSessionMemory ENABLED (warm-start state persistence)")
+else()
+    message(STATUS "Feature: CrossSessionMemory DISABLED (LLMQUANT_ENABLE_CROSS_SESSION_MEMORY=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
