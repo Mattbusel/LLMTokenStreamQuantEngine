@@ -1988,6 +1988,13 @@ int main(int argc, char* argv[]) {
         conf_decay.record(signal.confidence);
 #endif
 
+#ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
+        // Track rolling correlation between bias, vol, and confidence streams.
+        cross_asset_corr.record("bias",       signal.delta_bias_shift);
+        cross_asset_corr.record("vol",        signal.volatility_adjustment);
+        cross_asset_corr.record("confidence", signal.confidence);
+#endif
+
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
             int idx = spark_head.fetch_add(1, std::memory_order_relaxed) % kSparkSlots;
