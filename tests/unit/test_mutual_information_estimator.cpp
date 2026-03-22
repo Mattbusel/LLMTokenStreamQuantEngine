@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#ifdef LLMQUANT_MUTUAL_INFO_ENABLED
+#ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
 
 #include "MutualInformationEstimator.h"
 
@@ -208,4 +208,4 @@ TEST(MutualInformationEstimator, DisabledAtBuildTime) {
     SUCCEED();
 }
 
-#endif  // LLMQUANT_MUTUAL_INFO_ENABLED
+#endif  // LLMQUANT_MUTUAL_INFORMATION_ENABLED

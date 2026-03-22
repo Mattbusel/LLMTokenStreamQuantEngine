@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#ifdef LLMQUANT_BLIND_SPOT_ENABLED
+#ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
 
 #include "SignalBlindSpotDetector.h"
 
@@ -230,4 +230,4 @@ TEST(SignalBlindSpotDetector, DisabledAtBuildTime) {
     SUCCEED();
 }
 
-#endif  // LLMQUANT_BLIND_SPOT_ENABLED
+#endif  // LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
