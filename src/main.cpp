@@ -1266,6 +1266,10 @@ int main(int argc, char* argv[]) {
         // Track n-gram frequencies; fires on repeated patterns.
         ngram_profiler.push(text);
 #endif
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+        // Screen each token for weight anomalies, repetition, and vocab inflation.
+        adversarial_detector.inspect(text, weight.directional_bias);
+#endif
 #ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
         // Attribute per-token marginal contribution to the current bias.
         token_influence.record(text, weight.directional_bias);
@@ -1832,7 +1836,7 @@ int main(int argc, char* argv[]) {
     {
         llmquant::TokenInfluenceAttributor::Config ti_cfg;
         ti_cfg.window_size = 64;
-        ti_cfg.top_n       = 5;
+        ti_cfg.top_k       = 5;
         token_influence.update_config(ti_cfg);
     }
 #endif
@@ -3959,6 +3963,19 @@ int main(int argc, char* argv[]) {
               << "folds=" << walk_forward.num_folds()
               << "  (tokens not loaded in live mode — offline use only)\n";
 #endif
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+    std::cout << "  Adversarial det  : "
+              << "armed=" << (adversarial_detector.is_armed() ? "YES" : "no")
+              << "  anomalies=" << adversarial_detector.anomaly_count()
+              << "  tokens=" << adversarial_detector.total_tokens() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CI_ENABLED
+    std::cout << "  Signal CI (95%)  : "
+              << "mean=" << std::showpos << std::fixed << std::setprecision(4) << signal_ci.mean()
+              << "  hw=" << std::noshowpos << signal_ci.half_width()
+              << "  [" << signal_ci.lower() << ", " << signal_ci.upper() << "]"
+              << "  narrow=" << (signal_ci.is_narrow() ? "yes" : "no") << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4117,6 +4134,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_TOKEN_INFLUENCE_ENABLED
         std::cout << "  [json:influence]  " << token_influence.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ADVERSARIAL_DETECT_ENABLED
+        std::cout << "  [json:adversarial] " << adversarial_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CI_ENABLED
+        std::cout << "  [json:signal_ci]  " << signal_ci.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
