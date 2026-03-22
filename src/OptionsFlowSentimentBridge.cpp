@@ -39,8 +39,10 @@ void OptionsFlowSentimentBridge::record_bias(double bias, double dt_s) {
 
         // Divergence: sentiment velocity moves opposite to what skew implies.
         // Positive skew_ema means put premium > call premium (bearish hedging).
-        // D = v * sign(-skew): high v + high skew → D positive (bull narrative + bear hedge).
-        double score = vel_ema_val_ * (-skew_ema_val_);
+        // score = vel * skew: bullish narrative (vel>0) + bearish hedge (skew>0)
+        //   → score > 0 → SmartMoneyBear (market hedging against your bullish signal)
+        //   → score < 0 → SmartMoneyBull (market bullish hedge despite bearish signal)
+        double score = vel_ema_val_ * skew_ema_val_;
         div_score_.store(score, std::memory_order_relaxed);
 
         double threshold     = cfg_.div_threshold;

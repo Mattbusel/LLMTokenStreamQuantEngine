@@ -119,13 +119,22 @@ TEST(SentimentPhasePortrait, AttractorCallbackFires) {
     cfg.grid_size           = 4;
     cfg.min_visits          = 5;
     cfg.attractor_threshold = 0.30;
+    // Use velocity_alpha=1.0 so the EMA is instantaneous; all steady-state
+    // records accumulate in a single cell rather than spreading across the
+    // grid during a slow EMA transition.  This guarantees the second phase
+    // accumulates enough visits to shift the dominant cell and fire the callback.
+    cfg.velocity_alpha      = 1.0;
     std::atomic<int> fires{0};
     cfg.on_attractor_change = [&](int, int) { ++fires; };
     SentimentPhasePortrait spp(cfg);
 
-    // Push into one attractor then shift to another.
+    // Phase 1: establish attractor at the -0.8 cell (30 visits).
     for (int i = 0; i < 30; ++i) spp.record(-0.8);
-    for (int i = 0; i < 30; ++i) spp.record(0.8);
+    // Phase 2: 40 records of +0.8.  With alpha=1.0 the first record has a large
+    // velocity spike (goes to a different cell) then all remaining 39 go to the
+    // (row=3,col=2) cell.  39 > 30 so that cell becomes the new dominant
+    // attractor, triggering on_attractor_change.
+    for (int i = 0; i < 40; ++i) spp.record(0.8);
 
     EXPECT_GT(fires.load(), 0);
 }

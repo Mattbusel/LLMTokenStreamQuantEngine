@@ -2254,6 +2254,46 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_LIFECYCLE_TRACKER_ENABLED
+    // SignalLifecycleTracker: tracks each emitted signal's lifecycle
+    // (birth → peak → 50%-decay half-life → death), and flags zombie signals
+    // that persist beyond max_age_s without decaying.
+    llmquant::SignalLifecycleTracker lifecycle_tracker;
+    {
+        llmquant::SignalLifecycleTracker::Config lc_cfg;
+        lc_cfg.decay_fraction    = 0.10;
+        lc_cfg.halflife_fraction = 0.50;
+        lc_cfg.max_age_s         = 300.0;
+        lc_cfg.on_death = [](const std::string& id, double hl, double peak) {
+            spdlog::debug("[lifecycle] signal '{}' died  halflife={:.1f}s  peak={:.4f}", id, hl, peak);
+        };
+        lc_cfg.on_zombie = [](const std::string& id, double age) {
+            spdlog::warn("[lifecycle] ZOMBIE signal '{}' age={:.1f}s", id, age);
+        };
+        lifecycle_tracker.update_config(lc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+    // TokenWeightQuantiser: stochastic rounding to 256-level fixed grid.
+    // Preserves E[w] exactly across many tokens, enabling integer-precision
+    // downstream SIMD accumulation without systematic bias.
+    llmquant::TokenWeightQuantiser token_quantiser;
+    {
+        llmquant::TokenWeightQuantiser::Config tq_cfg;
+        tq_cfg.levels               = 256;
+        tq_cfg.range_min            = -1.0;
+        tq_cfg.range_max            =  1.0;
+        tq_cfg.error_alpha          = 0.05;
+        tq_cfg.clamp_alert_fraction = 0.05;
+        tq_cfg.on_high_clamp_rate = [](double rate, double w) {
+            spdlog::warn("[quantiser] HIGH CLAMP RATE {:.1f}% last_weight={:.4f}",
+                         rate * 100.0, w);
+        };
+        token_quantiser.update_config(tq_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
