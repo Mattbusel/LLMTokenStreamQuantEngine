@@ -9,12 +9,50 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 43 — 2026-03-21)
+- **Bug fix** `RiskManager::update_config()`: when a gate transitioned from
+  disabled → enabled, the corresponding `gate_*_last_blocked_` flag retained its
+  stale `true` value from before the gate was disabled. The trip callback would
+  therefore never fire on the first subsequent block after re-enabling.
+  Fixed by comparing old vs new `disable_*` fields inside `update_config()` and
+  clearing each flag that transitions disabled→enabled before overwriting
+  `config_`. Also clears both `gate_position_last_blocked_` and
+  `gate_pnl_last_blocked_` when `disable_position_gate` transitions, since both
+  gates live inside the same conditional block.
+- **Bug fix** `RiskManager::enable_all_gates()`: same stale-state issue; all six
+  `gate_*_last_blocked_` flags are now reset unconditionally when all gates are
+  re-enabled.
+- **Tests**: 2 new regression tests in `test_risk_manager.cpp`:
+  `test_gate_trip_fires_after_gate_reenabled_via_update_config` and
+  `test_gate_trip_fires_after_enable_all_gates`.
+
+### Changed (Cycle 43 — 2026-03-21)
+- **CI** `CMakeLists.txt`: added `LLMQUANT_ENABLE_TSAN` option parallel to
+  `LLMQUANT_ENABLE_ASAN`. TSan is mutually exclusive with ASan; when enabled,
+  sets `CMAKE_CXX_FLAGS_DEBUG` to `-g -O1 -fsanitize=thread
+  -fno-omit-frame-pointer`.
+- **CI** `sanitizers.yml` `tsan` job: replaced the manual
+  `CMAKE_CXX_FLAGS_DEBUG` override with `-DLLMQUANT_ENABLE_TSAN=ON`, keeping
+  TSan configuration in one canonical place (CMakeLists.txt).
+
 ### Added (Cycle 32 — 2026-03-21)
 - **Tests**: 2 new `MetricsLogger` JSON control-character escape tests — verify
   that `\t` (tab) and `\n` (newline) in token text are escaped as `\\t` /
   `\\n` in JSON output, not emitted as raw control characters
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
+
+### Fixed (Cycle 43 — 2026-03-21)
+- **Interface** `OmsAdapter`: add virtual `update_count()`, `error_count()`,
+  `reconnect_count()` (all default 0) to the abstract base. `RestOmsAdapter`
+  and `FixOmsAdapter` now override them, eliminating five `dynamic_cast` calls
+  in `main.cpp` (Prometheus scrape and session summary). `FixOmsAdapter::
+  get_reconnect_count()` is kept as a non-virtual alias to preserve backwards
+  compatibility with existing tests.
+- **Refactor** `Deduplicator::get_stats()`: replaced `dynamic_cast<const
+  InProcessDeduplicator*>` with virtual dispatch on the newly-added base-class
+  `total_novel()` / `total_duplicates()` methods. `RedisDeduplicator` delegates
+  both to its inner `InProcessDeduplicator`.
 
 ### Fixed (Cycle 42 — 2026-03-21)
 - **Interface** `Deduplicator` base class: `total_novel()` and
