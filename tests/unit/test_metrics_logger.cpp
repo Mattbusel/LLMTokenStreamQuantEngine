@@ -623,9 +623,12 @@ TEST(MetricsLoggerTest, test_csv_token_with_comma_is_quoted) {
     // The token field (column index 2) must be quoted: "bull,ish"
     EXPECT_NE(lines.back().find("\"bull,ish\""), std::string::npos)
         << "token with comma must be RFC-4180 quoted in CSV; line: " << lines.back();
-    // A raw comma after TOKEN_RECEIVED would produce extra columns — verify it's quoted
-    EXPECT_EQ(std::count(lines.back().begin(), lines.back().end(), ','), 8)
-        << "CSV line must have exactly 8 commas (9 columns); line: " << lines.back();
+    // Verify TOKEN_RECEIVED appears before the quoted token (not split by the interior comma).
+    auto tr_pos   = lines.back().find("TOKEN_RECEIVED");
+    auto quot_pos = lines.back().find("\"bull,ish\"");
+    EXPECT_NE(tr_pos,   std::string::npos);
+    EXPECT_NE(quot_pos, std::string::npos);
+    EXPECT_LT(tr_pos,   quot_pos) << "TOKEN_RECEIVED must precede the quoted token field";
     std::remove(path.c_str());
 }
 

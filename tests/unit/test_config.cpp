@@ -1235,13 +1235,10 @@ TEST(ConfigTest, test_validate_accepts_csv_format) {
 
 TEST(ConfigTest, test_validate_rejects_negative_dedup_ttl) {
     Config cfg;
-    // Use the YAML path only — cross-platform (no setenv/unsetenv).
-    (void)cfg.load_from_yaml_string("token_stream:\n  dedup_ttl_ms: -5\n");
-    auto errs = cfg.validate();
-    bool found = false;
-    for (const auto& e : errs)
-        if (e.find("dedup_ttl_ms") != std::string::npos) { found = true; break; }
-    EXPECT_TRUE(found) << "validate() must reject dedup_ttl_ms < 0";
+    // load_from_yaml_string validates internally; a negative dedup_ttl_ms
+    // must cause it to return false (and apply defaults).
+    bool loaded = cfg.load_from_yaml_string("token_stream:\n  dedup_ttl_ms: -5\n");
+    EXPECT_FALSE(loaded) << "load_from_yaml_string must reject dedup_ttl_ms < 0";
 }
 
 TEST(ConfigTest, test_validate_accepts_valid_redis_url) {
