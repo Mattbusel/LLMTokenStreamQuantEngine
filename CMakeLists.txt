@@ -122,6 +122,8 @@ option(LLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER        "Build TokenImportanceDecayS
 option(LLMQUANT_ENABLE_REGIME_ROUTER                "Build RegimeSwitchingSignalRouter: 3-state FSM (trending/ranging/crash) that routes signals to per-regime configurations" ON)
 option(LLMQUANT_ENABLE_STREAM_DIFFERENCER           "Build TokenStreamDifferencer: computes velocity, acceleration, and jerk of the token weight series for early reversal detection" ON)
 option(LLMQUANT_ENABLE_SIGNAL_DRIFT                 "Build SignalDriftMonitor: Wasserstein-1 drift detector comparing recent vs baseline bias-shift distributions" ON)
+option(LLMQUANT_ENABLE_LIFECYCLE_TRACKER            "Build SignalLifecycleTracker: tracks signal birth/peak/decay/death and empirical half-lives, flags zombie signals" ON)
+option(LLMQUANT_ENABLE_TOKEN_QUANTISER              "Build TokenWeightQuantiser: stochastic rounding to a fixed grid preserving E[w] exactly for integer-precision downstream" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1161,6 +1163,24 @@ if(LLMQUANT_ENABLE_SIGNAL_DRIFT)
     message(STATUS "Feature: SignalDriftMonitor ENABLED (W1 distribution drift)")
 else()
     message(STATUS "Feature: SignalDriftMonitor DISABLED (LLMQUANT_ENABLE_SIGNAL_DRIFT=OFF)")
+endif()
+
+# SignalLifecycleTracker: birth/peak/decay/death lifecycle tracking.
+if(LLMQUANT_ENABLE_LIFECYCLE_TRACKER)
+    target_sources(llmquant PRIVATE src/SignalLifecycleTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_LIFECYCLE_TRACKER_ENABLED)
+    message(STATUS "Feature: SignalLifecycleTracker ENABLED (signal lifecycle + zombie detection)")
+else()
+    message(STATUS "Feature: SignalLifecycleTracker DISABLED (LLMQUANT_ENABLE_LIFECYCLE_TRACKER=OFF)")
+endif()
+
+# TokenWeightQuantiser: stochastic rounding for integer-precision downstream.
+if(LLMQUANT_ENABLE_TOKEN_QUANTISER)
+    target_sources(llmquant PRIVATE src/TokenWeightQuantiser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_QUANTISER_ENABLED)
+    message(STATUS "Feature: TokenWeightQuantiser ENABLED (stochastic rounding, E[w] preserved)")
+else()
+    message(STATUS "Feature: TokenWeightQuantiser DISABLED (LLMQUANT_ENABLE_TOKEN_QUANTISER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

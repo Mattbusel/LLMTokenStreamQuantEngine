@@ -200,7 +200,9 @@ jobs:
             -DLLMQUANT_ENABLE_TOKEN_DECAY_SCHEDULER=OFF \
             -DLLMQUANT_ENABLE_REGIME_ROUTER=OFF \
             -DLLMQUANT_ENABLE_STREAM_DIFFERENCER=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_DRIFT=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_DRIFT=OFF \
+            -DLLMQUANT_ENABLE_LIFECYCLE_TRACKER=OFF \
+            -DLLMQUANT_ENABLE_TOKEN_QUANTISER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -316,6 +318,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_REGIME_ROUTER
           - flag: LLMQUANT_ENABLE_STREAM_DIFFERENCER
           - flag: LLMQUANT_ENABLE_SIGNAL_DRIFT
+          - flag: LLMQUANT_ENABLE_LIFECYCLE_TRACKER
+          - flag: LLMQUANT_ENABLE_TOKEN_QUANTISER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

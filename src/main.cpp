@@ -1971,25 +1971,6 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
-#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
-    // SignalDriftMonitor: Wasserstein-1 drift detector — fires when the recent
-    // bias-shift distribution diverges significantly from the baseline window.
-    llmquant::SignalDriftMonitor signal_drift;
-    {
-        llmquant::SignalDriftMonitor::Config sd_cfg;
-        sd_cfg.baseline_size   = 128;
-        sd_cfg.recent_size     = 32;
-        sd_cfg.drift_threshold = 0.08;
-        sd_cfg.on_drift_detected = [](double w1) {
-            spdlog::warn("[drift] W1={:.4f} — signal distribution has shifted", w1);
-        };
-        sd_cfg.on_drift_cleared = [](double w1) {
-            spdlog::info("[drift] W1={:.4f} — distribution stabilised", w1);
-        };
-        signal_drift.update_config(sd_cfg);
-    }
-#endif
-
 #ifdef LLMQUANT_SIGNAL_CI_ENABLED
     // SignalConfidenceInterval: jackknife CI on rolling signal window; narrow
     // CI = high-confidence environment, wide CI = noisy / uncertain signals.
@@ -2738,11 +2719,6 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         // Feed each signal's bias shift into the Markov state chain.
         sentiment_persistence.record(signal.delta_bias_shift);
-#endif
-
-#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
-        // Track distribution drift between baseline and recent bias-shift windows.
-        signal_drift.record(signal.delta_bias_shift);
 #endif
 
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
@@ -4415,13 +4391,6 @@ int main(int argc, char* argv[]) {
               << "  flagged=" << token_ib.flagged_count()
               << "  records=" << token_ib.total_records() << "\n";
 #endif
-#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
-    std::cout << "  Signal drift     : "
-              << "W1=" << std::fixed << std::setprecision(5) << signal_drift.last_w1()
-              << "  drifting=" << (signal_drift.is_drifting() ? "YES" : "no")
-              << "  events=" << signal_drift.drift_events()
-              << "  records=" << signal_drift.total_records() << "\n";
-#endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
     std::cout << "  Markov chain     : "
               << "state=" << sentiment_persistence.current_state()
@@ -4695,9 +4664,6 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_TOKEN_IB_ENABLED
         std::cout << "  [json:token_ib]   " << token_ib.to_stats_json() << "\n";
-#endif
-#ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
-        std::cout << "  [json:drift]      " << signal_drift.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_SENTIMENT_PERSISTENCE_ENABLED
         std::cout << "  [json:markov]     " << sentiment_persistence.to_stats_json() << "\n";
