@@ -283,6 +283,11 @@ void RedisDeduplicator::evict(const DedupKey& key) {
 size_t RedisDeduplicator::size() const { return inner_.size(); }
 void RedisDeduplicator::purge_expired() { inner_.purge_expired(); }
 
+// Stats delegate to inner_ (which tracks counts when Redis is unavailable /
+// when the connection was first established but fell back to in-process mode).
+uint64_t RedisDeduplicator::total_novel()      const noexcept { return inner_.total_novel(); }
+uint64_t RedisDeduplicator::total_duplicates() const noexcept { return inner_.total_duplicates(); }
+
 // ---------------------------------------------------------------------------
 // Deduplicator facade
 // ---------------------------------------------------------------------------

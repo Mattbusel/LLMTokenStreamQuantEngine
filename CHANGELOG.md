@@ -16,6 +16,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
 
+### Fixed (Cycle 42 — 2026-03-21)
+- **Interface** `Deduplicator` base class: `total_novel()` and
+  `total_duplicates()` were missing from the abstract interface, so code holding
+  a `Deduplicator*` (as used in `main.cpp` and tests) could not call them without
+  a `dynamic_cast`. Added as virtual (non-pure, default returns 0) to the base
+  class; `InProcessDeduplicator` overrides now use `override`; `RedisDeduplicator`
+  delegates both to its inner `InProcessDeduplicator` for fallback-path accounting.
+
 ### Added (Cycle 41 — 2026-03-21)
 - **Feature** `Config.token_stream.redis_url`: expose Redis URL directly in
   `config.yaml` and `TokenStreamConfig` struct. Previously the URL was only

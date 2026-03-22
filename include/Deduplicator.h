@@ -119,6 +119,15 @@ public:
      * May be a no-op if the backend evicts lazily.
      */
     virtual void purge_expired() = 0;
+
+    // -----------------------------------------------------------------------
+    // Stats interface (non-pure so backends may opt out).
+    // -----------------------------------------------------------------------
+
+    /** @brief Total novel (non-duplicate) registrations since construction. */
+    virtual uint64_t total_novel()      const noexcept { return 0; }
+    /** @brief Total duplicate hits since construction. */
+    virtual uint64_t total_duplicates() const noexcept { return 0; }
 };
 
 /**
@@ -173,14 +182,14 @@ public:
      *
      * @return Duplicate hit count.
      */
-    uint64_t total_duplicates() const noexcept { return total_duplicates_.load(); }
+    uint64_t total_duplicates() const noexcept override { return total_duplicates_.load(); }
 
     /**
      * @brief Return the total number of novel keys registered since construction.
      *
      * @return Novel registration count.
      */
-    uint64_t total_novel() const noexcept { return total_novel_.load(); }
+    uint64_t total_novel() const noexcept override { return total_novel_.load(); }
 
     /**
      * @brief Return the fraction of all seen keys that were duplicates, in [0.0, 1.0].
@@ -374,6 +383,17 @@ public:
      * @brief Purge expired entries from the in-process backend.
      */
     void purge_expired() override;
+
+    /**
+     * @brief Novel count — reflects in-process fallback entries and entries
+     *        processed when Redis was unavailable.
+     */
+    uint64_t total_novel()      const noexcept override;
+
+    /**
+     * @brief Duplicate count — same scope as total_novel().
+     */
+    uint64_t total_duplicates() const noexcept override;
 
     /**
      * @brief Return the Redis URL this instance was constructed with.
