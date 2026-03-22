@@ -27,6 +27,16 @@ add_executable(tests
 target_link_libraries(tests PRIVATE GTest::gtest_main llmquant)
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
+# MockOmsAdapter is a test double.  Several unit and integration tests use it
+# directly.  When LLMQUANT_ENABLE_MOCK_OMS=OFF, MockOmsAdapter.cpp is not
+# compiled into the llmquant library, so we compile it directly into the test
+# binary here to avoid link errors.
+if(NOT LLMQUANT_ENABLE_MOCK_OMS)
+    target_sources(tests PRIVATE ${CMAKE_SOURCE_DIR}/src/MockOmsAdapter.cpp)
+    # Ensure the tests binary sees the ENABLED define so the same code path runs.
+    target_compile_definitions(tests PRIVATE LLMQUANT_MOCK_OMS_ENABLED)
+endif()
+
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests

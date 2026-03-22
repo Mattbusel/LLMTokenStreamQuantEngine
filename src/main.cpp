@@ -18,7 +18,9 @@
 #ifdef LLMQUANT_FIX_OMS_ENABLED
 #  include "FixOmsAdapter.h"
 #endif
-#include "MockOmsAdapter.h"
+#ifdef LLMQUANT_MOCK_OMS_ENABLED
+#  include "MockOmsAdapter.h"
+#endif
 #ifdef LLMQUANT_PROMETHEUS_ENABLED
 #  include "PrometheusExporter.h"
 #endif
@@ -715,7 +717,8 @@ int main(int argc, char* argv[]) {
         oms_adapter = std::make_unique<llmquant::FixOmsAdapter>(fix_cfg);
 #else
         spdlog::error("--fix requested but FIX OMS support was disabled at build time "
-                      "(LLMQUANT_ENABLE_FIX_OMS=OFF). Falling back to MockOmsAdapter.");
+                      "(LLMQUANT_ENABLE_FIX_OMS=OFF).");
+        return 1;
 #endif
     } else if (!oms_address.empty()) {
 #ifdef LLMQUANT_REST_OMS_ENABLED
@@ -736,9 +739,11 @@ int main(int argc, char* argv[]) {
         oms_adapter = std::make_unique<llmquant::RestOmsAdapter>(oms_cfg);
 #else
         spdlog::error("--oms requested but REST OMS support was disabled at build time "
-                      "(LLMQUANT_ENABLE_REST_OMS=OFF). Falling back to MockOmsAdapter.");
+                      "(LLMQUANT_ENABLE_REST_OMS=OFF).");
+        return 1;
 #endif
     } else {
+#ifdef LLMQUANT_MOCK_OMS_ENABLED
         auto mock = std::make_unique<llmquant::MockOmsAdapter>();
         mock->load_states({
             {0.1,  1.0,  0.5, -10.0},
@@ -746,6 +751,12 @@ int main(int argc, char* argv[]) {
             {-0.1, 1.0, -0.2, -10.0},
         });
         oms_adapter = std::move(mock);
+#else
+        spdlog::error("No OMS adapter specified and MockOmsAdapter is disabled "
+                      "(LLMQUANT_ENABLE_MOCK_OMS=OFF). Pass --oms or --fix, or enable "
+                      "LLMQUANT_ENABLE_MOCK_OMS=ON.");
+        return 1;
+#endif
     }
 
     oms_adapter->set_position_callback([&](const llmquant::RiskManager::PositionState& state) {
