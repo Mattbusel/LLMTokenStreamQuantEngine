@@ -206,7 +206,9 @@ jobs:
             -DLLMQUANT_ENABLE_POSITION_CONCENTRATION=OFF \
             -DLLMQUANT_ENABLE_AUTOCORR_METER=OFF \
             -DLLMQUANT_ENABLE_SIGNAL_SSI=OFF \
-            -DLLMQUANT_ENABLE_POLARIZATION_MONITOR=OFF
+            -DLLMQUANT_ENABLE_POLARIZATION_MONITOR=OFF \
+            -DLLMQUANT_ENABLE_FLOW_PRESSURE=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_FATIGUE=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -328,6 +330,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_AUTOCORR_METER
           - flag: LLMQUANT_ENABLE_SIGNAL_SSI
           - flag: LLMQUANT_ENABLE_POLARIZATION_MONITOR
+          - flag: LLMQUANT_ENABLE_FLOW_PRESSURE
+          - flag: LLMQUANT_ENABLE_SIGNAL_FATIGUE
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

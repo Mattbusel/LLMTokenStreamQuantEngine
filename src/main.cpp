@@ -270,6 +270,12 @@
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
 #  include "SignalStrengthIndexer.h"
 #endif
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+#  include "TokenFlowPressureGauge.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_FATIGUE_ENABLED
+#  include "SignalFatigueMeter.h"
+#endif
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
 #  include "SignalPolarizationMonitor.h"
 #endif
@@ -1259,6 +1265,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
     llmquant::TokenWeightQuantiser token_quantiser;
 #endif
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+    llmquant::TokenFlowPressureGauge flow_pressure;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1389,6 +1398,15 @@ int main(int argc, char* argv[]) {
         // The quantised value is not fed back into the weight here; the quantiser is used
         // as a monitoring/diagnostic module for integer-precision feasibility analysis.
         (void)token_quantiser.quantise(weight.directional_bias);
+#endif
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+        // Record token arrival time for inter-token EMA pressure tracking.
+        {
+            auto fp_ns = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+            flow_pressure.record_token(fp_ns);
+        }
 #endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
@@ -2373,6 +2391,37 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+    // TokenFlowPressureGauge: EMA of inter-token arrival intervals.
+    // Pressure > 0.85 → tokens arriving faster than target rate → spike alert.
+    // (Declared pre-lambda; configured here.)
+    {
+        llmquant::TokenFlowPressureGauge::Config fp_cfg;
+        fp_cfg.target_interval_ns = 33'000'000ULL; // ~30 tok/s
+        fp_cfg.ema_alpha          = 0.10;
+        fp_cfg.spike_threshold    = 0.85;
+        fp_cfg.on_pressure_spike = [](double p) {
+            spdlog::warn("[flow_pressure] SPIKE pressure={:.3f} — token rate exceeds target", p);
+        };
+        flow_pressure.update_config(fp_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_FATIGUE_ENABLED
+    // SignalFatigueMeter: tracks consecutive same-direction signal streaks.
+    // streak >= 5 → fatigue callback fired; score saturates at streak=10.
+    llmquant::SignalFatigueMeter signal_fatigue;
+    {
+        llmquant::SignalFatigueMeter::Config sf_cfg;
+        sf_cfg.fatigue_threshold  = 5;
+        sf_cfg.saturation_streak  = 10;
+        sf_cfg.on_fatigue = [](int streak, double score) {
+            spdlog::warn("[fatigue] FATIGUED streak={} score={:.3f} — reversal risk elevated", streak, score);
+        };
+        signal_fatigue.update_config(sf_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
     // SignalPolarizationMonitor: detects bimodal sentiment distribution using
     // Sarle's bimodality coefficient.  BC > 0.6 → two opposing camps active.
@@ -2937,6 +2986,10 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
         signal_ssi.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_FATIGUE_ENABLED
+        // Track consecutive same-direction bias streaks for reversal risk.
+        signal_fatigue.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
         // Track bimodality of signal distribution — polarized market = two-camp regime.
@@ -4717,6 +4770,20 @@ int main(int argc, char* argv[]) {
               << "  oversold=" << (signal_ssi.is_oversold() ? "YES" : "no")
               << "  obs=" << signal_ssi.observation_count() << "\n";
 #endif
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+    std::cout << "  Flow Pressure    : "
+              << std::fixed << std::setprecision(3) << flow_pressure.pressure()
+              << "  spiking=" << (flow_pressure.is_spiking() ? "YES" : "no")
+              << "  tokens=" << flow_pressure.token_count() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_FATIGUE_ENABLED
+    std::cout << "  Signal Fatigue   : "
+              << "score=" << std::fixed << std::setprecision(3) << signal_fatigue.fatigue_score()
+              << "  streak=" << signal_fatigue.streak()
+              << "  dir=" << signal_fatigue.direction()
+              << "  fatigued=" << (signal_fatigue.is_fatigued() ? "YES" : "no")
+              << "  obs=" << signal_fatigue.observation_count() << "\n";
+#endif
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
     std::cout << "  Polarization BC  : "
               << std::fixed << std::setprecision(3) << polarization_monitor.bimodality_coefficient()
@@ -4948,6 +5015,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_SSI_ENABLED
         std::cout << "  [json:ssi]        " << signal_ssi.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
+        std::cout << "  [json:flow_pressure] " << flow_pressure.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_FATIGUE_ENABLED
+        std::cout << "  [json:fatigue]    " << signal_fatigue.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_POLARIZATION_MONITOR_ENABLED
         std::cout << "  [json:polarization] " << polarization_monitor.to_stats_json() << "\n";

@@ -127,6 +127,8 @@ option(LLMQUANT_ENABLE_TOKEN_QUANTISER              "Build TokenWeightQuantiser:
 option(LLMQUANT_ENABLE_POSITION_CONCENTRATION       "Build PositionConcentrationGuard: HHI-based theme concentration monitor, fires when signal pipeline is too concentrated in one theme" ON)
 option(LLMQUANT_ENABLE_AUTOCORR_METER               "Build SentimentAutocorrelationMeter: rolling lag-1..N autocorrelation of bias series for trending vs mean-reversion detection" ON)
 option(LLMQUANT_ENABLE_SIGNAL_SSI                   "Build SignalStrengthIndexer: RSI applied to sentiment bias (Sentiment Strength Index), fires overbought/oversold callbacks" ON)
+option(LLMQUANT_ENABLE_FLOW_PRESSURE                "Build TokenFlowPressureGauge: EMA of inter-token arrival intervals -> pressure score [0,1], fires on_pressure_spike" ON)
+option(LLMQUANT_ENABLE_SIGNAL_FATIGUE               "Build SignalFatigueMeter: consecutive same-direction signal streak counter with fatigue score and on_fatigue callback" ON)
 option(LLMQUANT_ENABLE_POLARIZATION_MONITOR         "Build SignalPolarizationMonitor: Sarle bimodality coefficient detector — fires when signal distribution splits into two opposing camps" ON)
 
 # ---------------------------------------------------------------------------
@@ -1210,6 +1212,24 @@ if(LLMQUANT_ENABLE_SIGNAL_SSI)
     message(STATUS "Feature: SignalStrengthIndexer ENABLED (RSI-based Sentiment Strength Index)")
 else()
     message(STATUS "Feature: SignalStrengthIndexer DISABLED (LLMQUANT_ENABLE_SIGNAL_SSI=OFF)")
+endif()
+
+# TokenFlowPressureGauge: EMA of inter-token arrival intervals -> normalized pressure score.
+if(LLMQUANT_ENABLE_FLOW_PRESSURE)
+    target_sources(llmquant PRIVATE src/TokenFlowPressureGauge.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FLOW_PRESSURE_ENABLED)
+    message(STATUS "Feature: TokenFlowPressureGauge ENABLED (arrival pressure score, spike callback)")
+else()
+    message(STATUS "Feature: TokenFlowPressureGauge DISABLED (LLMQUANT_ENABLE_FLOW_PRESSURE=OFF)")
+endif()
+
+# SignalFatigueMeter: consecutive same-direction streak counter with fatigue score.
+if(LLMQUANT_ENABLE_SIGNAL_FATIGUE)
+    target_sources(llmquant PRIVATE src/SignalFatigueMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_FATIGUE_ENABLED)
+    message(STATUS "Feature: SignalFatigueMeter ENABLED (streak tracking, fatigue score, fatigue callback)")
+else()
+    message(STATUS "Feature: SignalFatigueMeter DISABLED (LLMQUANT_ENABLE_SIGNAL_FATIGUE=OFF)")
 endif()
 
 # SignalPolarizationMonitor: Sarle bimodality coefficient for distribution polarization.
