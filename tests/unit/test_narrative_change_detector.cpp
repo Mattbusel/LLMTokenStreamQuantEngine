@@ -225,7 +225,8 @@ TEST(NarrativeChangeDetector, GradualShiftIntermediateSimilarity) {
     // Window B: 4 "bullish" + 4 "crash" + 8 new tokens.
     for (int i = 0; i < 4;  ++i) ncd.record(H("bullish"));
     for (int i = 0; i < 4;  ++i) ncd.record(H("crash"));
-    for (int i = 0; i < 8;  ++i) ncd.record(H("rate_hike_" + std::to_string(i)));
+    // Use 7 (not 8) so total=31, avoiding second window_a_ promotion at token 32.
+    for (int i = 0; i < 7;  ++i) ncd.record(H("rate_hike_" + std::to_string(i)));
 
     double sim = ncd.get_similarity();
     // Some overlap → not 0, not 1.

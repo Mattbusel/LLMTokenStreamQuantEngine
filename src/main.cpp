@@ -1704,6 +1704,11 @@ int main(int argc, char* argv[]) {
         signal_ensemble.record_outcome(passed ? 1.0 : -1.0);
 #endif
 
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+        // Feed bias into MACD oscillator; callbacks fire on zero-crosses.
+        signal_momentum_osc.record(signal.delta_bias_shift);
+#endif
+
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
         // Update synthetic LOB with the latest bias signal.
         order_book_sim.update_bias(signal.delta_bias_shift);
@@ -2734,6 +2739,19 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+                      << [&]() -> std::string {
+                            // MACD histogram: positive=bullish momentum, negative=bearish.
+                            double hist = signal_momentum_osc.histogram();
+                            std::ostringstream o;
+                            o << "  OSC:";
+                            if      (hist >  0.005) o << C("\033[32m");  // green  = bullish
+                            else if (hist < -0.005) o << C("\033[31m");  // red    = bearish
+                            else                    o << C("\033[90m");  // grey   = flat
+                            o << std::showpos << std::fixed << std::setprecision(3) << hist << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -2973,6 +2991,16 @@ int main(int argc, char* argv[]) {
               << "output=" << std::fixed << std::setprecision(4) << signal_ensemble.ensemble_output()
               << "  outcomes=" << signal_ensemble.total_outcomes() << "\n";
 #endif
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+    std::cout << "  Signal momentum  : "
+              << "macd=" << std::showpos << std::fixed << std::setprecision(5)
+              << signal_momentum_osc.macd()
+              << "  hist=" << signal_momentum_osc.histogram()
+              << std::noshowpos
+              << "  " << (signal_momentum_osc.is_bullish() ? "BULL" :
+                           signal_momentum_osc.is_bearish() ? "BEAR" : "FLAT")
+              << "  crosses=" << signal_momentum_osc.total_crosses() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3061,6 +3089,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
         std::cout << "  [json:ensemble]" << signal_ensemble.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
+        std::cout << "  [json:smo]     " << signal_momentum_osc.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

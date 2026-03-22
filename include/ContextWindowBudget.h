@@ -190,7 +190,7 @@ private:
     bool critiqued_{false};
     bool overflowed_{false};
 
-    std::atomic<uint64_t> total_resets_{0};
+    std::atomic<uint64_t> total_resets_{1};  // starts at 1: construction is the initial reset
     std::atomic<uint64_t> warn_events_{0};
     std::atomic<uint64_t> critical_events_{0};
     std::atomic<uint64_t> overflow_events_{0};
