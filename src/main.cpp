@@ -752,7 +752,8 @@ int main(int argc, char* argv[]) {
         risk_mgr.update_position(state);
     });
     // OMS alert callback wired after signal callback is registered (see below).
-    oms_adapter->start();
+    if (!oms_adapter->start())
+        spdlog::warn("[oms] start() returned false — adapter may not be polling");
 
     TokenStreamSimulator token_sim({
         .token_interval = std::chrono::microseconds(sys_config.token_stream.token_interval_ms * 1000),
@@ -1069,7 +1070,8 @@ int main(int argc, char* argv[]) {
             if (!err.empty())
                 spdlog::warn("stream: {}", err);
         });
-        stream_client->connect();
+        if (!stream_client->connect())
+            spdlog::warn("[stream] connect() returned false — stream may not start");
     } else {
         token_sim.start();
     }
@@ -1664,19 +1666,11 @@ int main(int argc, char* argv[]) {
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
-#ifdef LLMQUANT_REST_OMS_ENABLED
-        if (auto* rest = dynamic_cast<llmquant::RestOmsAdapter*>(oms_adapter.get())) {
-            std::cout << "  OMS updates      : " << rest->update_count()
-                      << "  errors=" << rest->error_count() << "\n";
-        } else
-#endif
-#ifdef LLMQUANT_FIX_OMS_ENABLED
-        if (auto* fix = dynamic_cast<llmquant::FixOmsAdapter*>(oms_adapter.get())) {
-            std::cout << "  OMS updates      : " << fix->update_count()
-                      << "  errors=" << fix->error_count()
-                      << "  reconnects=" << fix->get_reconnect_count() << "\n";
-        }
-#endif
+        std::cout << "  OMS updates      : " << oms_adapter->update_count()
+                  << "  errors=" << oms_adapter->error_count();
+        if (oms_adapter->reconnect_count() > 0)
+            std::cout << "  reconnects=" << oms_adapter->reconnect_count();
+        std::cout << "\n";
     }
     {
         auto top = llm_adapter.top_tokens_by_frequency(5);

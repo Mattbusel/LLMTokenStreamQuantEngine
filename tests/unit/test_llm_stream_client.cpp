@@ -42,14 +42,14 @@ TEST(LLMStreamClientTest, test_stream_client_connect_to_refused_port_does_not_ha
     // connect() may return false (immediate refusal) or true (OS queued the
     // connect and the reader thread exits quickly).  Either way, stop() must
     // return within a reasonable time.
-    client.connect();
+    (void)client.connect();
     client.stop();
     EXPECT_FALSE(client.is_running());
 }
 
 TEST(LLMStreamClientTest, test_stream_client_double_stop_is_safe) {
     LLMStreamClient client(refused_config());
-    client.connect();
+    (void)client.connect();
     client.stop();
     client.stop();  // second stop must not crash or hang
     SUCCEED();
@@ -121,7 +121,7 @@ TEST(LLMStreamClientTest, test_stream_client_stop_during_reconnect_backoff_does_
     LLMStreamClient client(refused_config());
     std::atomic<bool> done_fired{false};
     client.set_done_callback([&](const std::string&) { done_fired = true; });
-    client.connect();
+    (void)client.connect();
     // Give the reader thread time to attempt the first connect and enter backoff.
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     client.stop();
@@ -136,7 +136,7 @@ TEST(LLMStreamClientTest, test_stream_client_token_callback_exception_does_not_c
     client.set_token_callback([](const std::string&) {
         throw std::runtime_error("intentional test exception");
     });
-    client.connect();
+    (void)client.connect();
     client.stop();
     SUCCEED();
 }

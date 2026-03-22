@@ -95,7 +95,7 @@ public:
      * @return DedupResult::Novel if this is the first occurrence within the TTL;
      *         DedupResult::Duplicate otherwise.
      */
-    virtual DedupResult check_and_register(const DedupKey& key,
+    [[nodiscard]] virtual DedupResult check_and_register(const DedupKey& key,
                                            std::chrono::milliseconds ttl) = 0;
 
     /**
@@ -155,7 +155,7 @@ public:
      * @param ttl Time-to-live for this registration.
      * @return DedupResult::Novel or DedupResult::Duplicate.
      */
-    DedupResult check_and_register(const DedupKey& key,
+    [[nodiscard]] DedupResult check_and_register(const DedupKey& key,
                                    std::chrono::milliseconds ttl) override;
 
     /**
@@ -362,7 +362,7 @@ public:
      * @param ttl Time-to-live for this registration.
      * @return DedupResult::Novel or DedupResult::Duplicate.
      */
-    DedupResult check_and_register(const DedupKey& key,
+    [[nodiscard]] DedupResult check_and_register(const DedupKey& key,
                                    std::chrono::milliseconds ttl) override;
 
     /**

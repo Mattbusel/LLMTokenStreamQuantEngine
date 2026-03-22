@@ -266,6 +266,15 @@ void RiskManager::enable_all_gates() {
     config_.disable_rate_gate = false;
     config_.disable_drawdown_gate = false;
     config_.disable_position_gate = false;
+    // Re-arm trip callbacks: any gate that was disabled may have stale
+    // last_blocked_ == true from before it was disabled.  Clear all flags so
+    // that the first block after re-enabling correctly fires the trip callback.
+    gate_magnitude_last_blocked_  = false;
+    gate_confidence_last_blocked_ = false;
+    gate_rate_last_blocked_       = false;
+    gate_drawdown_last_blocked_   = false;
+    gate_position_last_blocked_   = false;
+    gate_pnl_last_blocked_        = false;
 }
 
 RiskManager::BlockedByGate RiskManager::get_blocked_by_gate() const noexcept {
@@ -302,6 +311,23 @@ void RiskManager::update_config(const Config& config) {
     if (config.max_drawdown < 0.0)
         throw std::invalid_argument("RiskManager: max_drawdown must be >= 0");
     std::lock_guard<std::mutex> lock(mutex_);
+    // Re-arm trip callbacks for gates that transition from disabled to enabled.
+    // Without this, gate_*_last_blocked_ retains stale `true` from before the
+    // gate was disabled, which silences the trip callback on the first block
+    // after re-enabling.
+    if (config_.disable_magnitude_gate  && !config.disable_magnitude_gate)
+        gate_magnitude_last_blocked_  = false;
+    if (config_.disable_confidence_gate && !config.disable_confidence_gate)
+        gate_confidence_last_blocked_ = false;
+    if (config_.disable_rate_gate       && !config.disable_rate_gate)
+        gate_rate_last_blocked_       = false;
+    if (config_.disable_drawdown_gate   && !config.disable_drawdown_gate)
+        gate_drawdown_last_blocked_   = false;
+    if (config_.disable_position_gate   && !config.disable_position_gate) {
+        // Both position and PnL gates live inside the position_gate block.
+        gate_position_last_blocked_ = false;
+        gate_pnl_last_blocked_      = false;
+    }
     config_ = config;
 }
 
