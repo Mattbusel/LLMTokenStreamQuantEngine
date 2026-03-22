@@ -250,7 +250,9 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--log-level" && i + 1 < argc) {
             log_level_str = argv[++i];
         } else if (arg == "--stats-interval" && i + 1 < argc) {
-            try { stats_interval_ms = std::max(100, std::stoi(argv[++i])); }
+            try {
+                stats_interval_ms = std::clamp(std::stoi(argv[++i]), 100, 60000);
+            }
             catch (...) { std::cerr << "error: --stats-interval requires an integer\n"; return 1; }
         } else if (arg == "--no-prometheus") {
             no_prometheus = true;
@@ -1508,18 +1510,6 @@ int main(int argc, char* argv[]) {
                 if (i > 0) std::cout << ", ";
                 std::cout << top_bias[i].first
                           << "(" << std::fixed << std::setprecision(3) << top_bias[i].second << ")";
-            }
-            std::cout << "\n";
-        }
-    }
-    {
-        auto top_inf = llm_adapter.export_hot_tokens(5);
-        if (!top_inf.empty()) {
-            std::cout << "  Top influence    : ";
-            for (size_t i = 0; i < top_inf.size(); ++i) {
-                if (i > 0) std::cout << ", ";
-                std::cout << top_inf[i].first
-                          << "(" << std::fixed << std::setprecision(3) << top_inf[i].second << ")";
             }
             std::cout << "\n";
         }
