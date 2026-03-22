@@ -528,6 +528,21 @@
 #ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
 #  include "OnlineGrangerCausality.h"
 #endif
+#ifdef LLMQUANT_MACD_HISTOGRAM_ENABLED
+#  include "SignalMACDHistogram.h"
+#endif
+#ifdef LLMQUANT_REGIME_MARKOV_ENABLED
+#  include "NarrativeRegimeMarkov.h"
+#endif
+#ifdef LLMQUANT_CONCENTRATION_RISK_ENABLED
+#  include "BiasConcentrationRisk.h"
+#endif
+#ifdef LLMQUANT_WILLIAMS_R_ENABLED
+#  include "SignalWilliamsR.h"
+#endif
+#ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
+#  include "TokenInfluenceDecay.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3780,6 +3795,102 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_MACD_HISTOGRAM_ENABLED
+    // SignalMACDHistogram: MACD fast/slow/signal EMAs applied to bias stream.
+    // Histogram zero-cross = momentum shift; divergence = overextended move.
+    llmquant::SignalMACDHistogram macd_hist;
+    {
+        llmquant::SignalMACDHistogram::Config mh_cfg;
+        mh_cfg.alpha_fast          = 2.0 / (12 + 1);
+        mh_cfg.alpha_slow          = 2.0 / (26 + 1);
+        mh_cfg.alpha_signal        = 2.0 / (9 + 1);
+        mh_cfg.min_samples         = 26;
+        mh_cfg.divergence_threshold = 0.005;
+        mh_cfg.on_zero_cross = [](double hist) {
+            spdlog::info("[macd] ZERO CROSS hist={:.6f} (momentum direction flip)", hist);
+        };
+        mh_cfg.on_divergence = [](double hist) {
+            spdlog::warn("[macd] DIVERGENCE hist={:.6f} (overextended momentum)", hist);
+        };
+        macd_hist.update_config(mh_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_REGIME_MARKOV_ENABLED
+    // NarrativeRegimeMarkov: Markov transition matrix over bias-binned regimes.
+    // Steady-state distribution reveals long-run narrative bias tendencies.
+    llmquant::NarrativeRegimeMarkov regime_markov;
+    {
+        llmquant::NarrativeRegimeMarkov::Config rm_cfg;
+        rm_cfg.n_regimes   = 5;
+        rm_cfg.bias_range  = 0.05;
+        rm_cfg.min_samples = 10;
+        rm_cfg.on_regime_change = [](int old_s, int new_s) {
+            spdlog::info("[regime_markov] REGIME CHANGE {} → {} (narrative shift)", old_s, new_s);
+        };
+        regime_markov.update_config(rm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONCENTRATION_RISK_ENABLED
+    // BiasConcentrationRisk: rolling HHI over |bias| magnitudes.
+    // High HHI = one dominant bias period; low HHI = dispersed, diversified signal.
+    llmquant::BiasConcentrationRisk conc_risk;
+    {
+        llmquant::BiasConcentrationRisk::Config cr_cfg;
+        cr_cfg.window                  = 20;
+        cr_cfg.min_samples             = 5;
+        cr_cfg.concentration_threshold = 0.25;
+        cr_cfg.on_concentrated = [](double hhi) {
+            spdlog::warn("[conc_risk] CONCENTRATED hhi={:.4f} (bias dominated by single period)", hhi);
+        };
+        cr_cfg.on_dispersed = [](double hhi) {
+            spdlog::info("[conc_risk] DISPERSED hhi={:.4f} (bias energy spreading out)", hhi);
+        };
+        conc_risk.update_config(cr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_WILLIAMS_R_ENABLED
+    // SignalWilliamsR: Williams %R oscillator over rolling bias window.
+    // %R near 0 → overbought narrative; %R near -100 → oversold.
+    llmquant::SignalWilliamsR williams_r;
+    {
+        llmquant::SignalWilliamsR::Config wr_cfg;
+        wr_cfg.period               = 14;
+        wr_cfg.min_samples          = 5;
+        wr_cfg.overbought_threshold = -20.0;
+        wr_cfg.oversold_threshold   = -80.0;
+        wr_cfg.on_overbought = [](double wr) {
+            spdlog::warn("[williams_r] OVERBOUGHT wr={:.1f} (narrative stretched positive)", wr);
+        };
+        wr_cfg.on_oversold = [](double wr) {
+            spdlog::warn("[williams_r] OVERSOLD wr={:.1f} (narrative stretched negative)", wr);
+        };
+        williams_r.update_config(wr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
+    // TokenInfluenceDecay: separate positive/negative EMA accumulators.
+    // Dominance switch = long-run influence regime change; net = directional pressure.
+    llmquant::TokenInfluenceDecay influence_decay;
+    {
+        llmquant::TokenInfluenceDecay::Config id_cfg;
+        id_cfg.alpha_pos           = 0.12;
+        id_cfg.alpha_neg           = 0.12;
+        id_cfg.dominance_threshold = 0.015;
+        id_cfg.min_samples         = 10;
+        id_cfg.on_positive_dominant = [](double net) {
+            spdlog::info("[influence] POS DOMINANT net={:.4f} (bullish influence prevails)", net);
+        };
+        id_cfg.on_negative_dominant = [](double net) {
+            spdlog::info("[influence] NEG DOMINANT net={:.4f} (bearish influence prevails)", net);
+        };
+        influence_decay.update_config(id_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -5008,6 +5119,21 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
         // x = bias_shift, y = confidence: test if bias leads confidence or vice versa
         granger.record(signal.delta_bias_shift, signal.confidence);
+#endif
+#ifdef LLMQUANT_MACD_HISTOGRAM_ENABLED
+        macd_hist.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_REGIME_MARKOV_ENABLED
+        regime_markov.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CONCENTRATION_RISK_ENABLED
+        conc_risk.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_WILLIAMS_R_ENABLED
+        williams_r.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_INFLUENCE_DECAY_ENABLED
+        influence_decay.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -7250,6 +7376,24 @@ int main(int argc, char* argv[]) {
               << "  ob_ev=" << stochastic_osc.overbought_events()
               << "  os_ev=" << stochastic_osc.oversold_events()
               << "  obs=" << stochastic_osc.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_ACF_ENABLED
+    std::cout << "  Bias ACF         : "
+              << "r1=" << std::fixed << std::setprecision(3) << bias_acf.r1()
+              << "  lag=" << bias_acf.dominant_lag()
+              << "  acf=" << std::setprecision(3) << bias_acf.dominant_acf()
+              << "  periodic=" << (bias_acf.is_periodic() ? "Y" : "N")
+              << "  events=" << bias_acf.periodic_events()
+              << "  rec=" << bias_acf.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
+    std::cout << "  Granger          : "
+              << "F_xy=" << std::fixed << std::setprecision(2) << granger.f_xy()
+              << "  F_yx=" << granger.f_yx()
+              << "  x→y=" << (granger.x_causes_y() ? "Y" : "N")
+              << "  y→x=" << (granger.y_causes_x() ? "Y" : "N")
+              << "  xy_ev=" << granger.xy_causality_events()
+              << "  rec=" << granger.total_records() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "

@@ -2101,6 +2101,56 @@ else()
     message(STATUS "Feature: OnlineGrangerCausality DISABLED (LLMQUANT_ENABLE_ONLINE_GRANGER=OFF)")
 endif()
 
+# SignalMACDHistogram: MACD line/signal/histogram applied to bias stream.
+option(LLMQUANT_ENABLE_MACD_HISTOGRAM "Build SignalMACDHistogram: MACD histogram zero-cross and divergence detector" ON)
+if(LLMQUANT_ENABLE_MACD_HISTOGRAM)
+    target_sources(llmquant PRIVATE src/SignalMACDHistogram.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MACD_HISTOGRAM_ENABLED)
+    message(STATUS "Feature: SignalMACDHistogram ENABLED (MACD fast/slow/signal EMAs, zero-cross and divergence callbacks)")
+else()
+    message(STATUS "Feature: SignalMACDHistogram DISABLED (LLMQUANT_ENABLE_MACD_HISTOGRAM=OFF)")
+endif()
+
+# NarrativeRegimeMarkov: Markov chain regime tracker over bias bins.
+option(LLMQUANT_ENABLE_REGIME_MARKOV "Build NarrativeRegimeMarkov: Markov transition matrix regime change detector" ON)
+if(LLMQUANT_ENABLE_REGIME_MARKOV)
+    target_sources(llmquant PRIVATE src/NarrativeRegimeMarkov.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_MARKOV_ENABLED)
+    message(STATUS "Feature: NarrativeRegimeMarkov ENABLED (n-regime Markov chain, steady-state power iteration, regime change callbacks)")
+else()
+    message(STATUS "Feature: NarrativeRegimeMarkov DISABLED (LLMQUANT_ENABLE_REGIME_MARKOV=OFF)")
+endif()
+
+# BiasConcentrationRisk: HHI concentration index over rolling bias magnitudes.
+option(LLMQUANT_ENABLE_CONCENTRATION_RISK "Build BiasConcentrationRisk: Herfindahl-Hirschman Index concentration risk detector" ON)
+if(LLMQUANT_ENABLE_CONCENTRATION_RISK)
+    target_sources(llmquant PRIVATE src/BiasConcentrationRisk.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONCENTRATION_RISK_ENABLED)
+    message(STATUS "Feature: BiasConcentrationRisk ENABLED (rolling HHI, concentrated/dispersed callbacks)")
+else()
+    message(STATUS "Feature: BiasConcentrationRisk DISABLED (LLMQUANT_ENABLE_CONCENTRATION_RISK=OFF)")
+endif()
+
+# SignalWilliamsR: Williams %R oscillator applied to bias stream.
+option(LLMQUANT_ENABLE_WILLIAMS_R "Build SignalWilliamsR: Williams percent-R overbought/oversold oscillator" ON)
+if(LLMQUANT_ENABLE_WILLIAMS_R)
+    target_sources(llmquant PRIVATE src/SignalWilliamsR.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_WILLIAMS_R_ENABLED)
+    message(STATUS "Feature: SignalWilliamsR ENABLED (Williams %R, overbought/oversold callbacks)")
+else()
+    message(STATUS "Feature: SignalWilliamsR DISABLED (LLMQUANT_ENABLE_WILLIAMS_R=OFF)")
+endif()
+
+# TokenInfluenceDecay: Separate positive/negative EMA accumulators with dominance detection.
+option(LLMQUANT_ENABLE_INFLUENCE_DECAY "Build TokenInfluenceDecay: exponential influence decay with positive/negative dominance" ON)
+if(LLMQUANT_ENABLE_INFLUENCE_DECAY)
+    target_sources(llmquant PRIVATE src/TokenInfluenceDecay.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_INFLUENCE_DECAY_ENABLED)
+    message(STATUS "Feature: TokenInfluenceDecay ENABLED (pos/neg EMA accumulators, dominance threshold callbacks)")
+else()
+    message(STATUS "Feature: TokenInfluenceDecay DISABLED (LLMQUANT_ENABLE_INFLUENCE_DECAY=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
