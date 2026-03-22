@@ -441,6 +441,21 @@
 #ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
 #  include "TokenSaliencyRanker.h"
 #endif
+#ifdef LLMQUANT_TAIL_RISK_METER_ENABLED
+#  include "SignalTailRiskMeter.h"
+#endif
+#ifdef LLMQUANT_LEVEL_CROSSING_ENABLED
+#  include "BiasLevelCrossing.h"
+#endif
+#ifdef LLMQUANT_CROSS_CORRELATOR_ENABLED
+#  include "SignalCrossCorrelator.h"
+#endif
+#ifdef LLMQUANT_VOL_RATIO_ENABLED
+#  include "NarrativeVolatilityRatio.h"
+#endif
+#ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
+#  include "SignalParabolicSAR.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3197,6 +3212,85 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_TAIL_RISK_METER_ENABLED
+    // SignalTailRiskMeter: rolling VaR_95 and Expected Shortfall ES_95 for bias stream.
+    // ES_95 = mean of all bias values in the 5% left tail — coherent risk measure.
+    llmquant::SignalTailRiskMeter tail_risk;
+    {
+        llmquant::SignalTailRiskMeter::Config tr_cfg;
+        tr_cfg.window       = 100;
+        tr_cfg.alpha        = 0.95;
+        tr_cfg.es_threshold = -0.3;
+        tr_cfg.on_tail_event = [](double es) {
+            spdlog::warn("[tail_risk] ES_95={:.4f} — extreme tail risk event", es);
+        };
+        tail_risk.update_config(tr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_LEVEL_CROSSING_ENABLED
+    // BiasLevelCrossing: rolling zero-crossing rate (ZCR) — frequency proxy for bias stream.
+    // High ZCR → mean-reverting, noisy; low ZCR → trending, low-frequency.
+    llmquant::BiasLevelCrossing level_crossing;
+    {
+        llmquant::BiasLevelCrossing::Config lc_cfg;
+        lc_cfg.window               = 50;
+        lc_cfg.zcr_change_threshold = 0.1;
+        lc_cfg.on_zcr_change = [](double old_zcr, double new_zcr) {
+            spdlog::info("[level_cross] ZCR {:.3f} → {:.3f}", old_zcr, new_zcr);
+        };
+        level_crossing.update_config(lc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CROSS_CORRELATOR_ENABLED
+    // SignalCrossCorrelator: cross-correlation R(τ) between raw bias and EMA bias at lag τ.
+    // Dominant lag τ* identifies lead-lag structure: τ*=0 → contemporaneous; τ*>0 → EMA leads.
+    llmquant::SignalCrossCorrelator cross_corr_lag;
+    {
+        llmquant::SignalCrossCorrelator::Config xcor_cfg;
+        xcor_cfg.ema_alpha  = 0.10;
+        xcor_cfg.window     = 60;
+        xcor_cfg.max_lag    = 5;
+        xcor_cfg.on_dominant_lag_change = [](int old_l, int new_l, double r) {
+            spdlog::info("[xcorr] dominant lag {} → {} (R={:.3f})", old_l, new_l, r);
+        };
+        cross_corr_lag.update_config(xcor_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_VOL_RATIO_ENABLED
+    // NarrativeVolatilityRatio: σ_short/σ_long EMA vol ratio — VIX term-structure proxy.
+    // Ratio > 1 → near-term uncertainty elevated (fear/panic); < 1 → contango regime.
+    llmquant::NarrativeVolatilityRatio vol_ratio;
+    {
+        llmquant::NarrativeVolatilityRatio::Config vr_cfg;
+        vr_cfg.alpha_short      = 0.20;  // ≈ 5-period
+        vr_cfg.alpha_long       = 0.04;  // ≈ 25-period
+        vr_cfg.change_threshold = 0.2;
+        vr_cfg.on_vol_regime_change = [](double old_r, double new_r) {
+            spdlog::info("[vol_ratio] ratio {:.3f} → {:.3f}", old_r, new_r);
+        };
+        vol_ratio.update_config(vr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
+    // SignalParabolicSAR: adaptive trailing stop indicator for bias trend tracking.
+    // SAR reversal fires when bias crosses the trailing stop from the trending side.
+    llmquant::SignalParabolicSAR parabolic_sar;
+    {
+        llmquant::SignalParabolicSAR::Config ps_cfg;
+        ps_cfg.af_start = 0.02;
+        ps_cfg.af_step  = 0.02;
+        ps_cfg.af_max   = 0.20;
+        ps_cfg.on_reversal = [](int dir, double sar_val) {
+            spdlog::info("[psar] REVERSAL → {} (SAR={:.4f})", dir > 0 ? "uptrend" : "downtrend", sar_val);
+        };
+        parabolic_sar.update_config(ps_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -4287,9 +4381,24 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
         {
             int tok_id = static_cast<int>(
-                std::hash<std::string>{}(text) % llmquant::TokenSaliencyRanker::kMaxTokens);
+                signal.timestamp_ns % llmquant::TokenSaliencyRanker::kMaxTokens);
             saliency_ranker.record(tok_id, signal.delta_bias_shift);
         }
+#endif
+#ifdef LLMQUANT_TAIL_RISK_METER_ENABLED
+        tail_risk.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_LEVEL_CROSSING_ENABLED
+        level_crossing.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CROSS_CORRELATOR_ENABLED
+        cross_corr_lag.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_VOL_RATIO_ENABLED
+        vol_ratio.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
+        parabolic_sar.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -6336,6 +6445,44 @@ int main(int argc, char* argv[]) {
                   << "  obs=" << saliency_ranker.total_records() << "\n";
     }
 #endif
+#ifdef LLMQUANT_TAIL_RISK_METER_ENABLED
+    std::cout << "  Tail Risk ES95   : "
+              << "VaR=" << std::fixed << std::setprecision(4) << tail_risk.var_alpha()
+              << "  ES=" << tail_risk.expected_shortfall()
+              << "  tail_events=" << tail_risk.tail_events()
+              << "  obs=" << tail_risk.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_LEVEL_CROSSING_ENABLED
+    std::cout << "  Level Crossing   : "
+              << "ZCR=" << std::fixed << std::setprecision(4) << level_crossing.zero_crossing_rate()
+              << "  MCR=" << level_crossing.mean_crossing_rate()
+              << "  changes=" << level_crossing.zcr_change_events()
+              << "  obs=" << level_crossing.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_CORRELATOR_ENABLED
+    std::cout << "  Cross Corr Lag   : "
+              << "R(0)=" << std::fixed << std::setprecision(4) << cross_corr_lag.r_lag0()
+              << "  R(1)=" << cross_corr_lag.r_lag1()
+              << "  dom_lag=" << cross_corr_lag.dominant_lag()
+              << "  changes=" << cross_corr_lag.lag_change_events()
+              << "  obs=" << cross_corr_lag.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_VOL_RATIO_ENABLED
+    std::cout << "  Vol Ratio        : "
+              << "σs=" << std::fixed << std::setprecision(4) << vol_ratio.short_vol()
+              << "  σl=" << vol_ratio.long_vol()
+              << "  ratio=" << std::setprecision(3) << vol_ratio.vol_ratio()
+              << "  changes=" << vol_ratio.regime_change_events()
+              << "  obs=" << vol_ratio.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
+    std::cout << "  Parabolic SAR    : "
+              << "SAR=" << std::fixed << std::setprecision(4) << parabolic_sar.sar()
+              << "  trend=" << parabolic_sar.trend()
+              << "  AF=" << std::setprecision(3) << parabolic_sar.af()
+              << "  reversals=" << parabolic_sar.reversal_events()
+              << "  obs=" << parabolic_sar.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -6862,6 +7009,21 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SALIENCY_RANKER_ENABLED
         std::cout << "  [json:saliency]   " << saliency_ranker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TAIL_RISK_METER_ENABLED
+        std::cout << "  [json:tail_risk]  " << tail_risk.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_LEVEL_CROSSING_ENABLED
+        std::cout << "  [json:level_xcr]  " << level_crossing.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CROSS_CORRELATOR_ENABLED
+        std::cout << "  [json:xcorr]      " << cross_corr_lag.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_VOL_RATIO_ENABLED
+        std::cout << "  [json:vol_ratio]  " << vol_ratio.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
+        std::cout << "  [json:psar]       " << parabolic_sar.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";

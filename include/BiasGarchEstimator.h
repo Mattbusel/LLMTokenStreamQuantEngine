@@ -78,7 +78,7 @@ public:
 
     /// Current conditional variance σ²_t.
     [[nodiscard]] double conditional_var() const noexcept {
-        return sigma2_.load(std::memory_order_relaxed);
+        return sigma2_a_.load(std::memory_order_relaxed);
     }
 
     /// Last innovation ε_{t-1} = bias_{t-1} − μ̂.

@@ -104,7 +104,7 @@ std::array<int, TokenSaliencyRanker::kTopK> TokenSaliencyRanker::top_bearish() c
 }
 
 std::string TokenSaliencyRanker::to_stats_json() const {
-    std::lock_guard<std::mutex> lk(mutex_);
+    // Do NOT hold the mutex while calling top_bullish/top_bearish — they also lock.
     auto top_bull = top_bullish();
     auto top_bear = top_bearish();
     std::ostringstream ss;

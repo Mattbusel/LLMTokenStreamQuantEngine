@@ -1781,6 +1781,56 @@ else()
     message(STATUS "Feature: TokenSaliencyRanker DISABLED (LLMQUANT_ENABLE_SALIENCY_RANKER=OFF)")
 endif()
 
+# SignalTailRiskMeter: rolling Expected Shortfall ES_α beyond the α-quantile of bias.
+option(LLMQUANT_ENABLE_TAIL_RISK_METER "Build SignalTailRiskMeter: rolling VaR_α and ES_α via partial sort; fires on_tail_event when ES < es_threshold" ON)
+if(LLMQUANT_ENABLE_TAIL_RISK_METER)
+    target_sources(llmquant PRIVATE src/SignalTailRiskMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TAIL_RISK_METER_ENABLED)
+    message(STATUS "Feature: SignalTailRiskMeter ENABLED (rolling ES/VaR, tail event callback)")
+else()
+    message(STATUS "Feature: SignalTailRiskMeter DISABLED (LLMQUANT_ENABLE_TAIL_RISK_METER=OFF)")
+endif()
+
+# BiasLevelCrossing: zero-crossing and level-crossing rate tracker for bias stream frequency.
+option(LLMQUANT_ENABLE_LEVEL_CROSSING "Build BiasLevelCrossing: rolling ZCR proxy for signal frequency; fires on_zcr_change on regime shift" ON)
+if(LLMQUANT_ENABLE_LEVEL_CROSSING)
+    target_sources(llmquant PRIVATE src/BiasLevelCrossing.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_LEVEL_CROSSING_ENABLED)
+    message(STATUS "Feature: BiasLevelCrossing ENABLED (zero-crossing rate, on_zcr_change)")
+else()
+    message(STATUS "Feature: BiasLevelCrossing DISABLED (LLMQUANT_ENABLE_LEVEL_CROSSING=OFF)")
+endif()
+
+# SignalCrossCorrelator: cross-correlation between raw bias and EMA at lag τ.
+option(LLMQUANT_ENABLE_CROSS_CORRELATOR "Build SignalCrossCorrelator: R(τ) cross-correlation between raw and EMA bias; dominant lag detects lead-lag regime" ON)
+if(LLMQUANT_ENABLE_CROSS_CORRELATOR)
+    target_sources(llmquant PRIVATE src/SignalCrossCorrelator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CROSS_CORRELATOR_ENABLED)
+    message(STATUS "Feature: SignalCrossCorrelator ENABLED (R(0..max_lag), dominant lag, on_dominant_lag_change)")
+else()
+    message(STATUS "Feature: SignalCrossCorrelator DISABLED (LLMQUANT_ENABLE_CROSS_CORRELATOR=OFF)")
+endif()
+
+# NarrativeVolatilityRatio: short/long EMA vol ratio — VIX term-structure analogue for bias.
+option(LLMQUANT_ENABLE_VOL_RATIO "Build NarrativeVolatilityRatio: σ_short/σ_long EMA vol ratio; >1=fear/panic, <1=contango; fires on_vol_regime_change" ON)
+if(LLMQUANT_ENABLE_VOL_RATIO)
+    target_sources(llmquant PRIVATE src/NarrativeVolatilityRatio.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VOL_RATIO_ENABLED)
+    message(STATUS "Feature: NarrativeVolatilityRatio ENABLED (short/long EMA vol ratio, term-structure regime)")
+else()
+    message(STATUS "Feature: NarrativeVolatilityRatio DISABLED (LLMQUANT_ENABLE_VOL_RATIO=OFF)")
+endif()
+
+# SignalParabolicSAR: Parabolic SAR trend-following indicator for bias stream.
+option(LLMQUANT_ENABLE_PARABOLIC_SAR "Build SignalParabolicSAR: adaptive trailing stop via Parabolic SAR; fires on_reversal on trend flip" ON)
+if(LLMQUANT_ENABLE_PARABOLIC_SAR)
+    target_sources(llmquant PRIVATE src/SignalParabolicSAR.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PARABOLIC_SAR_ENABLED)
+    message(STATUS "Feature: SignalParabolicSAR ENABLED (SAR trailing stop, AF acceleration, on_reversal)")
+else()
+    message(STATUS "Feature: SignalParabolicSAR DISABLED (LLMQUANT_ENABLE_PARABOLIC_SAR=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

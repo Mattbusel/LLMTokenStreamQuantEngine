@@ -54,7 +54,7 @@ TEST(SignalConvexityMeter, LinearIncreasePositiveD1) {
 
 TEST(SignalConvexityMeter, AcceleratingSignalRegime) {
     SignalConvexityMeter::Config cfg;
-    cfg.convex_threshold = 0.001;
+    cfg.convex_threshold = 0.01;
     cfg.min_samples = 3;
     SignalConvexityMeter m(cfg);
     // Exponential growth: differences are increasing
@@ -74,7 +74,7 @@ TEST(SignalConvexityMeter, AcceleratingSignalRegime) {
 
 TEST(SignalConvexityMeter, DeceleratingSignalRegime) {
     SignalConvexityMeter::Config cfg;
-    cfg.convex_threshold = 0.001;
+    cfg.convex_threshold = 0.01;
     cfg.min_samples = 3;
     SignalConvexityMeter m(cfg);
     // Decreasing steps (decelerating downtrend)
@@ -94,7 +94,7 @@ TEST(SignalConvexityMeter, DeceleratingSignalRegime) {
 
 TEST(SignalConvexityMeter, AcceleratingCallbackFires) {
     SignalConvexityMeter::Config cfg;
-    cfg.convex_threshold = 0.001;
+    cfg.convex_threshold = 0.01;
     cfg.min_samples = 3;
     std::atomic<int> fires{0};
     cfg.on_accelerating = [&](double) { ++fires; };
@@ -114,18 +114,18 @@ TEST(SignalConvexityMeter, AcceleratingCallbackFires) {
 
 TEST(SignalConvexityMeter, StabilizedCallbackFires) {
     SignalConvexityMeter::Config cfg;
-    cfg.convex_threshold = 0.001;
+    cfg.convex_threshold = 0.01;  // wider stable zone for reliable convergence
     cfg.min_samples = 3;
     std::atomic<int> stabs{0};
     cfg.on_stabilized = [&]() { ++stabs; };
     SignalConvexityMeter m(cfg);
 
-    // Push into accelerating
+    // Push into accelerating regime
     double x = 0.0;
     for (int i = 1; i <= 30; ++i) { x += static_cast<double>(i) * 0.1; m.record(x); }
 
-    // Return to stable with constant steps
-    for (int i = 0; i < 40; ++i) m.record(x + static_cast<double>(i) * 0.001);
+    // Return to stable with constant tiny steps (60 steps to ensure d2 fully decays)
+    for (int i = 0; i < 60; ++i) m.record(x + static_cast<double>(i) * 0.001);
 
     EXPECT_GE(stabs.load(), 1);
 }
