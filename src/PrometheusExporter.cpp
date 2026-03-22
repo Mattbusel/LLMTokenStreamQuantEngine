@@ -1,7 +1,6 @@
 #include "PrometheusExporter.h"
 #include <cmath>
 #include <sstream>
-#include <string>
 
 #ifdef _WIN32
   #include <winsock2.h>

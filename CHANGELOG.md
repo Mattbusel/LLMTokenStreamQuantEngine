@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 35 — 2026-03-21)
+- **Bug fix** `PrometheusExporter::format_info`: label values containing `"`,
+  `\`, or `\n` were emitted unescaped, producing invalid Prometheus text format.
+  Added `escape_prom_label_value()` helper; all three characters are now escaped
+  per the exposition format spec. Three regression tests added.
+- **Bug fix** `MetricsLogger` JSON output: token, dedup key, rejection reason,
+  and config-reload path strings were embedded directly in JSON format strings
+  without escaping. A token containing `"` or `\` would produce malformed JSON.
+  Added `escape_json_string()` helper covering `"`, `\`, `\n`, `\r`, `\t`, and
+  control characters; all four string fields now use it. Four regression tests added.
+- **Cleanup** `PrometheusExporter.cpp`: removed duplicate `#include <sstream>`.
+- **CI** `ci.yml`: removed `asan` job — identical coverage is provided by the
+  dedicated `sanitizers.yml` workflow (`asan-ubsan` job); eliminating the
+  duplicate reduces per-push CI minutes.
+
 ### Added (Cycle 31 — 2026-03-21)
 - **Feature flag** `LLMQUANT_ENABLE_SIMD` (CMake option, default ON): added to
   README feature flags table; gates SSE2 batch path in
