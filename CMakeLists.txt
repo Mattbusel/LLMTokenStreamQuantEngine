@@ -75,6 +75,8 @@ option(LLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET        "Build ContextWindowBudget: 
 option(LLMQUANT_ENABLE_FRACTAL_DIMENSION            "Build FractalDimensionEstimator: Higuchi fractal dimension of bias series as complexity metric" ON)
 option(LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE        "Build MarketMicrostructureFilter: models bid-ask bounce and short-term mean reversion to clean signals" ON)
 option(LLMQUANT_ENABLE_SIGNAL_ENSEMBLE              "Build SignalEnsembleLayer: model-stacking layer averaging multiple sub-signal generators" ON)
+option(LLMQUANT_ENABLE_ORDER_BOOK_SIM               "Build OrderBookSimulator: sentiment-driven synthetic LOB for slippage-aware fill price estimation" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_HEATMAP            "Build TokenSentimentHeatmap: 2D rolling token×sentiment-bucket histogram for alpha attribution" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -692,6 +694,24 @@ if(LLMQUANT_ENABLE_SIGNAL_ENSEMBLE)
     message(STATUS "Feature: SignalEnsembleLayer ENABLED (ensemble stacking)")
 else()
     message(STATUS "Feature: SignalEnsembleLayer DISABLED (LLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF)")
+endif()
+
+# OrderBookSimulator: sentiment-driven synthetic LOB for slippage-aware sizing.
+if(LLMQUANT_ENABLE_ORDER_BOOK_SIM)
+    target_sources(llmquant PRIVATE src/OrderBookSimulator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ORDER_BOOK_SIM_ENABLED)
+    message(STATUS "Feature: OrderBookSimulator ENABLED (synthetic LOB + fill price estimation)")
+else()
+    message(STATUS "Feature: OrderBookSimulator DISABLED (LLMQUANT_ENABLE_ORDER_BOOK_SIM=OFF)")
+endif()
+
+# TokenSentimentHeatmap: 2D token×bucket rolling histogram for alpha attribution.
+if(LLMQUANT_ENABLE_SENTIMENT_HEATMAP)
+    target_sources(llmquant PRIVATE src/TokenSentimentHeatmap.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_HEATMAP_ENABLED)
+    message(STATUS "Feature: TokenSentimentHeatmap ENABLED (token-level sentiment attribution)")
+else()
+    message(STATUS "Feature: TokenSentimentHeatmap DISABLED (LLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

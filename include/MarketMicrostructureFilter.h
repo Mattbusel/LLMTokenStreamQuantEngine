@@ -182,9 +182,9 @@ private:
     Config config_;
     double half_spread_{0.01};  // current EWMA estimate
 
-    std::atomic<uint64_t> total_fills_{0};
-    std::atomic<uint64_t> total_blocked_{0};
-    std::atomic<uint64_t> total_passed_{0};
+    mutable std::atomic<uint64_t> total_fills_{0};
+    mutable std::atomic<uint64_t> total_blocked_{0};
+    mutable std::atomic<uint64_t> total_passed_{0};
 };
 
 } // namespace llmquant

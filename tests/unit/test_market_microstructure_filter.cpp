@@ -144,8 +144,8 @@ TEST(MarketMicrostructureFilter, BlockedCallbackFires) {
     cfg.on_blocked = [&](double, double) { ++fires; };
     MarketMicrostructureFilter f(cfg);
 
-    f.should_trade(0.01, 0.0);  // blocks
-    f.should_trade(0.01, 0.0);  // blocks again
+    (void)f.should_trade(0.01, 0.0);  // blocks
+    (void)f.should_trade(0.01, 0.0);  // blocks again
     EXPECT_EQ(fires, 2);
 }
 

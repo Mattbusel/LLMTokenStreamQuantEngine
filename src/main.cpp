@@ -90,6 +90,12 @@
 #ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
 #  include "RollingSharpeBiasTracker.h"
 #endif
+#ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
+#  include "OrderBookSimulator.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_HEATMAP_ENABLED
+#  include "TokenSentimentHeatmap.h"
+#endif
 #if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
 #  include "SentimentMomentumFilter.h"
 #endif

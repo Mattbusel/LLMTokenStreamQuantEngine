@@ -12,6 +12,9 @@ NarrativeChangeDetector::NarrativeChangeDetector(Config config)
     config_.min_fill = min_fill;
     ring_b_.assign(config_.window_size, 0);
     config_break_threshold_.store(config_.break_threshold, std::memory_order_relaxed);
+    // Start counter at window_size-1 so the first fill triggers an immediate
+    // promotion — the first full window becomes window_a_ without delay.
+    tokens_in_window_a_ = config_.window_size - 1;
 }
 
 // Cosine similarity between window_a_ and window_b_.
@@ -76,13 +79,16 @@ void NarrativeChangeDetector::record(uint64_t token_hash) noexcept {
         if (ring_fill_ < config_.window_size) ++ring_fill_;
         ++window_b_[token_hash];
 
-        // --- When window_b_ fills, promote it to window_a_ and start fresh ---
-        if (ring_fill_ == config_.window_size
-            && ++tokens_in_window_a_ >= config_.window_size)
-        {
-            // Swap: current window_b_ becomes the new window_a_.
-            window_a_ = window_b_;
-            tokens_in_window_a_ = 0;
+        // --- Promote window_b_ to window_a_ once per full window of new tokens ---
+        // tokens_in_window_a_ starts at window_size-1 so the FIRST time ring_fill_
+        // reaches window_size, the increment brings it to window_size and we
+        // promote immediately.  After the first promotion it resets to 0 and we
+        // wait another full window before the next promotion.
+        if (ring_fill_ == config_.window_size) {
+            if (++tokens_in_window_a_ >= config_.window_size) {
+                window_a_ = window_b_;
+                tokens_in_window_a_ = 0;
+            }
         }
 
         // --- Compute similarity when both windows have enough data ---

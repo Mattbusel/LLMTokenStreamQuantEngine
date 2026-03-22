@@ -153,7 +153,9 @@ jobs:
             -DLLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET=OFF \
             -DLLMQUANT_ENABLE_FRACTAL_DIMENSION=OFF \
             -DLLMQUANT_ENABLE_MARKET_MICROSTRUCTURE=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF \
+            -DLLMQUANT_ENABLE_ORDER_BOOK_SIM=OFF \
+            -DLLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -222,6 +224,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_FRACTAL_DIMENSION
           - flag: LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE
           - flag: LLMQUANT_ENABLE_SIGNAL_ENSEMBLE
+          - flag: LLMQUANT_ENABLE_ORDER_BOOK_SIM
+          - flag: LLMQUANT_ENABLE_SENTIMENT_HEATMAP
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
