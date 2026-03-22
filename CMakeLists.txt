@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 # ---------------------------------------------------------------------------
 option(LLMQUANT_ENABLE_ASAN     "Build with AddressSanitizer + UBSan (Debug only)"  OFF)
+option(LLMQUANT_ENABLE_TSAN     "Build with ThreadSanitizer (Debug only; mutually exclusive with ASAN)" OFF)
 option(LLMQUANT_WARNINGS_AS_ERRORS "Treat all compiler warnings as errors"        ON)
 option(LLMQUANT_ENABLE_CLANG_TIDY  "Run clang-tidy on library sources"            OFF)
 option(LLMQUANT_ENABLE_FUZZING  "Build libFuzzer targets (requires clang + -fsanitize=fuzzer)" OFF)
@@ -56,6 +57,9 @@ else()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
     if(LLMQUANT_ENABLE_ASAN)
         set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0 -fsanitize=address,undefined -fno-omit-frame-pointer")
+    elseif(LLMQUANT_ENABLE_TSAN)
+        # TSan uses -O1 so inlined atomics remain visible to the race detector.
+        set(CMAKE_CXX_FLAGS_DEBUG   "-g -O1 -fsanitize=thread -fno-omit-frame-pointer")
     else()
         set(CMAKE_CXX_FLAGS_DEBUG   "-g -O0")
     endif()

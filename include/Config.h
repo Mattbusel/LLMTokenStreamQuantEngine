@@ -267,7 +267,7 @@ public:
      * @param poll_interval_ms How often to check for changes (default 500 ms).
      * @return true if the watcher thread was successfully started; false otherwise.
      */
-    bool start_watching(const std::string& filepath,
+    [[nodiscard]] bool start_watching(const std::string& filepath,
                         std::function<void(const SystemConfig&)> on_reload,
                         int poll_interval_ms = 500);
 

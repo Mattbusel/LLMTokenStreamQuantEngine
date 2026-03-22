@@ -2016,3 +2016,59 @@ TEST(RiskManagerTest, test_pnl_trip_not_double_fire_after_simultaneous_position_
     // trip callback must NOT re-fire here (we were already in pnl-blocked state).
     EXPECT_EQ(pnl_trips, 0) << "pnl trip must not re-fire after transitioning from combined to pure-pnl breach";
 }
+
+// ============================================================
+// Test: update_config disabled→enabled transition resets stale
+//       gate_*_last_blocked_ so the trip callback fires on next block.
+// ============================================================
+TEST(RiskManagerTest, test_gate_trip_fires_after_gate_reenabled_via_update_config) {
+    // Block a signal through the magnitude gate so last_blocked_ = true.
+    RiskManager::Config cfg = default_config();
+    RiskManager rm(cfg);
+    int mag_trips = 0;
+    rm.set_gate_trip_callback("magnitude", [&](const std::string&, const TradeSignal&) { ++mag_trips; });
+
+    (void)rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // exceeds 1.0 limit → trip fires
+    ASSERT_EQ(mag_trips, 1) << "trip callback must fire on first block";
+
+    (void)rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // still blocked, no re-fire
+    ASSERT_EQ(mag_trips, 1) << "trip callback must not re-fire while still blocked";
+
+    // Disable the magnitude gate — gate_magnitude_last_blocked_ is still true.
+    cfg.disable_magnitude_gate = true;
+    rm.update_config(cfg);
+
+    (void)rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // gate off, signal passes, no trip
+    ASSERT_EQ(mag_trips, 1) << "no trip while gate is disabled";
+
+    // Re-enable the magnitude gate — update_config must clear last_blocked_.
+    cfg.disable_magnitude_gate = false;
+    rm.update_config(cfg);
+
+    (void)rm.evaluate(make_signal(9.9, 0.1, 0.05, 0.8));  // gate back on, blocks again
+    EXPECT_EQ(mag_trips, 2) << "trip callback must fire again after gate is re-enabled";
+}
+
+// ============================================================
+// Test: enable_all_gates() resets stale gate last_blocked_ flags.
+// ============================================================
+TEST(RiskManagerTest, test_gate_trip_fires_after_enable_all_gates) {
+    RiskManager::Config cfg = default_config();
+    RiskManager rm(cfg);
+    int conf_trips = 0;
+    rm.set_gate_trip_callback("confidence", [&](const std::string&, const TradeSignal&) { ++conf_trips; });
+
+    // Trip the confidence gate.
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.0));  // confidence=0.0 < min 0.1
+    ASSERT_EQ(conf_trips, 1);
+
+    // Disable all gates so confidence gate no longer runs.
+    rm.disable_all_gates();
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.0));  // gate off, signal passes
+    ASSERT_EQ(conf_trips, 1);
+
+    // Re-enable all gates — enable_all_gates() must reset all last_blocked_ flags.
+    rm.enable_all_gates();
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.0));  // gate back on, blocks
+    EXPECT_EQ(conf_trips, 2) << "trip callback must fire again after enable_all_gates()";
+}

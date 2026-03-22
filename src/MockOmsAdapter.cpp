@@ -1,4 +1,5 @@
 #include "MockOmsAdapter.h"
+#include <algorithm>
 
 namespace llmquant {
 
@@ -44,7 +45,15 @@ void MockOmsAdapter::emitter_thread() {
         if (!running_.load()) break;
         if (callback_) callback_(state);
         emitted_++;
-        std::this_thread::sleep_for(config_.emit_interval);
+        // Interruptible sleep: check running_ every 10 ms so stop() returns
+        // promptly even when emit_interval is large.
+        auto remaining = config_.emit_interval;
+        const auto slice = std::chrono::milliseconds{10};
+        while (running_.load() && remaining > std::chrono::milliseconds{0}) {
+            auto step = std::min(remaining, slice);
+            std::this_thread::sleep_for(step);
+            remaining -= step;
+        }
     }
 
     running_ = false;

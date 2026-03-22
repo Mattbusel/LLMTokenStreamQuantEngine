@@ -52,7 +52,7 @@ jobs:
           cmake -B build-tsan \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS_DEBUG="-g -O1 -fsanitize=thread -fno-omit-frame-pointer" \
+            -DLLMQUANT_ENABLE_TSAN=ON \
             -DLLMQUANT_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build-tsan --parallel $(nproc)
