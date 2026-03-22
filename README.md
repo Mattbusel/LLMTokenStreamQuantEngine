@@ -147,11 +147,31 @@ ctest --test-dir build -C Release --output-on-failure
 
 ### CMake options
 
+#### Feature flags (subsystem on/off)
+
 | Option | Default | Description |
 |--------|---------|-------------|
-| `LLMQUANT_ENABLE_ASAN` | `OFF` | Enable AddressSanitizer + UBSan (non-MSVC Debug builds) |
+| `LLMQUANT_ENABLE_PROMETHEUS` | `ON` | Prometheus `/metrics` HTTP scrape endpoint |
+| `LLMQUANT_ENABLE_FIX_OMS` | `ON` | FIX 4.2 OMS adapter (`FixOmsAdapter`) |
+| `LLMQUANT_ENABLE_REST_OMS` | `ON` | REST OMS polling adapter (`RestOmsAdapter`) |
+| `LLMQUANT_ENABLE_DEDUP` | `ON` | Token deduplication subsystem |
+| `LLMQUANT_ENABLE_PROFILING` | `ON` | Latency percentile tracking |
+| `LLMQUANT_ENABLE_HOT_RELOAD` | `ON` | Config file hot-reload watcher thread |
+| `LLMQUANT_ENABLE_STREAM_CLIENT` | `ON` | `LLMStreamClient` live-streaming adapter |
+| `LLMQUANT_ENABLE_TLS` | `ON` | TLS via OpenSSL (auto-disabled if OpenSSL not found) |
+| `LLMQUANT_ENABLE_REDIS` | `ON` | Redis-backed deduplication via hiredis (auto-disabled if hiredis not found) |
+| `LLMQUANT_ENABLE_JSON_STATS_SUMMARY` | `ON` | Structured `[json:*]` lines in session exit summary |
+| `LLMQUANT_ENABLE_SIGNAL_TRACE` | `OFF` | Per-token `spdlog::trace` calls in hot path (debugging only) |
+
+#### Build/tooling options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `LLMQUANT_ENABLE_ASAN` | `OFF` | AddressSanitizer + UBSan (non-MSVC Debug builds) |
 | `LLMQUANT_WARNINGS_AS_ERRORS` | `ON` | Treat compiler warnings as errors |
 | `LLMQUANT_ENABLE_CLANG_TIDY` | `OFF` | Run clang-tidy on every source file during build |
+| `LLMQUANT_ENABLE_COVERAGE` | `OFF` | gcov/lcov coverage instrumentation |
+| `LLMQUANT_ENABLE_FUZZING` | `OFF` | libFuzzer targets (requires clang) |
 
 ---
 
