@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get install -y libspdlog-dev libyaml-cpp-dev libgtest-dev cmake nlohmann-json3-dev
+        run: sudo apt-get install -y libspdlog-dev libfmt-dev libyaml-cpp-dev libgtest-dev cmake nlohmann-json3-dev
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DLLMQUANT_ENABLE_ASAN=ON -DLLMQUANT_WARNINGS_AS_ERRORS=OFF
       - name: Build
