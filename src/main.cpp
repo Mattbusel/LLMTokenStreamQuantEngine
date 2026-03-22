@@ -60,6 +60,12 @@
 #ifdef LLMQUANT_WARMUP_SEQUENCER_ENABLED
 #  include "WarmupSequencer.h"
 #endif
+#ifdef LLMQUANT_DRAWDOWN_PROTECTOR_ENABLED
+#  include "DrawdownProtector.h"
+#endif
+#ifdef LLMQUANT_MULTI_TIMEFRAME_ENABLED
+#  include "MultiTimeframeAggregator.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1175,6 +1181,31 @@ int main(int argc, char* argv[]) {
             (void)llm_adapter.map_token_to_weight(tok);
         });
     }
+#endif
+
+#ifdef LLMQUANT_DRAWDOWN_PROTECTOR_ENABLED
+    // DrawdownProtector: tightens risk thresholds as cumulative losses deepen.
+    llmquant::DrawdownProtector drawdown_protector;
+    drawdown_protector.update_config([]{
+        llmquant::DrawdownProtector::Config cfg;
+        cfg.on_tier_change = [](int t, double scale, double dd_pct) {
+            spdlog::warn("[drawdown] tier {} active  scale={:.2f}  drawdown={:.1f}%",
+                         t, scale, dd_pct * 100.0);
+        };
+        return cfg;
+    }());
+#endif
+
+#ifdef LLMQUANT_MULTI_TIMEFRAME_ENABLED
+    // MultiTimeframeAggregator: fuses bias signals across 1s/5s/30s/5m EMAs.
+    llmquant::MultiTimeframeAggregator multi_tf;
+    multi_tf.update_config([]{
+        llmquant::MultiTimeframeAggregator::Config cfg;
+        cfg.on_divergence = [](double spread, double, double) {
+            spdlog::debug("[multi_tf] timeframe divergence spread={:.3f}", spread);
+        };
+        return cfg;
+    }());
 #endif
 
 // stale_detector already declared above (before the process_token lambda).

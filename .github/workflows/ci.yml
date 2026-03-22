@@ -135,7 +135,9 @@ jobs:
             -DLLMQUANT_ENABLE_SIGNAL_DECAY=OFF \
             -DLLMQUANT_ENABLE_TOKEN_COST_BUDGET=OFF \
             -DLLMQUANT_ENABLE_LEAD_LAG=OFF \
-            -DLLMQUANT_ENABLE_GRADIENT_OPTIMISER=OFF
+            -DLLMQUANT_ENABLE_GRADIENT_OPTIMISER=OFF \
+            -DLLMQUANT_ENABLE_DRAWDOWN_PROTECTOR=OFF \
+            -DLLMQUANT_ENABLE_MULTI_TIMEFRAME=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -186,6 +188,8 @@ jobs:
           - flag: LLMQUANT_ENABLE_TOKEN_COST_BUDGET
           - flag: LLMQUANT_ENABLE_LEAD_LAG
           - flag: LLMQUANT_ENABLE_GRADIENT_OPTIMISER
+          - flag: LLMQUANT_ENABLE_DRAWDOWN_PROTECTOR
+          - flag: LLMQUANT_ENABLE_MULTI_TIMEFRAME
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

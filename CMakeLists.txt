@@ -57,6 +57,8 @@ option(LLMQUANT_ENABLE_GRADIENT_OPTIMISER  "Build GradientOptimiser: gradient-as
 option(LLMQUANT_ENABLE_WARMUP_SEQUENCER          "Build WarmupSequencer: pre-seed pipeline EMA accumulators with synthetic tokens before live streaming" ON)
 option(LLMQUANT_ENABLE_SIGNAL_DECAY              "Build SignalDecayEnvelope: exponential time-decay on accumulated bias so stale conviction fades" ON)
 option(LLMQUANT_ENABLE_TOKEN_COST_BUDGET         "Build TokenCostBudget: real-time LLM API cost limiter with soft/hard budget tiers" ON)
+option(LLMQUANT_ENABLE_DRAWDOWN_PROTECTOR        "Build DrawdownProtector: tiered risk scaling that tightens limits as cumulative losses grow" ON)
+option(LLMQUANT_ENABLE_MULTI_TIMEFRAME           "Build MultiTimeframeAggregator: fuse signals across multiple EMA horizons (1s/5s/30s/5m)" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -514,6 +516,24 @@ elseif(LLMQUANT_ENABLE_GRADIENT_OPTIMISER AND NOT LLMQUANT_ENABLE_BACKTEST)
     message(STATUS "Feature: GradientOptimiser SKIPPED (requires LLMQUANT_ENABLE_BACKTEST=ON)")
 else()
     message(STATUS "Feature: GradientOptimiser DISABLED (LLMQUANT_ENABLE_GRADIENT_OPTIMISER=OFF)")
+endif()
+
+# DrawdownProtector: tiered dynamic risk tightening on cumulative drawdown.
+if(LLMQUANT_ENABLE_DRAWDOWN_PROTECTOR)
+    target_sources(llmquant PRIVATE src/DrawdownProtector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DRAWDOWN_PROTECTOR_ENABLED)
+    message(STATUS "Feature: DrawdownProtector ENABLED (tiered risk scaling on drawdown)")
+else()
+    message(STATUS "Feature: DrawdownProtector DISABLED (LLMQUANT_ENABLE_DRAWDOWN_PROTECTOR=OFF)")
+endif()
+
+# MultiTimeframeAggregator: multi-horizon EMA signal fusion.
+if(LLMQUANT_ENABLE_MULTI_TIMEFRAME)
+    target_sources(llmquant PRIVATE src/MultiTimeframeAggregator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MULTI_TIMEFRAME_ENABLED)
+    message(STATUS "Feature: MultiTimeframeAggregator ENABLED (1s/5s/30s/5m EMA fusion)")
+else()
+    message(STATUS "Feature: MultiTimeframeAggregator DISABLED (LLMQUANT_ENABLE_MULTI_TIMEFRAME=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
