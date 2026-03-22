@@ -197,6 +197,14 @@ public:
     void force_close();
 
     /**
+     * @brief Manually force the circuit to OPEN state.
+     *
+     * Useful for external triggers (e.g. LatencyBudgetEnforcer Breaker tier)
+     * that need to trip the pipeline independently of the block-rate heuristic.
+     */
+    void force_open();
+
+    /**
      * @brief Reset all statistics (trips, recoveries, EMA) to zero.
      *
      * Does NOT change the current state.

@@ -65,6 +65,16 @@ option(LLMQUANT_ENABLE_CONFIDENCE_CALIBRATOR        "Build ConfidenceCalibrator:
 option(LLMQUANT_ENABLE_VOLATILITY_FORECASTER        "Build VolatilityForecaster: EWMA-based realized-vol forecast with regime-adaptive decay" ON)
 option(LLMQUANT_ENABLE_BAYESIAN_SIGNAL_FILTER       "Build BayesianSignalFilter: Bayesian online update of signal prior from observed trade outcomes" ON)
 option(LLMQUANT_ENABLE_ANOMALY_DETECTOR             "Build AnomalyDetector: z-score based spike detector for bias/confidence/volatility streams" ON)
+option(LLMQUANT_ENABLE_BURST_DETECTOR               "Build TokenBurstDetector: sliding-window token arrival rate monitor with burst onset callback" ON)
+option(LLMQUANT_ENABLE_SIGNAL_PERSISTENCE           "Build SignalPersistenceTracker: consecutive same-direction streak counter with conviction multiplier" ON)
+option(LLMQUANT_ENABLE_ROLLING_SHARPE               "Build RollingSharpeBiasTracker: rolling Sharpe ratio of the bias stream for signal quality gating" ON)
+option(LLMQUANT_ENABLE_NARRATIVE_CHANGE             "Build NarrativeChangeDetector: cosine-similarity break detector for LLM topic-switch events" ON)
+option(LLMQUANT_ENABLE_PNL_ATTRIBUTION              "Build PnLAttributionEngine: retrospective P&L attribution across sentiment driver categories" ON)
+option(LLMQUANT_ENABLE_PORTFOLIO_HEAT               "Build PortfolioHeatMonitor: cross-instrument risk heat aggregator with correlation burst detection" ON)
+option(LLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET        "Build ContextWindowBudget: tracks LLM context fill fraction and throttles input when near capacity" ON)
+option(LLMQUANT_ENABLE_FRACTAL_DIMENSION            "Build FractalDimensionEstimator: Higuchi fractal dimension of bias series as complexity metric" ON)
+option(LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE        "Build MarketMicrostructureFilter: models bid-ask bounce and short-term mean reversion to clean signals" ON)
+option(LLMQUANT_ENABLE_SIGNAL_ENSEMBLE              "Build SignalEnsembleLayer: model-stacking layer averaging multiple sub-signal generators" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -592,6 +602,96 @@ if(LLMQUANT_ENABLE_ANOMALY_DETECTOR)
     message(STATUS "Feature: AnomalyDetector ENABLED (z-score spike detection)")
 else()
     message(STATUS "Feature: AnomalyDetector DISABLED (LLMQUANT_ENABLE_ANOMALY_DETECTOR=OFF)")
+endif()
+
+# NarrativeChangeDetector: cosine-similarity break detector for LLM topic-switch.
+if(LLMQUANT_ENABLE_NARRATIVE_CHANGE)
+    target_sources(llmquant PRIVATE src/NarrativeChangeDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_CHANGE_ENABLED)
+    message(STATUS "Feature: NarrativeChangeDetector ENABLED (cosine-similarity narrative break)")
+else()
+    message(STATUS "Feature: NarrativeChangeDetector DISABLED (LLMQUANT_ENABLE_NARRATIVE_CHANGE=OFF)")
+endif()
+
+# PnLAttributionEngine: retrospective P&L attribution across signal driver categories.
+if(LLMQUANT_ENABLE_PNL_ATTRIBUTION)
+    target_sources(llmquant PRIVATE src/PnLAttributionEngine.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PNL_ATTRIBUTION_ENABLED)
+    message(STATUS "Feature: PnLAttributionEngine ENABLED (P&L attribution by sentiment driver)")
+else()
+    message(STATUS "Feature: PnLAttributionEngine DISABLED (LLMQUANT_ENABLE_PNL_ATTRIBUTION=OFF)")
+endif()
+
+# PortfolioHeatMonitor: cross-instrument risk heat aggregator.
+if(LLMQUANT_ENABLE_PORTFOLIO_HEAT)
+    target_sources(llmquant PRIVATE src/PortfolioHeatMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PORTFOLIO_HEAT_ENABLED)
+    message(STATUS "Feature: PortfolioHeatMonitor ENABLED (cross-instrument risk heat)")
+else()
+    message(STATUS "Feature: PortfolioHeatMonitor DISABLED (LLMQUANT_ENABLE_PORTFOLIO_HEAT=OFF)")
+endif()
+
+# TokenBurstDetector: sliding-window token arrival rate burst detector.
+if(LLMQUANT_ENABLE_BURST_DETECTOR)
+    target_sources(llmquant PRIVATE src/TokenBurstDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BURST_DETECTOR_ENABLED)
+    message(STATUS "Feature: TokenBurstDetector ENABLED (token arrival rate burst detection)")
+else()
+    message(STATUS "Feature: TokenBurstDetector DISABLED (LLMQUANT_ENABLE_BURST_DETECTOR=OFF)")
+endif()
+
+# SignalPersistenceTracker: consecutive same-direction streak with conviction scaling.
+if(LLMQUANT_ENABLE_SIGNAL_PERSISTENCE)
+    target_sources(llmquant PRIVATE src/SignalPersistenceTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_PERSISTENCE_ENABLED)
+    message(STATUS "Feature: SignalPersistenceTracker ENABLED (directional streak + conviction scale)")
+else()
+    message(STATUS "Feature: SignalPersistenceTracker DISABLED (LLMQUANT_ENABLE_SIGNAL_PERSISTENCE=OFF)")
+endif()
+
+# RollingSharpeBiasTracker: rolling Sharpe ratio of the bias stream.
+if(LLMQUANT_ENABLE_ROLLING_SHARPE)
+    target_sources(llmquant PRIVATE src/RollingSharpeBiasTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ROLLING_SHARPE_ENABLED)
+    message(STATUS "Feature: RollingSharpeBiasTracker ENABLED (rolling Sharpe signal quality)")
+else()
+    message(STATUS "Feature: RollingSharpeBiasTracker DISABLED (LLMQUANT_ENABLE_ROLLING_SHARPE=OFF)")
+endif()
+
+# ContextWindowBudget: LLM context fill fraction tracker.
+if(LLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET)
+    target_sources(llmquant PRIVATE src/ContextWindowBudget.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED)
+    message(STATUS "Feature: ContextWindowBudget ENABLED (context fill throttle)")
+else()
+    message(STATUS "Feature: ContextWindowBudget DISABLED (LLMQUANT_ENABLE_CONTEXT_WINDOW_BUDGET=OFF)")
+endif()
+
+# FractalDimensionEstimator: Higuchi fractal dimension.
+if(LLMQUANT_ENABLE_FRACTAL_DIMENSION)
+    target_sources(llmquant PRIVATE src/FractalDimensionEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FRACTAL_DIMENSION_ENABLED)
+    message(STATUS "Feature: FractalDimensionEstimator ENABLED (Higuchi fractal dimension)")
+else()
+    message(STATUS "Feature: FractalDimensionEstimator DISABLED (LLMQUANT_ENABLE_FRACTAL_DIMENSION=OFF)")
+endif()
+
+# MarketMicrostructureFilter: bid-ask + mean-reversion signal cleaning.
+if(LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE)
+    target_sources(llmquant PRIVATE src/MarketMicrostructureFilter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED)
+    message(STATUS "Feature: MarketMicrostructureFilter ENABLED (microstructure noise filter)")
+else()
+    message(STATUS "Feature: MarketMicrostructureFilter DISABLED (LLMQUANT_ENABLE_MARKET_MICROSTRUCTURE=OFF)")
+endif()
+
+# SignalEnsembleLayer: model-stacking for multiple sub-signal generators.
+if(LLMQUANT_ENABLE_SIGNAL_ENSEMBLE)
+    target_sources(llmquant PRIVATE src/SignalEnsembleLayer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_ENSEMBLE_ENABLED)
+    message(STATUS "Feature: SignalEnsembleLayer ENABLED (ensemble stacking)")
+else()
+    message(STATUS "Feature: SignalEnsembleLayer DISABLED (LLMQUANT_ENABLE_SIGNAL_ENSEMBLE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

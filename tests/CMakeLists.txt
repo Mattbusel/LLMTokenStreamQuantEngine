@@ -49,6 +49,16 @@ add_executable(tests
     unit/test_anomaly_detector.cpp
     unit/test_bayesian_signal_filter.cpp
     unit/test_volatility_forecaster.cpp
+    unit/test_narrative_change_detector.cpp
+    unit/test_pnl_attribution_engine.cpp
+    unit/test_portfolio_heat_monitor.cpp
+    unit/test_token_burst_detector.cpp
+    unit/test_signal_persistence_tracker.cpp
+    unit/test_rolling_sharpe_bias_tracker.cpp
+    unit/test_context_window_budget.cpp
+    unit/test_fractal_dimension_estimator.cpp
+    unit/test_market_microstructure_filter.cpp
+    unit/test_signal_ensemble_layer.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
@@ -73,7 +83,7 @@ endif()
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests
-    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*"
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*:*NarrativeChange*:*PnLAttribution*:*PortfolioHeat*:*TokenBurstDetector*:*SignalPersistence*:*RollingSharpeBias*:*ContextWindowBudget*:*FractalDimension*:*MarketMicrostructure*:*SignalEnsemble*"
 )
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 

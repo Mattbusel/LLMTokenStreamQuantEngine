@@ -65,9 +65,10 @@ TEST(AnomalyDetectorTest, SoftAnomalyCallbackFires) {
     cfg.soft_cb = [&](const AnomalyDetector::AnomalyEvent&) { ++soft_count; };
     AnomalyDetector det(cfg);
 
-    // Feed 10 constant values, then inject a spike.
-    for (int i = 0; i < 10; ++i) det.record(0.0);
-    det.record(50.0); // huge spike → |z| >> 2
+    // Feed alternating ±1 background (mean=0, stddev=1) so z is computable,
+    // then inject a spike far above the soft threshold.
+    for (int i = 0; i < 10; ++i) det.record(i % 2 == 0 ? -1.0 : 1.0);
+    det.record(50.0); // z ≈ 50 — well above soft=2, below hard=100
 
     EXPECT_GE(soft_count, 1);
     EXPECT_EQ(det.soft_anomalies(), static_cast<uint64_t>(soft_count));
@@ -86,8 +87,8 @@ TEST(AnomalyDetectorTest, HardAnomalyCallbackFires) {
     };
     AnomalyDetector det(cfg);
 
-    for (int i = 0; i < 10; ++i) det.record(0.0);
-    det.record(100.0); // extreme spike → |z| >> 3
+    for (int i = 0; i < 10; ++i) det.record(i % 2 == 0 ? -1.0 : 1.0);
+    det.record(100.0); // z ≈ 100 >> 3
 
     EXPECT_GE(hard_count, 1);
 }
@@ -103,8 +104,8 @@ TEST(AnomalyDetectorTest, SoftNotFiredWhenHardExceeded) {
     cfg.hard_cb = [&](const AnomalyDetector::AnomalyEvent&) { ++hard_count; };
     AnomalyDetector det(cfg);
 
-    for (int i = 0; i < 10; ++i) det.record(0.0);
-    det.record(100.0); // hard anomaly: only hard_cb should fire
+    for (int i = 0; i < 10; ++i) det.record(i % 2 == 0 ? -1.0 : 1.0);
+    det.record(100.0); // z ≈ 100 >> 3 — hard anomaly only
 
     EXPECT_EQ(soft_count, 0);
     EXPECT_GE(hard_count, 1);
@@ -158,7 +159,8 @@ TEST(AnomalyDetectorTest, AnomalyEventFieldsPopulated) {
     cfg.soft_cb = [&](const AnomalyDetector::AnomalyEvent& e) { captured = e; };
     AnomalyDetector det(cfg);
 
-    for (int i = 0; i < 10; ++i) det.record(0.0);
+    // Alternating ±1 background: mean=0, stddev=1 → z(50) ≈ 50.
+    for (int i = 0; i < 10; ++i) det.record(i % 2 == 0 ? -1.0 : 1.0);
     det.record(50.0);
 
     EXPECT_DOUBLE_EQ(captured.value, 50.0);

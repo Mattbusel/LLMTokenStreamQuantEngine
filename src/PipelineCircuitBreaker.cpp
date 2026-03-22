@@ -155,6 +155,13 @@ void PipelineCircuitBreaker::force_close() {
     }
 }
 
+void PipelineCircuitBreaker::force_open() {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (state_.load(std::memory_order_acquire) != State::Open) {
+        transition_to(State::Open);
+    }
+}
+
 void PipelineCircuitBreaker::reset_stats() {
     trips_.store(0, std::memory_order_relaxed);
     recoveries_.store(0, std::memory_order_relaxed);

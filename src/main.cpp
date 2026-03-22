@@ -54,6 +54,9 @@
 #ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
 #  include "TokenEntropyMonitor.h"
 #endif
+#ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
+#  include "NarrativeChangeDetector.h"
+#endif
 #ifdef LLMQUANT_TRADING_HOURS_ENABLED
 #  include "TradingHoursGuard.h"
 #endif
@@ -77,6 +80,33 @@
 #endif
 #ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
 #  include "AnomalyDetector.h"
+#endif
+#ifdef LLMQUANT_BURST_DETECTOR_ENABLED
+#  include "TokenBurstDetector.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_PERSISTENCE_ENABLED
+#  include "SignalPersistenceTracker.h"
+#endif
+#ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
+#  include "RollingSharpeBiasTracker.h"
+#endif
+#if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+#  include "SentimentMomentumFilter.h"
+#endif
+#if defined(LLMQUANT_POSITION_TRACKER_ENABLED) && defined(LLMQUANT_KELLY_SIZER_ENABLED)
+#  include "PositionTracker.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
+#  include "SignalDecayEnvelope.h"
+#endif
+#ifdef LLMQUANT_LATENCY_ENFORCER_ENABLED
+#  include "LatencyBudgetEnforcer.h"
+#endif
+#ifdef LLMQUANT_PNL_ATTRIBUTION_ENABLED
+#  include "PnLAttributionEngine.h"
+#endif
+#ifdef LLMQUANT_PORTFOLIO_HEAT_ENABLED
+#  include "PortfolioHeatMonitor.h"
 #endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
@@ -990,6 +1020,14 @@ int main(int argc, char* argv[]) {
     // Declared before process_token lambda so the lambda can capture it by ref.
     llmquant::TokenEntropyMonitor entropy_monitor;
 #endif
+#ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
+    // Narrative change detector: cosine similarity break for topic-switch events.
+    llmquant::NarrativeChangeDetector narrative_detector;
+    narrative_detector.set_break_callback([](double sim) {
+        spdlog::info("[narrative] topic break detected — cosine_sim={:.3f}; "
+                     "LLM may have switched themes", sim);
+    });
+#endif
 
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
     // Stale-token watchdog: fires if no token arrives for >30 s (configurable).
@@ -1006,12 +1044,24 @@ int main(int argc, char* argv[]) {
     });
 #endif
 
+    // These must be declared BEFORE the process_token lambda so the lambda can
+    // capture them by reference even though they appear under #ifdef guards.
+#if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+    llmquant::SentimentMomentumFilter sentiment_momentum_filter;
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
+    llmquant::SignalDecayEnvelope signal_decay;
+#endif
+
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
 #ifdef LLMQUANT_ENTROPY_MONITOR_ENABLED
         entropy_monitor.record(std::hash<std::string>{}(text));
+#endif
+#ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
+        narrative_detector.record(std::hash<std::string>{}(text));
 #endif
 #ifdef LLMQUANT_STALE_DETECTOR_ENABLED
         stale_detector.record_token();
@@ -1056,6 +1106,15 @@ int main(int argc, char* argv[]) {
         weight.confidence_score *= sem_mult_confidence.load(std::memory_order_relaxed);
         weight.volatility_score *= sem_mult_volatility.load(std::memory_order_relaxed);
         weight.directional_bias *= sem_mult_bias.load(std::memory_order_relaxed);
+
+#if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+        // Feed raw sentiment score into the momentum filter's trajectory analyzer.
+        sentiment_momentum_filter.record_sample(weight.sentiment_score);
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
+        // Reinforce the decay envelope with each token's directional bias.
+        signal_decay.reinforce(weight.directional_bias);
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -1131,6 +1190,53 @@ int main(int argc, char* argv[]) {
                 spdlog::info("[circuit_breaker] pipeline HALF-OPEN — probing recovery");
             }
         });
+#endif
+
+#ifdef LLMQUANT_LATENCY_ENFORCER_ENABLED
+    // Latency budget enforcer: tiered SLA escalation (Normal→Warn→Throttle→Drop→Breaker).
+    // When the Breaker tier is reached the pipeline circuit breaker is tripped immediately.
+    llmquant::LatencyBudgetEnforcer latency_budget_enforcer;
+    latency_budget_enforcer.set_warn_callback([](int64_t p99) {
+        spdlog::warn("[lbe] p99={}µs — warn budget exceeded", p99);
+    });
+    latency_budget_enforcer.set_throttle_callback([](int64_t p99) {
+        spdlog::warn("[lbe] p99={}µs — throttle tier: slowing token intake", p99);
+    });
+    latency_budget_enforcer.set_drop_callback([](int64_t p99) {
+        spdlog::error("[lbe] p99={}µs — drop tier: signal emission suspended", p99);
+    });
+#ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+    latency_budget_enforcer.set_breaker_callback([&](int64_t p99) {
+        spdlog::error("[lbe] p99={}µs — breaker tier: tripping circuit breaker", p99);
+        circuit_breaker.force_open();
+    });
+#else
+    latency_budget_enforcer.set_breaker_callback([](int64_t p99) {
+        spdlog::error("[lbe] p99={}µs — breaker tier: critical latency", p99);
+    });
+#endif
+    latency_budget_enforcer.set_recovery_callback([](int64_t p99) {
+        spdlog::info("[lbe] p99={}µs — recovered to Normal tier", p99);
+    });
+#endif
+
+#ifdef LLMQUANT_PNL_ATTRIBUTION_ENABLED
+    // P&L attribution: attributes realized trade outcomes to sentiment driver categories.
+    llmquant::PnLAttributionEngine pnl_attribution;
+#endif
+
+#ifdef LLMQUANT_PORTFOLIO_HEAT_ENABLED
+    // Portfolio heat monitor: aggregates cross-instrument risk heat.
+    llmquant::PortfolioHeatMonitor portfolio_heat;
+    portfolio_heat.set_warn_callback([](double heat) {
+        spdlog::warn("[portfolio_heat] heat={:.2f} — approaching risk budget", heat);
+    });
+    portfolio_heat.set_critical_callback([](double heat) {
+        spdlog::error("[portfolio_heat] heat={:.2f} — critical; shedding risk", heat);
+    });
+    portfolio_heat.set_recovery_callback([](double heat) {
+        spdlog::info("[portfolio_heat] heat={:.2f} — recovered to Cool", heat);
+    });
 #endif
 
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
@@ -1271,6 +1377,75 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_BURST_DETECTOR_ENABLED
+    // TokenBurstDetector: flags high token arrival rates to detect backlog flushes.
+    llmquant::TokenBurstDetector burst_detector;
+    {
+        llmquant::TokenBurstDetector::Config bd_cfg;
+        bd_cfg.on_burst_start = [](double rate) {
+            spdlog::warn("[burst_det] BURST {:.1f} tok/s — throttling may apply", rate);
+        };
+        bd_cfg.on_burst_end = [](double rate) {
+            spdlog::info("[burst_det] burst end {:.1f} tok/s", rate);
+        };
+        burst_detector.update_config(bd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_PERSISTENCE_ENABLED
+    // SignalPersistenceTracker: conviction multiplier from directional streak.
+    llmquant::SignalPersistenceTracker persistence_tracker;
+    {
+        llmquant::SignalPersistenceTracker::Config pt_cfg;
+        pt_cfg.on_conviction = [](int streak) {
+            spdlog::info("[persistence] conviction streak={}", streak);
+        };
+        persistence_tracker.update_config(pt_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
+    // RollingSharpeBiasTracker: rolling Sharpe of the bias stream.
+    llmquant::RollingSharpeBiasTracker rolling_sharpe;
+#endif
+
+#if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+    // SentimentMomentumFilter: gates trade signals that contradict the macro
+    // sentiment trajectory (Improving/Declining/Stable/Volatile).
+    {
+        llmquant::SentimentMomentumFilter::Config smf_cfg;
+        smf_cfg.mode           = llmquant::SentimentMomentumFilter::Mode::Relaxed;
+        smf_cfg.scale_by_slope = true;
+        smf_cfg.slope_scale    = 0.05;
+        sentiment_momentum_filter.update_config(smf_cfg);
+    }
+#endif
+
+#if defined(LLMQUANT_POSITION_TRACKER_ENABLED) && defined(LLMQUANT_KELLY_SIZER_ENABLED)
+    // PositionTracker: records open/close trades and feeds realised P&L back
+    // into the Kelly sizer to keep position sizing adaptive.
+    llmquant::PositionTracker position_tracker(kelly_sizer);
+    position_tracker.set_trade_close_callback([](uint64_t id, double ret, bool win) {
+        spdlog::info("[pos_tracker] trade#{} closed  return={:.4f}  {}",
+                     id, ret, win ? "WIN" : "LOSS");
+    });
+#endif
+
+#ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
+    // SignalDecayEnvelope: attenuates accumulated bias after token-stream silence.
+    {
+        llmquant::SignalDecayEnvelope::Config sd_cfg;
+        sd_cfg.half_life_ms = 15'000.0;  // bias halves after 15 s of silence
+        sd_cfg.clamp        = true;
+        sd_cfg.min_bias     = -2.0;
+        sd_cfg.max_bias     =  2.0;
+        signal_decay.update_config(sd_cfg);
+        signal_decay.set_zero_cross_callback([](double old_b, double new_b) {
+            spdlog::info("[signal_decay] bias zero-cross: {:.4f} → {:.4f}", old_b, new_b);
+        });
+    }
+#endif
+
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
     std::array<double, kSparkSlots> spark_ring{};
@@ -1296,13 +1471,38 @@ int main(int argc, char* argv[]) {
                               std::chrono::high_resolution_clock::now() - signal.timestamp
                           ).count();
 
+#if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
+        // Block signals that contradict the macro sentiment trajectory.
+        const TradeSignal momentum_filtered = sentiment_momentum_filter.filter_signal(signal);
+#else
+        const TradeSignal& momentum_filtered = signal;
+#endif
+
+#ifdef LLMQUANT_SIGNAL_DECAY_ENABLED
+        // Scale delta_bias_shift by the decay-attenuated envelope factor.
+        // Reuse the filtered signal, cloning to allow modification.
+        TradeSignal decay_adjusted = momentum_filtered;
+        {
+            double envelope = signal_decay.decayed_bias();
+            if (std::abs(envelope) > 1e-9) {
+                // Attenuate: multiply bias by |envelope| / |raw_bias| ratio clamped to [0,1].
+                double raw = signal_decay.raw_bias();
+                if (std::abs(raw) > 1e-9)
+                    decay_adjusted.delta_bias_shift *= std::min(1.0, std::abs(envelope) / std::abs(raw));
+            }
+        }
+        const TradeSignal& pre_kelly_signal = decay_adjusted;
+#else
+        const TradeSignal& pre_kelly_signal = momentum_filtered;
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
         // Scale delta_bias_shift by the current Kelly fraction before risk gating.
-        const TradeSignal sized_signal = kelly_sizer.size_signal(signal);
+        const TradeSignal sized_signal = kelly_sizer.size_signal(pre_kelly_signal);
         bool passed = risk_mgr.evaluate(sized_signal);
 #else
-        const TradeSignal& sized_signal = signal;
-        bool passed = risk_mgr.evaluate(signal);
+        const TradeSignal& sized_signal = pre_kelly_signal;
+        bool passed = risk_mgr.evaluate(pre_kelly_signal);
 #endif
 
 #ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
@@ -1358,6 +1558,21 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ANOMALY_DETECTOR_ENABLED
         // Check for statistical anomalies in the bias stream.
         anomaly_detector.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_BURST_DETECTOR_ENABLED
+        // Record token arrival for burst rate tracking.
+        burst_detector.record();
+#endif
+
+#ifdef LLMQUANT_SIGNAL_PERSISTENCE_ENABLED
+        // Track directional streak for conviction scoring.
+        persistence_tracker.record_bias(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
+        // Update rolling Sharpe of the bias stream.
+        rolling_sharpe.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -1419,6 +1634,13 @@ int main(int argc, char* argv[]) {
                 sized_signal.confidence,
                 static_cast<double>(latency_us),
                 sized_signal.signal_quality);
+
+#if defined(LLMQUANT_POSITION_TRACKER_ENABLED) && defined(LLMQUANT_KELLY_SIZER_ENABLED)
+            // Open a tracked position for this signal.  In a live system the
+            // entry_price would come from the OMS fill report; here we use the
+            // sized bias as a normalised proxy (1.0 base).
+            (void)position_tracker.open_trade(sized_signal, 1.0);
+#endif
         } else {
             logger.log_risk_rejection(block_reason_copy,
                                       signal.delta_bias_shift,
@@ -1688,6 +1910,15 @@ int main(int argc, char* argv[]) {
                     trade_engine.update_config(te_cfg);
                 }
             }
+        }
+#endif
+
+#ifdef LLMQUANT_LATENCY_ENFORCER_ENABLED
+        // Feed current P99 to the latency budget enforcer.
+        // Callbacks fire on tier transitions; Breaker tier trips the circuit breaker.
+        {
+            int64_t p99_us_i = static_cast<int64_t>(stats.p99_latency.count());
+            (void)latency_budget_enforcer.check(p99_us_i);
         }
 #endif
 
@@ -2320,6 +2551,20 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
+                      << [&]() -> std::string {
+                            // Narrative similarity: 1=consistent, 0=topic break.
+                            double sim  = narrative_detector.get_similarity();
+                            bool brk    = narrative_detector.is_narrative_break();
+                            std::ostringstream o;
+                            o << "  NRR:";
+                            if      (brk)        o << C("\033[31m");   // red    = break
+                            else if (sim > 0.75)  o << C("\033[32m");   // green  = stable
+                            else                  o << C("\033[33m");   // yellow = shifting
+                            o << std::fixed << std::setprecision(2) << sim << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -2514,6 +2759,25 @@ int main(int argc, char* argv[]) {
               << "  last_z=" << std::fixed << std::setprecision(2)
               << anomaly_detector.last_z_score() << "\n";
 #endif
+#ifdef LLMQUANT_BURST_DETECTOR_ENABLED
+    std::cout << "  Burst detector   : "
+              << "rate=" << std::fixed << std::setprecision(1) << burst_detector.current_rate()
+              << "tok/s  burst=" << (burst_detector.is_burst() ? "Y" : "N")
+              << "  events=" << burst_detector.burst_events() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_PERSISTENCE_ENABLED
+    std::cout << "  Persistence      : "
+              << "streak=" << persistence_tracker.current_streak()
+              << "  scale=" << std::fixed << std::setprecision(2)
+              << persistence_tracker.conviction_scale()
+              << "  reversals=" << persistence_tracker.total_reversals() << "\n";
+#endif
+#ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
+    std::cout << "  Rolling Sharpe   : "
+              << "sharpe=" << std::fixed << std::setprecision(3) << rolling_sharpe.last_sharpe()
+              << "  poor=" << (rolling_sharpe.is_poor_quality() ? "Y" : "N")
+              << "  n=" << rolling_sharpe.sample_count() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -2570,6 +2834,15 @@ int main(int argc, char* argv[]) {
         std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
 #ifdef LLMQUANT_DEDUP_ENABLED
         std::cout << "  [json:dedup]   " << deduplicator.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_LATENCY_ENFORCER_ENABLED
+        std::cout << "  [json:lbe]     " << latency_budget_enforcer.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PNL_ATTRIBUTION_ENABLED
+        std::cout << "  [json:pnl_attr] " << pnl_attribution.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_PORTFOLIO_HEAT_ENABLED
+        std::cout << "  [json:pheat]   " << portfolio_heat.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

@@ -40,6 +40,17 @@ double AnomalyDetector::record(double value) {
     {
         std::lock_guard<std::mutex> lk(mutex_);
 
+        // Compute z-score against the PRIOR window (before adding current value)
+        // so that the anomaly value does not contaminate the background statistics.
+        int n_prior = static_cast<int>(window_.size());
+        double mean   = 0.0;
+        double stddev = 0.0;
+        if (n_prior >= config_.min_samples) {
+            mean        = sum_ / n_prior;
+            double var  = (sum2_ / n_prior) - (mean * mean);
+            stddev      = (var > 0.0) ? std::sqrt(var) : 0.0;
+        }
+
         // Maintain rolling window.
         window_.push_back(value);
         sum_  += value;
@@ -51,16 +62,12 @@ double AnomalyDetector::record(double value) {
             sum2_ -= evicted * evicted;
         }
 
-        int n = static_cast<int>(window_.size());
-        if (n < config_.min_samples) {
+        if (n_prior < config_.min_samples) {
             last_z_ = 0.0;
             // Return NaN to signal insufficient data.
             return std::numeric_limits<double>::quiet_NaN();
         }
 
-        double mean   = sum_ / n;
-        double var    = (sum2_ / n) - (mean * mean);
-        double stddev = (var > 0.0) ? std::sqrt(var) : 0.0;
         z = compute_z(value, mean, stddev);
         last_z_ = z;
 
