@@ -35,7 +35,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Bug fix**: `main.cpp` health callback referenced `LLMQUANT_VERSION_STRING`
   — corrected to `LLMQUANT_VERSION` (the actual macro from the generated
   version header).
-- Total tests: 1108 (up from 986).
+- Total tests: 1158 (up from 986).
 
 ### Added (Cycle 34 — 2026-03-21)
 - **New module `SentimentTrajectoryAnalyzer`** (`include/SentimentTrajectoryAnalyzer.h`,

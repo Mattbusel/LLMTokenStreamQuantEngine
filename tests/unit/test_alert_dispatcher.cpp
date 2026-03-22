@@ -121,9 +121,8 @@ TEST(AlertDispatcher, DedupDoesNotSuppressDifferentMessages) {
 TEST(AlertDispatcher, QueueFullDropsAlert) {
     AlertDispatcher::Config cfg;
     cfg.max_queue_depth = 2;
+    cfg.dedup_window_ms = 0;  // disable dedup so unique messages are not deduped
     AlertDispatcher ad(cfg);
-    // Don't start — all posts go to a stopped queue and should count as total_posted.
-    // Actually with queue not started, running_ is false so posts are dropped without queueing.
     // Start but hold the sink so queue fills.
     std::mutex hold;
     hold.lock();
@@ -133,9 +132,9 @@ TEST(AlertDispatcher, QueueFullDropsAlert) {
     });
     (void)ad.start();
 
-    // Post 10 alerts; only 2 fit in queue.
+    // Post 10 alerts with unique messages; only 2 fit in queue.
     for (int i = 0; i < 10; ++i)
-        ad.post(AlertDispatcher::Severity::Info, "cat", "msg");
+        ad.post(AlertDispatcher::Severity::Info, "cat", "msg_" + std::to_string(i));
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     hold.unlock();
 

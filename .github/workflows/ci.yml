@@ -124,7 +124,11 @@ jobs:
             -DLLMQUANT_ENABLE_TOKEN_REPLAY=OFF \
             -DLLMQUANT_ENABLE_PARAMETER_SWEEP=OFF \
             -DLLMQUANT_ENABLE_ALERT_DISPATCHER=OFF \
-            -DLLMQUANT_ENABLE_POSITION_TRACKER=OFF
+            -DLLMQUANT_ENABLE_POSITION_TRACKER=OFF \
+            -DLLMQUANT_ENABLE_ENTROPY_METER=OFF \
+            -DLLMQUANT_ENABLE_LATENCY_ENFORCER=OFF \
+            -DLLMQUANT_ENABLE_ENTROPY_MONITOR=OFF \
+            -DLLMQUANT_ENABLE_TRADING_HOURS=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -164,6 +168,10 @@ jobs:
           - flag: LLMQUANT_ENABLE_PARAMETER_SWEEP
           - flag: LLMQUANT_ENABLE_ALERT_DISPATCHER
           - flag: LLMQUANT_ENABLE_POSITION_TRACKER
+          - flag: LLMQUANT_ENABLE_ENTROPY_METER
+          - flag: LLMQUANT_ENABLE_LATENCY_ENFORCER
+          - flag: LLMQUANT_ENABLE_ENTROPY_MONITOR
+          - flag: LLMQUANT_ENABLE_TRADING_HOURS
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
