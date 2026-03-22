@@ -162,6 +162,9 @@
 #ifdef LLMQUANT_CONFIDENCE_DECAY_ENABLED
 #  include "ConfidenceDecayTracker.h"
 #endif
+#ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
+#  include "CrossAssetCorrelationMonitor.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1544,6 +1547,25 @@ int main(int argc, char* argv[]) {
             spdlog::info("[conf_decay] half-life {:.0f}ms→{:.0f}ms", old, nw);
         };
         conf_decay.update_config(std::move(cd_cfg));
+    }
+#endif
+
+#ifdef LLMQUANT_CROSS_ASSET_CORR_ENABLED
+    // CrossAssetCorrelationMonitor: rolling Pearson correlation between bias and vol.
+    // Register "bias" and "vol" as two virtual "assets" to track their co-movement.
+    llmquant::CrossAssetCorrelationMonitor cross_asset_corr;
+    {
+        llmquant::CrossAssetCorrelationMonitor::Config ca_cfg;
+        ca_cfg.on_high_correlation = [](const std::string& a, const std::string& b, double rho) {
+            spdlog::info("[cross_asset] high correlation  {}<>{} rho={:.3f}", a, b, rho);
+        };
+        ca_cfg.on_low_correlation  = [](const std::string& a, const std::string& b, double rho) {
+            spdlog::info("[cross_asset] low correlation   {}<>{} rho={:.3f}", a, b, rho);
+        };
+        cross_asset_corr.update_config(std::move(ca_cfg));
+        cross_asset_corr.register_asset("bias");
+        cross_asset_corr.register_asset("vol");
+        cross_asset_corr.register_asset("confidence");
     }
 #endif
 
