@@ -1830,3 +1830,46 @@ TEST(RiskManagerTest, test_format_blocked_by_gate_all_zero_initially) {
     EXPECT_NE(s.find("conf=0"), std::string::npos) << "conf must be 0; got: " << s;
     EXPECT_NE(s.find("dd=0"),   std::string::npos) << "dd must be 0; got: " << s;
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 28: pnl gate counter tracking
+// ---------------------------------------------------------------------------
+
+TEST(RiskManagerTest, test_pnl_gate_increments_blocked_pnl_counter) {
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    // Wire OMS position with PnL breach.
+    OmsPosition pos;
+    pos.current_position = 0.1;
+    pos.position_limit   = 1.0;
+    pos.pnl              = -15.0;
+    pos.pnl_limit        = -10.0;
+    rm.update_oms_position(pos);
+
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+
+    auto s = rm.to_stats_json();
+    EXPECT_NE(s.find("\"blocked_pnl\":1"), std::string::npos)
+        << "blocked_pnl must be 1 after one PnL breach block; json=" << s;
+}
+
+TEST(RiskManagerTest, test_pnl_gate_counter_in_format_blocked_by_gate) {
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    OmsPosition pos;
+    pos.current_position = 0.1;
+    pos.position_limit   = 1.0;
+    pos.pnl              = -20.0;
+    pos.pnl_limit        = -10.0;
+    rm.update_oms_position(pos);
+
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+
+    std::string s = rm.format_blocked_by_gate();
+    EXPECT_NE(s.find("pnl=1"), std::string::npos)
+        << "pnl counter must be 1 after PnL breach block; got: " << s;
+}
