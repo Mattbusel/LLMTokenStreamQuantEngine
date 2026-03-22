@@ -1454,7 +1454,9 @@ int main(int argc, char* argv[]) {
     }
 
     token_sim.stop();
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
     if (stream_client) stream_client->stop();
+#endif
     oms_adapter->stop();
 #ifdef LLMQUANT_PROMETHEUS_ENABLED
     prom_exporter.stop();
