@@ -1840,13 +1840,13 @@ TEST(RiskManagerTest, test_pnl_gate_increments_blocked_pnl_counter) {
     cfg.disable_rate_gate = true;
     RiskManager rm(cfg);
 
-    // Wire OMS position with PnL breach.
-    OmsPosition pos;
-    pos.current_position = 0.1;
-    pos.position_limit   = 1.0;
-    pos.pnl              = -15.0;
-    pos.pnl_limit        = -10.0;
-    rm.update_oms_position(pos);
+    // Wire position with PnL breach (pnl < pnl_limit).
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.1;
+    pos.position_limit = 1.0;
+    pos.pnl            = -15.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
 
     (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
 
@@ -1860,12 +1860,12 @@ TEST(RiskManagerTest, test_pnl_gate_counter_in_format_blocked_by_gate) {
     cfg.disable_rate_gate = true;
     RiskManager rm(cfg);
 
-    OmsPosition pos;
-    pos.current_position = 0.1;
-    pos.position_limit   = 1.0;
-    pos.pnl              = -20.0;
-    pos.pnl_limit        = -10.0;
-    rm.update_oms_position(pos);
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.1;
+    pos.position_limit = 1.0;
+    pos.pnl            = -20.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
 
     (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
 
