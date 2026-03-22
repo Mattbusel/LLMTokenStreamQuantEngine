@@ -19,3 +19,7 @@ out/
 *.swo
 *~
 build-ninja/
+# Test artifacts (audit log rotation test outputs)
+test_audit_rotate.ndjson*
+tmp_backtest_tokens.txt
+tmp_bt_comments.txt

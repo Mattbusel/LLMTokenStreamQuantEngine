@@ -1902,7 +1902,9 @@ TEST(TradeSignalEngineTest, test_time_decay_disabled_zero_half_life) {
     engine.set_backtest_mode(true);
     engine.set_signal_callback([](const TradeSignal&) {});
 
-    engine.process_semantic_weight({0.5, 1.0, 0.5, 0.0});
+    // SemanticWeight: {sentiment, confidence, volatility, directional_bias}
+    // directional_bias must be non-zero to accumulate any bias.
+    engine.process_semantic_weight({0.5, 1.0, 0.5, 0.8});
     double bias_initial = engine.get_accumulated_bias();
     ASSERT_GT(bias_initial, 0.0);
 
@@ -1927,7 +1929,8 @@ TEST(TradeSignalEngineTest, test_time_decay_reduces_bias_over_elapsed_time) {
     engine.set_backtest_mode(true);
     engine.set_signal_callback([](const TradeSignal&) {});
 
-    engine.process_semantic_weight({0.8, 1.0, 0.0, 0.0});
+    // SemanticWeight: {sentiment, confidence, volatility, directional_bias}
+    engine.process_semantic_weight({0.8, 1.0, 0.0, 0.8});
     double bias_initial = engine.get_accumulated_bias();
     ASSERT_GT(bias_initial, 0.0);
 

@@ -33,6 +33,8 @@
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
+#include <array>
+#include <cmath>
 #include <iomanip>
 #include <memory>
 #include <thread>
@@ -1222,6 +1224,7 @@ int main(int argc, char* argv[]) {
     // Interruptible sleep: wake every 100ms to check g_running so that
     // SIGINT/SIGTERM is handled promptly regardless of --stats-interval.
     uint64_t last_tick = 0;
+    std::string last_regime;  // For regime-change transition alerts.
     while (g_running) {
         {
             auto deadline = std::chrono::steady_clock::now()
@@ -1668,6 +1671,38 @@ int main(int argc, char* argv[]) {
         // get_process_cpu_fraction() returns a fraction [0, N_cores], so multiply by 100.
         logger.log_system_stats(get_process_rss_bytes(), cpu_fraction * 100.0);
 
+        // Compute rolling regime classification from sparkline ring (lag-1 AC).
+        // mean > +0.05 && AC > 0.10  → BULL  mean < -0.05 && AC > 0.10  → BEAR
+        // AC < -0.15 → CHOP  |mean| < 0.02 → FLAT  else → NOIS
+        std::string current_regime;
+        std::string current_regime_str;
+        {
+            int rgm_head = spark_head.load(std::memory_order_relaxed);
+            int rgm_n    = std::min(rgm_head, kSparkSlots);
+            if (rgm_n >= 4) {
+                int rgm_start = (rgm_head >= kSparkSlots) ? (rgm_head % kSparkSlots) : 0;
+                double rgm_sum = 0.0;
+                for (int i = 0; i < rgm_n; ++i)
+                    rgm_sum += spark_ring[(rgm_start + i) % kSparkSlots];
+                double rgm_mean = rgm_sum / static_cast<double>(rgm_n);
+                double rgm_cov = 0.0, rgm_var = 0.0;
+                for (int i = 1; i < rgm_n; ++i) {
+                    double x0 = spark_ring[(rgm_start + i - 1) % kSparkSlots] - rgm_mean;
+                    double x1 = spark_ring[(rgm_start + i)     % kSparkSlots] - rgm_mean;
+                    rgm_cov += x0 * x1;
+                    rgm_var += x0 * x0;
+                }
+                double rgm_ac = (rgm_var > 1e-12) ? rgm_cov / rgm_var : 0.0;
+                const char* rgm_col;
+                if      (rgm_mean >  0.05 && rgm_ac >  0.10) { current_regime = "BULL"; rgm_col = "\033[32m"; }
+                else if (rgm_mean < -0.05 && rgm_ac >  0.10) { current_regime = "BEAR"; rgm_col = "\033[31m"; }
+                else if (rgm_ac < -0.15)                      { current_regime = "CHOP"; rgm_col = "\033[33m"; }
+                else if (std::abs(rgm_mean) < 0.02)           { current_regime = "FLAT"; rgm_col = "\033[90m"; }
+                else                                          { current_regime = "NOIS"; rgm_col = "\033[35m"; }
+                current_regime_str = std::string("  RGM:") + C(rgm_col) + current_regime + C("\033[0m");
+            }
+        }
+
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
             std::cout << "\n  -- STATS "
@@ -1728,7 +1763,14 @@ int main(int argc, char* argv[]) {
                             }
                             return out;
                          }()
+                      << [&]() -> std::string { return current_regime_str; }()
                       << std::flush;
+
+            // Regime-change alert: log to spdlog when classified regime transitions.
+            if (!current_regime.empty() && current_regime != last_regime && !last_regime.empty()) {
+                spdlog::info("[regime] {} → {}", last_regime, current_regime);
+            }
+            last_regime = current_regime;
 
             // Alert if P99 exceeds budget.
             if (p99 > sys_config.latency.target_latency_us && last_tick != stats.measurements) {

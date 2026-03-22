@@ -35,6 +35,7 @@ option(LLMQUANT_ENABLE_MOCK_OMS      "Build MockOmsAdapter (deterministic test d
 option(LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY "Build SentimentTrajectoryAnalyzer (online linear-regression trend detector for token sentiment streams)" ON)
 option(LLMQUANT_ENABLE_AUDIT_LOG         "Build the async NDJSON signal audit log (SignalAuditLog)" ON)
 option(LLMQUANT_ENABLE_CIRCUIT_BREAKER   "Build the pipeline circuit-breaker (auto-pause on sustained high block rate)" ON)
+option(LLMQUANT_ENABLE_BACKTEST          "Build BacktestRunner: full-pipeline token-sequence replay with PnL statistics" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -181,6 +182,15 @@ if(LLMQUANT_ENABLE_CIRCUIT_BREAKER)
     message(STATUS "Feature: PipelineCircuitBreaker ENABLED (auto-pause on high block rate)")
 else()
     message(STATUS "Feature: PipelineCircuitBreaker DISABLED (LLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF)")
+endif()
+
+# BacktestRunner: full-pipeline token-sequence replay with PnL statistics.
+if(LLMQUANT_ENABLE_BACKTEST)
+    target_sources(llmquant PRIVATE src/BacktestRunner.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BACKTEST_ENABLED)
+    message(STATUS "Feature: BacktestRunner ENABLED (full-pipeline replay with PnL stats)")
+else()
+    message(STATUS "Feature: BacktestRunner DISABLED (LLMQUANT_ENABLE_BACKTEST=OFF)")
 endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).
