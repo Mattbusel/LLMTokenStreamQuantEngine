@@ -124,6 +124,7 @@ option(LLMQUANT_ENABLE_STREAM_DIFFERENCER           "Build TokenStreamDifference
 option(LLMQUANT_ENABLE_SIGNAL_DRIFT                 "Build SignalDriftMonitor: Wasserstein-1 drift detector comparing recent vs baseline bias-shift distributions" ON)
 option(LLMQUANT_ENABLE_LIFECYCLE_TRACKER            "Build SignalLifecycleTracker: tracks signal birth/peak/decay/death and empirical half-lives, flags zombie signals" ON)
 option(LLMQUANT_ENABLE_TOKEN_QUANTISER              "Build TokenWeightQuantiser: stochastic rounding to a fixed grid preserving E[w] exactly for integer-precision downstream" ON)
+option(LLMQUANT_ENABLE_POSITION_CONCENTRATION       "Build PositionConcentrationGuard: HHI-based theme concentration monitor, fires when signal pipeline is too concentrated in one theme" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1181,6 +1182,15 @@ if(LLMQUANT_ENABLE_TOKEN_QUANTISER)
     message(STATUS "Feature: TokenWeightQuantiser ENABLED (stochastic rounding, E[w] preserved)")
 else()
     message(STATUS "Feature: TokenWeightQuantiser DISABLED (LLMQUANT_ENABLE_TOKEN_QUANTISER=OFF)")
+endif()
+
+# PositionConcentrationGuard: HHI theme concentration monitor.
+if(LLMQUANT_ENABLE_POSITION_CONCENTRATION)
+    target_sources(llmquant PRIVATE src/PositionConcentrationGuard.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POSITION_CONCENTRATION_ENABLED)
+    message(STATUS "Feature: PositionConcentrationGuard ENABLED (HHI theme concentration)")
+else()
+    message(STATUS "Feature: PositionConcentrationGuard DISABLED (LLMQUANT_ENABLE_POSITION_CONCENTRATION=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

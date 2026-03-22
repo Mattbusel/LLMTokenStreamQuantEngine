@@ -52,9 +52,9 @@ TEST(TokenWeightQuantiserTest, ClampCounts) {
     cfg.range_max =  1.0;
     cfg.clamp_alert_fraction = 1.0;  // suppress alert
     TokenWeightQuantiser q(cfg);
-    q.quantise(2.0);   // clamped
-    q.quantise(-2.0);  // clamped
-    q.quantise(0.5);   // not clamped
+    (void)q.quantise(2.0);   // clamped
+    (void)q.quantise(-2.0);  // clamped
+    (void)q.quantise(0.5);   // not clamped
     EXPECT_EQ(q.clamp_count(), 2u);
     EXPECT_EQ(q.total_count(), 3u);
 }
@@ -63,8 +63,8 @@ TEST(TokenWeightQuantiserTest, ClampRateCorrect) {
     TokenWeightQuantiser::Config cfg;
     cfg.clamp_alert_fraction = 1.0;
     TokenWeightQuantiser q(cfg);
-    q.quantise(5.0);  // clamped
-    q.quantise(0.0);  // not clamped
+    (void)q.quantise(5.0);  // clamped
+    (void)q.quantise(0.0);  // not clamped
     EXPECT_NEAR(q.clamp_rate(), 0.5, 1e-9);
 }
 
@@ -83,7 +83,7 @@ TEST(TokenWeightQuantiserTest, QuantisationErrorNonNegative) {
     TokenWeightQuantiser::Config cfg;
     cfg.levels = 4;
     TokenWeightQuantiser q(cfg);
-    for (int i = 0; i < 50; ++i) q.quantise(i * 0.02 - 0.5);
+    for (int i = 0; i < 50; ++i) (void)q.quantise(i * 0.02 - 0.5);
     EXPECT_GE(q.quantisation_error(), 0.0);
 }
 
@@ -94,14 +94,14 @@ TEST(TokenWeightQuantiserTest, ClampAlertCallbackFires) {
     cfg.on_high_clamp_rate = [&](double, double) { ++fires; };
     TokenWeightQuantiser q(cfg);
     // All weights out of range → clamp rate = 100% > 10%.
-    for (int i = 0; i < 10; ++i) q.quantise(5.0);
+    for (int i = 0; i < 10; ++i) (void)q.quantise(5.0);
     EXPECT_GE(fires.load(), 1);
 }
 
 TEST(TokenWeightQuantiserTest, ResetClearsState) {
     TokenWeightQuantiser q;
-    q.quantise(0.5);
-    q.quantise(2.0);
+    (void)q.quantise(0.5);
+    (void)q.quantise(2.0);
     q.reset();
     EXPECT_EQ(q.total_count(), 0u);
     EXPECT_EQ(q.clamp_count(), 0u);
@@ -109,7 +109,7 @@ TEST(TokenWeightQuantiserTest, ResetClearsState) {
 
 TEST(TokenWeightQuantiserTest, StatsJsonNonEmpty) {
     TokenWeightQuantiser q;
-    q.quantise(0.5);
+    (void)q.quantise(0.5);
     std::string j = q.to_stats_json();
     EXPECT_NE(j.find("quantisation_error"), std::string::npos);
     EXPECT_NE(j.find("clamp_rate"),         std::string::npos);
@@ -120,7 +120,7 @@ TEST(TokenWeightQuantiserTest, ConcurrentSafe) {
     std::atomic<bool> go{false};
     auto worker = [&] {
         while (!go.load()) {}
-        for (int i = 0; i < 500; ++i) q.quantise(i * 0.004 - 1.0);
+        for (int i = 0; i < 500; ++i) (void)q.quantise(i * 0.004 - 1.0);
     };
     std::thread t1(worker), t2(worker);
     go.store(true);

@@ -130,7 +130,7 @@ private:
 
     double vel_ema_val_{0.0};
     double skew_ema_val_{0.0};
-    bool   armed_{false};  // true when not in active divergence
+    bool   armed_{true};   // true when not in active divergence; ready to fire
 
     std::atomic<double>   vel_ema_{0.0};
     std::atomic<double>   skew_ema_{0.0};

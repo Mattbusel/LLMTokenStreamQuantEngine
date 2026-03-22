@@ -261,6 +261,9 @@
 #ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
 #  include "TokenWeightQuantiser.h"
 #endif
+#ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
+#  include "PositionConcentrationGuard.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1243,6 +1246,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
     llmquant::TokenStreamDifferencer stream_differencer;
+#endif
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+    llmquant::TokenWeightQuantiser token_quantiser;
 #endif
 
     // Shared token processing lambda used by both the simulator and the
@@ -2284,7 +2290,7 @@ int main(int argc, char* argv[]) {
     // TokenWeightQuantiser: stochastic rounding to 256-level fixed grid.
     // Preserves E[w] exactly across many tokens, enabling integer-precision
     // downstream SIMD accumulation without systematic bias.
-    llmquant::TokenWeightQuantiser token_quantiser;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::TokenWeightQuantiser::Config tq_cfg;
         tq_cfg.levels               = 256;

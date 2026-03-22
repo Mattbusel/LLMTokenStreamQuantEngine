@@ -51,12 +51,12 @@ void OptionsFlowSentimentBridge::record_bias(double bias, double dt_s) {
         if (armed_) {
             if (score > threshold) {
                 kind = DivergenceKind::SmartMoneyBear;
-                armed_ = false;
+                armed_ = true;
                 should_fire = true;
                 div_count_.fetch_add(1, std::memory_order_relaxed);
             } else if (score < -threshold) {
                 kind = DivergenceKind::SmartMoneyBull;
-                armed_ = false;
+                armed_ = true;
                 should_fire = true;
                 div_count_.fetch_add(1, std::memory_order_relaxed);
             }
@@ -118,7 +118,7 @@ void OptionsFlowSentimentBridge::reset() {
     warmup_count_ = 0;
     vel_ema_val_ = 0.0;
     skew_ema_val_ = 0.0;
-    armed_ = false;
+    armed_ = true;
     vel_ema_.store(0.0, std::memory_order_relaxed);
     skew_ema_.store(0.0, std::memory_order_relaxed);
     div_score_.store(0.0, std::memory_order_relaxed);
@@ -134,7 +134,7 @@ void OptionsFlowSentimentBridge::update_config(const Config& cfg) {
     warmup_count_ = 0;
     vel_ema_val_ = 0.0;
     skew_ema_val_ = 0.0;
-    armed_ = false;
+    armed_ = true;
 }
 
 } // namespace llmquant
