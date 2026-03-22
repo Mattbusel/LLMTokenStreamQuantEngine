@@ -510,6 +510,24 @@
 #ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
 #  include "TokenCadenceAnalyser.h"
 #endif
+#ifdef LLMQUANT_MEAN_REVERSION_SPEED_ENABLED
+#  include "SignalMeanReversionSpeed.h"
+#endif
+#ifdef LLMQUANT_CLUSTER_DETECTOR_ENABLED
+#  include "NarrativeClusterDetector.h"
+#endif
+#ifdef LLMQUANT_VOL_BREAKOUT_ENABLED
+#  include "BiasVolatilityBreakout.h"
+#endif
+#ifdef LLMQUANT_STOCHASTIC_OSC_ENABLED
+#  include "SignalStochasticOscillator.h"
+#endif
+#ifdef LLMQUANT_BIAS_ACF_ENABLED
+#  include "BiasAutocorrelationFunction.h"
+#endif
+#ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
+#  include "OnlineGrangerCausality.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3638,6 +3656,130 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_MEAN_REVERSION_SPEED_ENABLED
+    // SignalMeanReversionSpeed: OLS AR(1) estimator for κ (speed of mean reversion).
+    // θ < 1 → mean-reverting; θ > 1 → explosive/trending; fires on transition.
+    llmquant::SignalMeanReversionSpeed mean_rev_speed;
+    {
+        llmquant::SignalMeanReversionSpeed::Config mr_cfg;
+        mr_cfg.window               = 30;
+        mr_cfg.min_samples          = 10;
+        mr_cfg.fast_kappa_threshold = 1.0;
+        mr_cfg.explosive_theta      = 1.0;
+        mr_cfg.on_fast_reversion = [](double kappa) {
+            spdlog::info("[mean_rev] FAST REVERSION kappa={:.3f}", kappa);
+        };
+        mr_cfg.on_explosive = [](double theta) {
+            spdlog::warn("[mean_rev] EXPLOSIVE theta={:.3f}", theta);
+        };
+        mean_rev_speed.update_config(mr_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CLUSTER_DETECTOR_ENABLED
+    // NarrativeClusterDetector: online k-means bias regime classifier (k=3 regimes).
+    // Fires on_cluster_change when narrative regime assignment switches.
+    llmquant::NarrativeClusterDetector cluster_detector;
+    {
+        llmquant::NarrativeClusterDetector::Config cd_cfg;
+        cd_cfg.k           = 3;
+        cd_cfg.alpha       = 0.1;
+        cd_cfg.min_samples = 10;
+        cd_cfg.on_cluster_change = [](int old_c, int new_c, double centroid) {
+            spdlog::info("[cluster] REGIME CHANGE {} → {} (centroid={:.4f})", old_c, new_c, centroid);
+        };
+        cluster_detector.update_config(cd_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_VOL_BREAKOUT_ENABLED
+    // BiasVolatilityBreakout: short/long rolling std ratio for vol expansion/contraction.
+    // ratio > breakout_ratio → expansion; ratio < contraction_ratio → compression.
+    llmquant::BiasVolatilityBreakout vol_breakout;
+    {
+        llmquant::BiasVolatilityBreakout::Config vb_cfg;
+        vb_cfg.short_window      = 10;
+        vb_cfg.long_window       = 30;
+        vb_cfg.min_samples       = 10;
+        vb_cfg.breakout_ratio    = 1.5;
+        vb_cfg.contraction_ratio = 0.7;
+        vb_cfg.on_expansion = [](double ratio) {
+            spdlog::warn("[vol_breakout] EXPANSION ratio={:.3f}", ratio);
+        };
+        vb_cfg.on_contraction = [](double ratio) {
+            spdlog::info("[vol_breakout] CONTRACTION ratio={:.3f}", ratio);
+        };
+        vol_breakout.update_config(vb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_STOCHASTIC_OSC_ENABLED
+    // SignalStochasticOscillator: %K/%D stochastic exhaustion detector for bias stream.
+    // %K near 100 → overbought narrative; %K near 0 → oversold; K/D cross = mean reversion.
+    llmquant::SignalStochasticOscillator stochastic_osc;
+    {
+        llmquant::SignalStochasticOscillator::Config so_cfg;
+        so_cfg.k_period             = 14;
+        so_cfg.d_period             = 3;
+        so_cfg.overbought_threshold = 80.0;
+        so_cfg.oversold_threshold   = 20.0;
+        so_cfg.on_overbought = [](double k) {
+            spdlog::info("[stoch] OVERBOUGHT %K={:.1f}", k);
+        };
+        so_cfg.on_oversold = [](double k) {
+            spdlog::info("[stoch] OVERSOLD %K={:.1f}", k);
+        };
+        so_cfg.on_kd_bullish_cross = [](double k, double d) {
+            spdlog::info("[stoch] K/D BULLISH CROSS %K={:.1f} %D={:.1f}", k, d);
+        };
+        so_cfg.on_kd_bearish_cross = [](double k, double d) {
+            spdlog::info("[stoch] K/D BEARISH CROSS %K={:.1f} %D={:.1f}", k, d);
+        };
+        stochastic_osc.update_config(so_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BIAS_ACF_ENABLED
+    // BiasAutocorrelationFunction: rolling multi-lag ACF for narrative autocorrelation.
+    // Positive r1 → trending momentum; negative r1 → mean-reversion.
+    llmquant::BiasAutocorrelationFunction bias_acf;
+    {
+        llmquant::BiasAutocorrelationFunction::Config acf_cfg;
+        acf_cfg.window             = 64;
+        acf_cfg.max_lag            = 16;
+        acf_cfg.min_samples        = 32;
+        acf_cfg.periodic_threshold = 0.4;
+        acf_cfg.on_periodic_pattern = [](int lag, double r) {
+            spdlog::info("[acf] PERIODIC PATTERN dominant_lag={} r={:.3f}", lag, r);
+        };
+        acf_cfg.on_lag1_sign_change = [](double r1) {
+            spdlog::info("[acf] r1 SIGN FLIP {:.3f} (momentum↔mean-rev regime change)", r1);
+        };
+        bias_acf.update_config(acf_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
+    // OnlineGrangerCausality: VAR(1) Granger causality between bias and confidence.
+    llmquant::OnlineGrangerCausality granger;
+    {
+        llmquant::OnlineGrangerCausality::Config gc_cfg;
+        gc_cfg.window      = 64;
+        gc_cfg.min_samples = 32;
+        gc_cfg.f_threshold = 3.84;
+        gc_cfg.on_x_causes_y = [](double f) {
+            spdlog::info("[granger] BIAS->CONFIDENCE F={:.2f} (bias leads confidence)", f);
+        };
+        gc_cfg.on_y_causes_x = [](double f) {
+            spdlog::info("[granger] CONFIDENCE->BIAS F={:.2f} (confidence leads bias)", f);
+        };
+        gc_cfg.on_bidirectional = []() {
+            spdlog::warn("[granger] BIDIRECTIONAL causality — feedback loop detected");
+        };
+        granger.update_config(gc_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -4847,6 +4989,25 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
         cadence_analyser.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_MEAN_REVERSION_SPEED_ENABLED
+        mean_rev_speed.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CLUSTER_DETECTOR_ENABLED
+        cluster_detector.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_VOL_BREAKOUT_ENABLED
+        vol_breakout.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_STOCHASTIC_OSC_ENABLED
+        stochastic_osc.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BIAS_ACF_ENABLED
+        bias_acf.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
+        // x = bias_shift, y = confidence: test if bias leads confidence or vice versa
+        granger.record(signal.delta_bias_shift, signal.confidence);
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
@@ -7057,6 +7218,39 @@ int main(int argc, char* argv[]) {
               << "  gaps=" << cadence_analyser.gap_events()
               << "  obs=" << cadence_analyser.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_MEAN_REVERSION_SPEED_ENABLED
+    std::cout << "  Mean Rev Speed   : "
+              << "theta=" << std::fixed << std::setprecision(4) << mean_rev_speed.theta()
+              << "  kappa=" << mean_rev_speed.kappa()
+              << "  half_life=" << mean_rev_speed.half_life()
+              << "  fast_rev=" << mean_rev_speed.fast_reversion_events()
+              << "  obs=" << mean_rev_speed.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CLUSTER_DETECTOR_ENABLED
+    std::cout << "  Cluster Detector : "
+              << "cluster=" << cluster_detector.active_cluster()
+              << "  changes=" << cluster_detector.cluster_change_events()
+              << "  obs=" << cluster_detector.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_VOL_BREAKOUT_ENABLED
+    std::cout << "  Vol Breakout     : "
+              << "sv=" << std::fixed << std::setprecision(4) << vol_breakout.short_vol()
+              << "  lv=" << vol_breakout.long_vol()
+              << "  ratio=" << std::setprecision(3) << vol_breakout.vol_ratio()
+              << "  exp=" << vol_breakout.expansion_events()
+              << "  con=" << vol_breakout.contraction_events()
+              << "  obs=" << vol_breakout.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_STOCHASTIC_OSC_ENABLED
+    std::cout << "  Stochastic Osc   : "
+              << "%K=" << std::fixed << std::setprecision(1) << stochastic_osc.k_pct()
+              << "  %D=" << stochastic_osc.d_pct()
+              << "  ob=" << (stochastic_osc.is_overbought() ? "Y" : "N")
+              << "  os=" << (stochastic_osc.is_oversold() ? "Y" : "N")
+              << "  ob_ev=" << stochastic_osc.overbought_events()
+              << "  os_ev=" << stochastic_osc.oversold_events()
+              << "  obs=" << stochastic_osc.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -7666,6 +7860,24 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CADENCE_ANALYSER_ENABLED
         std::cout << "  [json:cadence]    " << cadence_analyser.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MEAN_REVERSION_SPEED_ENABLED
+        std::cout << "  [json:mean_rev]   " << mean_rev_speed.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CLUSTER_DETECTOR_ENABLED
+        std::cout << "  [json:cluster]    " << cluster_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_VOL_BREAKOUT_ENABLED
+        std::cout << "  [json:vol_break]  " << vol_breakout.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_STOCHASTIC_OSC_ENABLED
+        std::cout << "  [json:stoch]      " << stochastic_osc.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BIAS_ACF_ENABLED
+        std::cout << "  [json:bias_acf]   " << bias_acf.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ONLINE_GRANGER_ENABLED
+        std::cout << "  [json:granger]    " << granger.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";

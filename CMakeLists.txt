@@ -2081,6 +2081,26 @@ else()
     message(STATUS "Feature: SignalStochasticOscillator DISABLED (LLMQUANT_ENABLE_STOCHASTIC_OSC=OFF)")
 endif()
 
+# BiasAutocorrelationFunction: rolling multi-lag ACF for trending vs mean-reversion detection.
+option(LLMQUANT_ENABLE_BIAS_ACF "Build BiasAutocorrelationFunction: rolling ACF at lags 1..N; r1>0=trending, r1<0=mean-reverting; fires on_periodic_pattern/on_lag1_sign_change" ON)
+if(LLMQUANT_ENABLE_BIAS_ACF)
+    target_sources(llmquant PRIVATE src/BiasAutocorrelationFunction.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BIAS_ACF_ENABLED)
+    message(STATUS "Feature: BiasAutocorrelationFunction ENABLED (multi-lag ACF, periodic pattern, r1 sign-flip)")
+else()
+    message(STATUS "Feature: BiasAutocorrelationFunction DISABLED (LLMQUANT_ENABLE_BIAS_ACF=OFF)")
+endif()
+
+# OnlineGrangerCausality: VAR(1) Granger causality test between two signal streams.
+option(LLMQUANT_ENABLE_ONLINE_GRANGER "Build OnlineGrangerCausality: rolling VAR(1) F-test for directional Granger causality; fires on_x_causes_y/on_y_causes_x/on_bidirectional" ON)
+if(LLMQUANT_ENABLE_ONLINE_GRANGER)
+    target_sources(llmquant PRIVATE src/OnlineGrangerCausality.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ONLINE_GRANGER_ENABLED)
+    message(STATUS "Feature: OnlineGrangerCausality ENABLED (VAR(1) F-test, bidirectional causality detection)")
+else()
+    message(STATUS "Feature: OnlineGrangerCausality DISABLED (LLMQUANT_ENABLE_ONLINE_GRANGER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
