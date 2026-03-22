@@ -726,7 +726,7 @@ public:
         uint64_t pos    = stats_.signals_blocked_position.load(std::memory_order_relaxed);
         uint64_t pnl    = stats_.signals_blocked_pnl.load(std::memory_order_relaxed);
         uint64_t passed = stats_.signals_passed.load(std::memory_order_relaxed);
-        uint64_t total_blocked = mag + conf + ratel + dd + pos;
+        uint64_t total_blocked = mag + conf + ratel + dd + pos + pnl;
         uint64_t total = passed + total_blocked;
         double bfrac = (total > 0) ? (static_cast<double>(total_blocked) / static_cast<double>(total)) : 0.0;
         char buf[512];

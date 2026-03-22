@@ -109,8 +109,9 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
                             if (position_.pnl < position_.pnl_limit) {
                                 pnl_breach = true;
                                 if (!hard_breach) {
+                                    // Only increment pnl counter here — position counter is for
+                                    // position-limit blocks only; pnl_limit is a separate gate.
                                     sat_increment(stats_.signals_blocked_pnl);
-                                    sat_increment(stats_.signals_blocked_position);
                                     reject_reason = "pnl_limit";
                                     if (!gate_position_last_blocked_ && gate_trip_position_cb_) {
                                         trip_cb_copy = gate_trip_position_cb_;
@@ -483,7 +484,8 @@ double RiskManager::get_rejection_rate() const noexcept {
                      + s.signals_blocked_confidence.load(std::memory_order_relaxed)
                      + s.signals_blocked_rate.load(std::memory_order_relaxed)
                      + s.signals_blocked_drawdown.load(std::memory_order_relaxed)
-                     + s.signals_blocked_position.load(std::memory_order_relaxed);
+                     + s.signals_blocked_position.load(std::memory_order_relaxed)
+                     + s.signals_blocked_pnl.load(std::memory_order_relaxed);
     uint64_t total = passed + blocked;
     if (total == 0) return 0.0;
     return static_cast<double>(blocked) / static_cast<double>(total);
@@ -496,7 +498,8 @@ uint64_t RiskManager::get_total_signals_evaluated() const noexcept {
          + s.signals_blocked_confidence.load(std::memory_order_relaxed)
          + s.signals_blocked_rate.load(std::memory_order_relaxed)
          + s.signals_blocked_drawdown.load(std::memory_order_relaxed)
-         + s.signals_blocked_position.load(std::memory_order_relaxed);
+         + s.signals_blocked_position.load(std::memory_order_relaxed)
+         + s.signals_blocked_pnl.load(std::memory_order_relaxed);
 }
 
 std::string RiskManager::format_blocked_by_gate() const noexcept {
@@ -519,7 +522,8 @@ std::string RiskManager::format_stats() const {
     uint64_t rate    = s.signals_blocked_rate.load(std::memory_order_relaxed);
     uint64_t dd      = s.signals_blocked_drawdown.load(std::memory_order_relaxed);
     uint64_t pos     = s.signals_blocked_position.load(std::memory_order_relaxed);
-    uint64_t blocked = mag + conf + rate + dd + pos;
+    uint64_t pnl     = s.signals_blocked_pnl.load(std::memory_order_relaxed);
+    uint64_t blocked = mag + conf + rate + dd + pos + pnl;
     uint64_t total   = passed + blocked;
     double blocked_rate = (total == 0) ? 0.0 : static_cast<double>(blocked) / static_cast<double>(total);
     std::ostringstream oss;
@@ -532,6 +536,7 @@ std::string RiskManager::format_stats() const {
         << " rate=" << rate
         << " dd="   << dd
         << " pos="  << pos
+        << " pnl="  << pnl
         << " healthy=" << (is_healthy() ? "true" : "false");
     return oss.str();
 }

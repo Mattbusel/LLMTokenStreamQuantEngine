@@ -1873,3 +1873,26 @@ TEST(RiskManagerTest, test_pnl_gate_counter_in_format_blocked_by_gate) {
     EXPECT_NE(s.find("pnl=1"), std::string::npos)
         << "pnl counter must be 1 after PnL breach block; got: " << s;
 }
+
+TEST(RiskManagerTest, test_pnl_block_does_not_increment_position_counter) {
+    // Bug fix: PnL-only blocks must only increment signals_blocked_pnl,
+    // NOT signals_blocked_position (which is for position-limit breaches only).
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    // Position within limit but PnL breached.
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.1;
+    pos.position_limit = 1.0;   // well within limit
+    pos.pnl            = -50.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    bool blocked = !rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    EXPECT_TRUE(blocked) << "signal should be blocked by PnL gate";
+
+    auto bg = rm.get_blocked_by_gate();
+    EXPECT_EQ(bg.pnl,      1u) << "pnl counter must be 1";
+    EXPECT_EQ(bg.position, 0u) << "position counter must stay 0 for a pnl-only block";
+}
