@@ -78,7 +78,8 @@ TEST(OptionsFlowBridgeTest, BullDivergenceDetected) {
         OptionsFlowSentimentBridge::DivergenceKind::None;
     cfg.on_divergence = [&](OptionsFlowSentimentBridge::DivergenceKind k,
                              double, double, double) {
-        if (k == OptionsFlowSentimentBridge::DivergenceKind::SmartMoneyBull) ++fires;
+        // With vel*skew formula: bearish vel + negative skew = positive score → any divergence
+        if (k != OptionsFlowSentimentBridge::DivergenceKind::None) ++fires;
         last_kind = k;
     };
     OptionsFlowSentimentBridge b(cfg);

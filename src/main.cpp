@@ -1369,6 +1369,12 @@ int main(int argc, char* argv[]) {
         // Track velocity/acceleration/jerk of the token weight series.
         stream_differencer.record(weight.directional_bias);
 #endif
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+        // Stochastic-round the weight to the fixed grid (side effect: tracks error + clamp rate).
+        // The quantised value is not fed back into the weight here; the quantiser is used
+        // as a monitoring/diagnostic module for integer-precision feasibility analysis.
+        (void)token_quantiser.quantise(weight.directional_bias);
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -2815,6 +2821,17 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
         // Track W1 distribution drift between recent and baseline bias-shift windows.
         signal_drift_monitor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_LIFECYCLE_TRACKER_ENABLED
+        // Track the emitted signal's lifecycle (birth → peak → half-life → death).
+        // Use a composite ID: bias sign + quantised magnitude.
+        {
+            std::string sig_id = (signal.delta_bias_shift >= 0.0 ? "bull_" : "bear_")
+                               + std::to_string(static_cast<int>(
+                                     std::abs(signal.delta_bias_shift) * 10.0));
+            lifecycle_tracker.record_signal(sig_id, signal.delta_bias_shift);
+            lifecycle_tracker.tick();
+        }
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4555,6 +4572,19 @@ int main(int argc, char* argv[]) {
               << "  events=" << signal_drift_monitor.drift_events()
               << "  obs=" << signal_drift_monitor.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_LIFECYCLE_TRACKER_ENABLED
+    std::cout << "  Lifecycle tracker: "
+              << "active=" << lifecycle_tracker.active_signal_count()
+              << "  dead=" << lifecycle_tracker.dead_count()
+              << "  zombies=" << lifecycle_tracker.zombie_count()
+              << "  mean_hl=" << std::fixed << std::setprecision(1) << lifecycle_tracker.mean_halflife_s() << "s\n";
+#endif
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+    std::cout << "  Token quantiser  : "
+              << "error_ema=" << std::fixed << std::setprecision(5) << token_quantiser.quantisation_error()
+              << "  clamp_rate=" << std::setprecision(3) << token_quantiser.clamp_rate()
+              << "  total=" << token_quantiser.total_count() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -4763,6 +4793,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_DRIFT_ENABLED
         std::cout << "  [json:drift]      " << signal_drift_monitor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_LIFECYCLE_TRACKER_ENABLED
+        std::cout << "  [json:lifecycle]  " << lifecycle_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+        std::cout << "  [json:quantiser]  " << token_quantiser.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
