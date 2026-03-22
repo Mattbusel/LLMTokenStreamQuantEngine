@@ -114,6 +114,18 @@
 #ifdef LLMQUANT_PORTFOLIO_HEAT_ENABLED
 #  include "PortfolioHeatMonitor.h"
 #endif
+#ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
+#  include "ContextWindowBudget.h"
+#endif
+#ifdef LLMQUANT_FRACTAL_DIMENSION_ENABLED
+#  include "FractalDimensionEstimator.h"
+#endif
+#ifdef LLMQUANT_MARKET_MICROSTRUCTURE_ENABLED
+#  include "MarketMicrostructureFilter.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_ENSEMBLE_ENABLED
+#  include "SignalEnsembleLayer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1415,6 +1427,16 @@ int main(int argc, char* argv[]) {
     llmquant::RollingSharpeBiasTracker rolling_sharpe;
 #endif
 
+#ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
+    // OrderBookSimulator: sentiment-driven LOB for slippage-aware fill estimation.
+    llmquant::OrderBookSimulator order_book_sim;
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_HEATMAP_ENABLED
+    // TokenSentimentHeatmap: per-token sentiment distribution for attribution.
+    llmquant::TokenSentimentHeatmap sentiment_heatmap;
+#endif
+
 #if defined(LLMQUANT_SENTIMENT_MOMENTUM_FILTER_ENABLED) && defined(LLMQUANT_SENTIMENT_TRAJECTORY_ENABLED)
     // SentimentMomentumFilter: gates trade signals that contradict the macro
     // sentiment trajectory (Improving/Declining/Stable/Volatile).
@@ -1579,6 +1601,20 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ROLLING_SHARPE_ENABLED
         // Update rolling Sharpe of the bias stream.
         rolling_sharpe.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
+        // Update synthetic LOB with the latest bias signal.
+        order_book_sim.update_bias(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_HEATMAP_ENABLED
+        // Record direction–sentiment pair for attribution.
+        {
+            const char* dir_key = (signal.strategy_toggle > 0) ? "bull"
+                                : (signal.strategy_toggle < 0) ? "bear" : "neutral";
+            sentiment_heatmap.record(dir_key, signal.delta_bias_shift);
+        }
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -2783,6 +2819,17 @@ int main(int argc, char* argv[]) {
               << "sharpe=" << std::fixed << std::setprecision(3) << rolling_sharpe.last_sharpe()
               << "  poor=" << (rolling_sharpe.is_poor_quality() ? "Y" : "N")
               << "  n=" << rolling_sharpe.sample_count() << "\n";
+#endif
+#ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
+    std::cout << "  Order book sim   : "
+              << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
+              << "  bias=" << order_book_sim.cumulative_bias()
+              << "  updates=" << order_book_sim.total_updates() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_HEATMAP_ENABLED
+    std::cout << "  Sentiment heatmap: "
+              << "tokens=" << sentiment_heatmap.token_count()
+              << "  records=" << sentiment_heatmap.total_records() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
