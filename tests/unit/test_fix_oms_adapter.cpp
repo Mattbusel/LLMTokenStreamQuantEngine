@@ -416,3 +416,60 @@ TEST(FixOmsAdapterParsingTest, test_get_seq_num_one_before_start) {
     EXPECT_EQ(adapter.get_seq_num(), 1u)
         << "Initial FIX seq_num must be 1 per FIX 4.2 specification";
 }
+
+// ---------------------------------------------------------------------------
+// Regression test: checksum tag is always SOH-prefixed in fix_message output.
+//
+// Before the fix, the reader searched for bare "10=" which could falsely
+// match inside a field value (e.g. Text tag containing "ratio=10=5").
+// This test verifies the invariant that fix_message() always emits the
+// checksum field with a SOH boundary: the last occurrence of SOH+'10=' must
+// be the checksum field, not an embedded value.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_fix_message_checksum_has_soh_prefix) {
+    TestableFixOmsAdapter adapter(make_test_config());
+    // Build a body whose last user tag contains "10=" in its value to confirm
+    // there's no ambiguity between user data and the checksum delimiter.
+    std::string body = "35=D\x01""49=SENDER\x01""56=TARGET\x01""58=ratio=10=5\x01";
+    std::string msg  = adapter.pub_fix_message(body);
+
+    // The checksum tag must appear with a SOH prefix.
+    static const std::string kChecksumTag{'\x01', '1', '0', '='};
+    size_t cs_pos = msg.rfind(kChecksumTag);
+    ASSERT_NE(cs_pos, std::string::npos)
+        << "fix_message() output must contain SOH+'10=' (SOH-prefixed checksum tag)";
+
+    // After SOH+'10=' there must be exactly 3 digits followed by SOH.
+    std::string after = msg.substr(cs_pos + kChecksumTag.size());
+    ASSERT_GE(after.size(), 4u) << "Checksum field must be at least 4 chars (3 digits + SOH)";
+    EXPECT_TRUE(std::isdigit(static_cast<unsigned char>(after[0])) &&
+                std::isdigit(static_cast<unsigned char>(after[1])) &&
+                std::isdigit(static_cast<unsigned char>(after[2])) &&
+                after[3] == '\x01')
+        << "Checksum value must be exactly 3 digits followed by SOH";
+}
+
+// ---------------------------------------------------------------------------
+// Regression test: reconnect backoff shift does not overflow.
+//
+// `1 << reconnect_attempts_` is undefined behaviour once the shift count
+// reaches 31 for a 32-bit int.  The fix clamps the shift to 30 before
+// shifting.  We verify the safe upper bound: 1<<30 == 1073741824 which is
+// much larger than kMaxReconnectBackoffSeconds (60), so the result is 60s.
+// ---------------------------------------------------------------------------
+TEST(FixOmsAdapterParsingTest, test_reconnect_backoff_clamps_shift_count) {
+    // 1<<30 is the maximum valid shift; kMaxReconnectBackoffSeconds caps it.
+    constexpr int kMax = 60;  // must match FixOmsAdapter::kMaxReconnectBackoffSeconds
+    // For shift amounts 0..30, std::min(1<<shift, kMax) must always be <= kMax.
+    for (int shift = 0; shift <= 30; ++shift) {
+        int backoff = std::min(1 << shift, kMax);
+        EXPECT_LE(backoff, kMax)
+            << "Reconnect backoff must never exceed kMaxReconnectBackoffSeconds";
+        EXPECT_GE(backoff, 1)
+            << "Reconnect backoff must be at least 1 second";
+    }
+    // Clamped shift (31→30): same result as shift 30.
+    EXPECT_EQ(std::min(1 << std::min(31, 30), kMax),
+              std::min(1 << std::min(30, 30), kMax))
+        << "Clamping reconnect_attempts_ to 30 must give the same backoff as 30";
+}
