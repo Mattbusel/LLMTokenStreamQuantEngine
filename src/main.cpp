@@ -712,6 +712,7 @@ int main(int argc, char* argv[]) {
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
     // semantic-weight pipeline so neither call site duplicates logic.
     auto process_token = [&](const std::string& text, uint64_t seq_id) {
+#ifdef LLMQUANT_DEDUP_ENABLED
         // Skip duplicate tokens within the dedup window (unless --no-dedup).
         if (!no_dedup) {
             auto dedup_result = deduplicator.check(text);
@@ -720,6 +721,7 @@ int main(int argc, char* argv[]) {
                 return;
             }
         }
+#endif
 
         latency_ctrl.start_measurement();
 
@@ -1128,6 +1130,7 @@ int main(int argc, char* argv[]) {
 #endif
                         return 0;
                     }() << "\n"
+#ifdef LLMQUANT_DEDUP_ENABLED
                  << "# HELP llmquant_dedup_novel_total Tokens processed as novel (not seen in TTL window)\n"
                  << "# TYPE llmquant_dedup_novel_total counter\n"
                  << "llmquant_dedup_novel_total " << dedup_backend->total_novel() << "\n"
@@ -1140,6 +1143,7 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_dedup_redis_reconnect_attempts_total Total Redis reconnect attempts\n"
                  << "# TYPE llmquant_dedup_redis_reconnect_attempts_total counter\n"
                  << "llmquant_dedup_redis_reconnect_attempts_total 0\n"
+#endif
                  << "# HELP llmquant_signals_passed_total Total trade signals that passed all risk gates\n"
                  << "# TYPE llmquant_signals_passed_total counter\n"
                  << "llmquant_signals_passed_total " << rs.signals_passed.load() << "\n"
@@ -1253,6 +1257,7 @@ int main(int argc, char* argv[]) {
                           << "llmquant_signal_quality_ema " << std::setprecision(6) << q_ema << "\n";
                         return o.str();
                     }()
+#ifdef LLMQUANT_DEDUP_ENABLED
                  << "# HELP llmquant_dedup_duplicate_rate Fraction of checked tokens that were duplicates [0,1]\n"
                  << "# TYPE llmquant_dedup_duplicate_rate gauge\n"
                  << "llmquant_dedup_duplicate_rate " << [&]() -> double {
@@ -1260,7 +1265,9 @@ int main(int argc, char* argv[]) {
                         uint64_t novel = dedup_backend->total_novel();
                         uint64_t total = novel + dupes;
                         return (total > 0) ? (static_cast<double>(dupes) / static_cast<double>(total)) : 0.0;
-                    }() << "\n";
+                    }() << "\n"
+#endif
+                ;
             // Signal quality histogram — per-bucket counts emitted as a Prometheus histogram.
             {
                 auto qhb = trade_engine.get_quality_histogram();
@@ -1315,6 +1322,7 @@ int main(int argc, char* argv[]) {
                  << "# HELP llmquant_risk_healthy Whether all risk gates are nominally healthy (1=yes)\n"
                  << "# TYPE llmquant_risk_healthy gauge\n"
                  << "llmquant_risk_healthy " << (risk_mgr.is_healthy() ? 1 : 0) << "\n"
+#ifdef LLMQUANT_DEDUP_ENABLED
                  << "# HELP llmquant_dedup_dup_rate_pct Duplicate token rate as percentage [0,100]\n"
                  << "# TYPE llmquant_dedup_dup_rate_pct gauge\n"
                  << "llmquant_dedup_dup_rate_pct " << [&]() -> double {
@@ -1322,7 +1330,9 @@ int main(int argc, char* argv[]) {
                         uint64_t dup = dedup_backend->total_duplicates();
                         uint64_t tot = nov + dup;
                         return (tot > 0) ? (static_cast<double>(dup) * 100.0 / static_cast<double>(tot)) : 0.0;
-                    }() << "\n";
+                    }() << "\n"
+#endif
+                ;
             // Top-5 influential tokens as labeled gauges for Grafana dashboards.
             {
                 snap << "# HELP llmquant_top_influence_token Composite influence score (freq+bias blend) [0,1]\n"
@@ -1375,7 +1385,9 @@ int main(int argc, char* argv[]) {
                                    << pressure.composite << C("\033[0m")
                       << "  BKOF:" << std::setprecision(1) << backoff << "x"
                       << "  HIT%:" << hit_pct
+#ifdef LLMQUANT_DEDUP_ENABLED
                       << "  DEDUP:" << dedup_backend->total_duplicates()
+#endif
                       << "  NOISE:" << trade_engine.get_stats().noise_filtered.load()
                       << "  PASS:" << risk_mgr.get_stats().signals_passed.load()
                       << "  BLOCK:" << blocked
@@ -1472,6 +1484,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  Signals passed   : " << risk_mgr.get_stats().signals_passed.load() << "\n";
     std::cout << "  Latency warmup   : " << std::fixed << std::setprecision(0)
               << (latency_ctrl.get_window_fill_ratio() * 100.0) << "% window filled\n";
+#ifdef LLMQUANT_DEDUP_ENABLED
     {
         auto ds = dedup_backend->get_stats();
         uint64_t total_dedup = ds.total_novel + ds.total_duplicates;
@@ -1482,6 +1495,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Dedup duplicates : " << ds.total_duplicates
                   << "  (" << std::fixed << std::setprecision(1) << dup_rate << "% dup rate)\n";
     }
+#endif
     {
         auto uptime_s = std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::steady_clock::now() - engine_start_time).count();
@@ -1550,7 +1564,9 @@ int main(int argc, char* argv[]) {
         std::cout << "  [json:engine]  " << trade_engine.to_stats_json() << "\n";
         std::cout << "  [json:adapter] " << llm_adapter.to_stats_json() << "\n";
         std::cout << "  [json:latency] " << latency_ctrl.to_stats_json() << "\n";
+#ifdef LLMQUANT_DEDUP_ENABLED
         std::cout << "  [json:dedup]   " << dedup_backend->to_stats_json() << "\n";
+#endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
 
