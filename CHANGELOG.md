@@ -10,6 +10,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 28 — 2026-03-21)
+- **Docs**: README test count badge updated 788 → 895; CLAUDE.md test coverage
+  table updated with accurate per-file counts (actual `grep -c '^TEST('` values).
+- **Feature flag** `LLMQUANT_ENABLE_HOT_RELOAD` (CMake option, default ON): gates
+  the config file watcher thread (`config.start_watching()`) behind
+  `#ifdef LLMQUANT_HOT_RELOAD_ENABLED` in `src/main.cpp`. Disable with
+  `-DLLMQUANT_ENABLE_HOT_RELOAD=OFF` for embedded/constrained builds.
+  Added to feature-flags-matrix CI job and minimal build.
+- **Tests**: 2 new `TradeSignalEngine` edge-case tests — zero-confidence
+  SemanticWeight must not produce a signal; `signals_suppressed` counter must
+  increment on noise-filtered tokens (`test_trade_signal_engine.cpp`).
+- **Tests**: 2 new `RiskManager` pnl-gate counter tests — `blocked_pnl` counter
+  in `to_stats_json()` and `format_blocked_by_gate()` increments correctly after
+  a PnL-breach block (`test_risk_manager.cpp`).
+
+### Added (Cycle 28 — 2026-03-21 — hook additions)
 - **Bug fix**: `export_hot_tokens(5)` was called twice in the session summary
   ("Top influence" block at line 1515 and "Hot tokens" block at line 1527)
   producing identical output. Removed the redundant "Top influence" block.
