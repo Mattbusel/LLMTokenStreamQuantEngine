@@ -1282,5 +1282,27 @@ TEST(ConfigTest, test_validate_accepts_empty_redis_url) {
     EXPECT_FALSE(redis_err) << "validate() must accept empty redis_url";
 }
 
+TEST(ConfigTest, test_validate_rejects_negative_volatility_magnitude) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "risk_thresholds:\n  max_volatility_magnitude: -1.0\n");
+    auto errs = cfg.validate();
+    bool found = false;
+    for (const auto& e : errs)
+        if (e.find("max_volatility_magnitude") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found) << "validate() must reject max_volatility_magnitude < 0";
+}
+
+TEST(ConfigTest, test_validate_rejects_negative_spread_magnitude) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string(
+        "risk_thresholds:\n  max_spread_magnitude: -0.5\n");
+    auto errs = cfg.validate();
+    bool found = false;
+    for (const auto& e : errs)
+        if (e.find("max_spread_magnitude") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found) << "validate() must reject max_spread_magnitude < 0";
+}
+
 } // namespace
 } // namespace llmquant

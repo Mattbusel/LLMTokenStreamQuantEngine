@@ -105,7 +105,7 @@ public:
      *
      * @return LatencyStats snapshot.
      */
-    LatencyStats get_stats() const;
+    [[nodiscard]] LatencyStats get_stats() const;
 
     /**
      * @brief Reset all counters and the sample window to their initial states.
@@ -228,7 +228,7 @@ public:
      *
      * @return PressureState snapshot.
      */
-    PressureState get_pressure() const;
+    [[nodiscard]] PressureState get_pressure() const;
 
     /**
      * @brief Return true once the sample window is at least 50% populated.
@@ -241,7 +241,7 @@ public:
      *
      * @return true if get_window_fill_ratio() >= 0.5; false otherwise.
      */
-    bool is_warmed_up() const { return get_window_fill_ratio() >= 0.5; }
+    [[nodiscard]] bool is_warmed_up() const { return get_window_fill_ratio() >= 0.5; }
 
     /**
      * @brief Return true once the sample window is at least @p fraction populated.
@@ -249,7 +249,7 @@ public:
      * @param fraction Minimum fill ratio required, clamped to [0.0, 1.0].
      * @return true if get_window_fill_ratio() >= fraction.
      */
-    bool is_warmed_up(double fraction) const {
+    [[nodiscard]] bool is_warmed_up(double fraction) const {
         double f = fraction < 0.0 ? 0.0 : (fraction > 1.0 ? 1.0 : fraction);
         return get_window_fill_ratio() >= f;
     }
@@ -263,7 +263,7 @@ public:
      *
      * @return Sample window fill ratio in [0.0, 1.0].
      */
-    double get_window_fill_ratio() const;
+    [[nodiscard]] double get_window_fill_ratio() const;
 
     /**
      * @brief Return the fraction of recorded samples that exceeded the configured
@@ -274,7 +274,7 @@ public:
      *
      * @return SLO breach rate in [0.0, 1.0].
      */
-    double get_slo_breach_rate() const noexcept;
+    [[nodiscard]] double get_slo_breach_rate() const noexcept;
 
     /**
      * @brief Compute an arbitrary percentile of the current sample window on demand.
@@ -285,7 +285,7 @@ public:
      * @param p Percentile fraction in [0.0, 1.0]; clamped if out of range.
      * @return The p-th percentile latency from the current sample window.
      */
-    std::chrono::microseconds get_percentile(double p) const;
+    [[nodiscard]] std::chrono::microseconds get_percentile(double p) const;
 
     /**
      * @brief Return the current exponential-backoff multiplier for source polling.
@@ -369,7 +369,7 @@ public:
      *
      * @return P99 latency in microseconds.
      */
-    int64_t get_p99_us() const {
+    [[nodiscard]] int64_t get_p99_us() const {
         return get_stats().p99_latency.count();
     }
 
@@ -383,7 +383,7 @@ public:
      *
      * @return P95 latency in microseconds.
      */
-    int64_t get_p95_us() const {
+    [[nodiscard]] int64_t get_p95_us() const {
         return get_stats().p95_latency.count();
     }
 
@@ -397,7 +397,7 @@ public:
      *
      * @return P50 latency in microseconds.
      */
-    int64_t get_p50_us() const {
+    [[nodiscard]] int64_t get_p50_us() const {
         return get_stats().p50_latency.count();
     }
 

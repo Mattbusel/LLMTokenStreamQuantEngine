@@ -107,7 +107,7 @@ void MetricsLogger::write_csv_header() {
 
 void MetricsLogger::log_token_received(const std::string& token, uint64_t sequence_id) {
     if (!config_.enable_token_logging) return;
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
 
     auto now = std::chrono::high_resolution_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -128,7 +128,7 @@ void MetricsLogger::log_token_received(const std::string& token, uint64_t sequen
 }
 
 void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_t latency_us) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     
     auto now = std::chrono::high_resolution_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -154,7 +154,7 @@ void MetricsLogger::log_signal_generated(double bias, double volatility, uint64_
 }
 
 void MetricsLogger::log_latency_measurement(uint64_t latency_us) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
@@ -172,7 +172,7 @@ void MetricsLogger::log_latency_measurement(uint64_t latency_us) {
 }
 
 void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
@@ -191,7 +191,7 @@ void MetricsLogger::log_system_stats(uint64_t memory_usage, double cpu_usage) {
 }
 
 void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, double confidence) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
@@ -218,7 +218,7 @@ void MetricsLogger::log_risk_rejection(const std::string& reason, double bias, d
 void MetricsLogger::log_trade_signal(double bias, double volatility,
                                       double confidence, double latency_us,
                                       double quality) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 
@@ -246,7 +246,7 @@ void MetricsLogger::log_trade_signal(double bias, double volatility,
 }
 
 void MetricsLogger::log_config_reload(const std::string& source_path, bool success) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     const char* status = success ? "ok" : "failed";
@@ -268,7 +268,7 @@ void MetricsLogger::log_config_reload(const std::string& source_path, bool succe
 
 void MetricsLogger::log_pipeline_health(bool healthy, double slo_breach_rate,
                                          double backoff_multiplier) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     const char* status = healthy ? "ok" : "degraded";
@@ -287,7 +287,7 @@ void MetricsLogger::log_pipeline_health(bool healthy, double slo_breach_rate,
 }
 
 void MetricsLogger::log_dedup_event(const std::string& key, bool is_duplicate) {
-    log_entries_++;
+    log_entries_.fetch_add(1, std::memory_order_relaxed);
     auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     const char* kind = is_duplicate ? "duplicate" : "novel";

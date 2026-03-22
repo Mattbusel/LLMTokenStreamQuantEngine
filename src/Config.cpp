@@ -590,6 +590,10 @@ std::vector<std::string> Config::validate() const {
         errors.emplace_back("pressure.backoff_scale_factor must be > 0");
     if (!std::isfinite(rt.max_bias_magnitude) || rt.max_bias_magnitude < 0.0)
         errors.emplace_back("risk_thresholds.max_bias_magnitude must be >= 0");
+    if (!std::isfinite(rt.max_volatility_magnitude) || rt.max_volatility_magnitude < 0.0)
+        errors.emplace_back("risk_thresholds.max_volatility_magnitude must be >= 0");
+    if (!std::isfinite(rt.max_spread_magnitude) || rt.max_spread_magnitude < 0.0)
+        errors.emplace_back("risk_thresholds.max_spread_magnitude must be >= 0");
     if (!std::isfinite(rt.min_confidence) || rt.min_confidence < 0.0 || rt.min_confidence > 1.0)
         errors.emplace_back("risk_thresholds.min_confidence must be in [0, 1]");
     if (rt.max_signals_per_second == 0)
