@@ -9,6 +9,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 34 — 2026-03-21)
+- **New module `SentimentTrajectoryAnalyzer`** (`include/SentimentTrajectoryAnalyzer.h`,
+  `src/SentimentTrajectoryAnalyzer.cpp`): real-time online linear-regression
+  trend detector for per-token sentiment streams.  Fits a least-squares slope
+  over a fixed sliding window of N scores and classifies the stream as
+  `Improving`, `Declining`, `Stable`, `Volatile`, or `Undefined`.  Exposes
+  `get_slope()`, `get_r_squared()`, `get_residual_std()`, `get_mean()`,
+  `to_stats_json()`, and thread-safe `add_sample()`.  Feature flag:
+  `LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY` (default ON).
+  13 new tests in `test_sentiment_trajectory.cpp`.
+- **Time-based bias decay** in `TradeSignalEngine`: new `Config` field
+  `time_decay_half_life_ms` (default 0 = disabled).  When set, accumulated
+  bias/volatility are multiplied by `pow(0.5, elapsed_ms / half_life)` at the
+  start of each `process_semantic_weight()` call — preventing stale sentiment
+  from persisting during quiet periods between token bursts.  Unlike the
+  existing per-token `signal_decay_rate`, this decays based on wall-clock
+  elapsed time, so a 30-second silence decays the bias proportionally regardless
+  of how many tokens have been seen.
+  2 new tests in `test_trade_signal_engine.cpp`.
+- **Docs**: README test badge updated 950 → 986.
+
 ### Added/Fixed (Cycle 33 — 2026-03-21)
 - **`[[nodiscard]]` sweep**: Added `[[nodiscard]]` to all bool/result-returning
   public methods: `OmsAdapter::start()`/`is_running()`/`description()` and all
