@@ -84,12 +84,21 @@ clang-format --dry-run src/*.cpp include/*.h
 | FixOmsAdapter | ✓ | ✓ FIX 4.2 + session recovery | ✓ | ✓ |
 | MockOmsAdapter | ✓ | ✓ deterministic test double | ✓ | ✓ |
 | PrometheusExporter | ✓ | ✓ HTTP /metrics scrape | ✓ | ✓ |
+| SentimentTrajectoryAnalyzer | ✓ | ✓ online linear-regression | ✓ | ✓ |
+| SignalAuditLog | ✓ | ✓ async NDJSON rotating log | ✓ | ✓ |
+| PipelineCircuitBreaker | ✓ | ✓ EMA block-rate auto-pause | ✓ | ✓ |
+| HealthServer | ✓ | ✓ HTTP /health k8s endpoint | ✓ | ✓ |
+| BacktestRunner | ✓ | ✓ token-seq replay + PnL stats | ✓ | ✓ |
+| KellyPositionSizer | ✓ | ✓ Kelly Criterion sizing | ✓ | ✓ |
+| AdaptiveCooldownController | ✓ | ✓ latency-aware cooldown | ✓ | ✓ |
+| SignalBlendLayer | ✓ | ✓ multi-source confidence blend | ✓ | ✓ |
+| StaleTokenDetector | ✓ | ✓ stream-silence watchdog | ✓ | ✓ |
+| RegimeDetector | ✓ | ✓ EMA-based regime classifier | ✓ | ✓ |
+| TokenReplayRecorder | ✓ | ✓ binary token stream recorder | ✓ | ✓ |
 
 ## What Still Needs Building
 - Nothing critical — all modules complete.
-- `evaluate_with_reason` callback re-entrancy deadlock: fixed in cycle 9 with `ewr_mutex_`.
 - FIX surrogate-pair Unicode in SequenceReset: still deferred (low priority).
-- Async alert dispatch: no longer needed after the re-entrancy fix.
 
 ## Non-Obvious Design Decisions
 
