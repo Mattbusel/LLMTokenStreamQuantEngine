@@ -32,8 +32,8 @@ TEST(BiasLevelCrossing, LowZCRForConstantSignal) {
 
 TEST(BiasLevelCrossing, ZCRChangeCallback) {
     BiasLevelCrossing::Config cfg;
-    cfg.window = 20;
-    cfg.min_samples = 5;
+    cfg.window = 8;
+    cfg.min_samples = 3;
     cfg.zcr_change_threshold = 0.1;
     int events = 0;
     cfg.on_zcr_change = [&](double, double) { ++events; };

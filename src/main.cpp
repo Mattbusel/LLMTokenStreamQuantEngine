@@ -456,6 +456,30 @@
 #ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
 #  include "SignalParabolicSAR.h"
 #endif
+#ifdef LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED
+#  include "NarrativeEntropyClock.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED
+#  include "SignalDecayHalfLife.h"
+#endif
+#ifdef LLMQUANT_BAYESIAN_SENTIMENT_ENABLED
+#  include "BayesianSentimentPrior.h"
+#endif
+#ifdef LLMQUANT_BOLLINGER_BANDS_ENABLED
+#  include "SignalBollingerBands.h"
+#endif
+#ifdef LLMQUANT_IMPULSE_DETECTOR_ENABLED
+#  include "BiasImpulseDetector.h"
+#endif
+#ifdef LLMQUANT_TREND_STRENGTH_INDEX_ENABLED
+#  include "SignalTrendStrengthIndex.h"
+#endif
+#ifdef LLMQUANT_MASS_INDEX_ENABLED
+#  include "NarrativeMassIndex.h"
+#endif
+#ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
+#  include "SignalChoppinessIndex.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -3291,6 +3315,108 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_BOLLINGER_BANDS_ENABLED
+    // SignalBollingerBands: rolling SMA ± k*σ Bollinger Bands over bias stream.
+    // Fires on_upper_touch / on_lower_touch on excursions; on_squeeze when bandwidth narrows.
+    llmquant::SignalBollingerBands bollinger_bands;
+    {
+        llmquant::SignalBollingerBands::Config bb_cfg;
+        bb_cfg.window            = 20;
+        bb_cfg.k                 = 2.0;
+        bb_cfg.min_samples       = 10;
+        bb_cfg.squeeze_threshold = 0.005;
+        bb_cfg.on_upper_touch = [](double bias) {
+            spdlog::info("[bollinger] UPPER touch (bias={:.4f})", bias);
+        };
+        bb_cfg.on_lower_touch = [](double bias) {
+            spdlog::info("[bollinger] LOWER touch (bias={:.4f})", bias);
+        };
+        bb_cfg.on_squeeze = [](double bw) {
+            spdlog::info("[bollinger] SQUEEZE (bandwidth={:.4f})", bw);
+        };
+        bollinger_bands.update_config(bb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_IMPULSE_DETECTOR_ENABLED
+    // BiasImpulseDetector: rolling z-score spike detector — identifies sudden bias surges.
+    // Fires on_impulse when |z| exceeds z_threshold; tracks max-z for session peak.
+    llmquant::BiasImpulseDetector impulse_det;
+    {
+        llmquant::BiasImpulseDetector::Config id_cfg;
+        id_cfg.window      = 30;
+        id_cfg.z_threshold = 3.0;
+        id_cfg.min_samples = 10;
+        id_cfg.on_impulse = [](double z, double bias) {
+            spdlog::warn("[impulse] SPIKE z={:.2f} bias={:.4f}", z, bias);
+        };
+        impulse_det.update_config(id_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TREND_STRENGTH_INDEX_ENABLED
+    // SignalTrendStrengthIndex: double-smoothed TSI ∈ (-100, +100) — momentum purity gauge.
+    // Positive → sustained up-bias; negative → sustained down-bias; fires on_zero_cross / on_strong.
+    llmquant::SignalTrendStrengthIndex trend_strength;
+    {
+        llmquant::SignalTrendStrengthIndex::Config ts_cfg;
+        ts_cfg.fast_period       = 8;
+        ts_cfg.slow_period       = 25;
+        ts_cfg.signal_period     = 13;
+        ts_cfg.strength_threshold = 50.0;
+        ts_cfg.min_samples       = 20;
+        ts_cfg.on_zero_cross = [](double prev_tsi, double curr_tsi) {
+            spdlog::info("[tsi] ZERO-CROSS {:.1f} → {:.1f}", prev_tsi, curr_tsi);
+        };
+        ts_cfg.on_strong = [](double tsi) {
+            spdlog::info("[tsi] STRONG TREND tsi={:.1f}", tsi);
+        };
+        trend_strength.update_config(ts_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_MASS_INDEX_ENABLED
+    // NarrativeMassIndex: range-expansion mass index — detects narrative reversal setups.
+    // Bulge (MI > reversal_bulge) followed by drop below reversal_trigger → reversal signal.
+    llmquant::NarrativeMassIndex mass_idx;
+    {
+        llmquant::NarrativeMassIndex::Config mi_cfg;
+        mi_cfg.fast_period      = 9;
+        mi_cfg.slow_period      = 25;
+        mi_cfg.period           = 25;
+        mi_cfg.reversal_bulge   = 27.0;
+        mi_cfg.reversal_trigger = 26.5;
+        mi_cfg.min_samples      = 15;
+        mi_cfg.on_bulge_start = [](double mi) {
+            spdlog::info("[mass_idx] BULGE START mi={:.3f}", mi);
+        };
+        mi_cfg.on_reversal_signal = [](double mi) {
+            spdlog::warn("[mass_idx] REVERSAL SIGNAL mi={:.3f}", mi);
+        };
+        mass_idx.update_config(mi_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
+    // SignalChoppinessIndex: log-normalised ATR/range ratio ∈ [0, 100].
+    // < 38.2 → strongly trending; > 61.8 → choppy/sideways; fires on_trending / on_choppy.
+    llmquant::SignalChoppinessIndex choppiness;
+    {
+        llmquant::SignalChoppinessIndex::Config ci_cfg;
+        ci_cfg.window              = 14;
+        ci_cfg.min_samples         = 8;
+        ci_cfg.trending_threshold  = 38.2;
+        ci_cfg.choppy_threshold    = 61.8;
+        ci_cfg.on_trending = [](double ci) {
+            spdlog::info("[choppiness] TRENDING ci={:.1f}", ci);
+        };
+        ci_cfg.on_choppy = [](double ci) {
+            spdlog::info("[choppiness] CHOPPY ci={:.1f}", ci);
+        };
+        choppiness.update_config(ci_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     // WaveletSignalDecomposer: Haar DWT decomposition of signal stream into J=4 frequency bands.
     // Low-level detail spikes → rapid oscillation; high-level → slow regime drift.
@@ -3344,6 +3470,62 @@ int main(int argc, char* argv[]) {
             spdlog::info("[convexity] regime STABLE — reduce directional exposure");
         };
         convexity_meter.update_config(cm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED
+    // NarrativeEntropyClock: accumulates KL surprisal from bias stream.
+    // Fires when narrative information budget is exhausted (signal is stale/repetitive).
+    llmquant::NarrativeEntropyClock entropy_clock;
+    {
+        llmquant::NarrativeEntropyClock::Config ec_cfg;
+        ec_cfg.n_bins        = 20;
+        ec_cfg.budget_nats   = 5.0;
+        ec_cfg.min_samples   = 10;
+        ec_cfg.on_budget_exhausted = [](double nats) {
+            spdlog::warn("[entropy_clock] narrative exhausted after {:.2f} nats — signal stale", nats);
+        };
+        entropy_clock.update_config(ec_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED
+    // SignalDecayHalfLife: OLS half-life estimator for signal momentum.
+    llmquant::SignalDecayHalfLife decay_halflife;
+    {
+        llmquant::SignalDecayHalfLife::Config dh_cfg;
+        dh_cfg.window         = 32;
+        dh_cfg.min_samples    = 8;
+        dh_cfg.fast_threshold = 5.0;
+        dh_cfg.slow_threshold = 60.0;
+        dh_cfg.on_fast_decay = [](double hl) {
+            spdlog::warn("[halflife] FAST decay t½={:.1f} samples — momentum fading", hl);
+        };
+        dh_cfg.on_slow_decay = [](double hl) {
+            spdlog::info("[halflife] SLOW decay t½={:.1f} samples — persistent signal", hl);
+        };
+        decay_halflife.update_config(dh_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_BAYESIAN_SENTIMENT_ENABLED
+    // BayesianSentimentPrior: Normal-Gamma conjugate posterior over signal mean.
+    llmquant::BayesianSentimentPrior bayes_prior;
+    {
+        llmquant::BayesianSentimentPrior::Config bp_cfg;
+        bp_cfg.prior_mean        = 0.0;
+        bp_cfg.prior_kappa       = 2.0;
+        bp_cfg.prior_alpha       = 2.0;
+        bp_cfg.prior_beta        = 0.5;
+        bp_cfg.shift_threshold   = 2.5;
+        bp_cfg.min_samples       = 5;
+        bp_cfg.on_belief_shift = [](double pm, double ps) {
+            spdlog::info("[bayes] BELIEF SHIFT: μ={:.4f} ±{:.4f} — signal decisive", pm, ps);
+        };
+        bp_cfg.on_belief_restored = []() {
+            spdlog::info("[bayes] belief restored to prior — signal weakened");
+        };
+        bayes_prior.update_config(bp_cfg);
     }
 #endif
 
@@ -4400,6 +4582,21 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
         parabolic_sar.record(signal.delta_bias_shift);
 #endif
+#ifdef LLMQUANT_BOLLINGER_BANDS_ENABLED
+        bollinger_bands.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_IMPULSE_DETECTOR_ENABLED
+        impulse_det.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_TREND_STRENGTH_INDEX_ENABLED
+        trend_strength.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_MASS_INDEX_ENABLED
+        mass_idx.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
+        choppiness.record(signal.delta_bias_shift);
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         wavelet_decomp.record(signal.delta_bias_shift);
 #endif
@@ -4410,6 +4607,15 @@ int main(int argc, char* argv[]) {
         // Reward = |bias_shift| * confidence: larger, higher-confidence signals are better.
         rl_weighter.update("llm_primary",
             std::abs(signal.delta_bias_shift) * signal.confidence);
+#endif
+#ifdef LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED
+        entropy_clock.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED
+        decay_halflife.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_BAYESIAN_SENTIMENT_ENABLED
+        bayes_prior.update(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -6483,6 +6689,46 @@ int main(int argc, char* argv[]) {
               << "  reversals=" << parabolic_sar.reversal_events()
               << "  obs=" << parabolic_sar.total_records() << "\n";
 #endif
+#ifdef LLMQUANT_BOLLINGER_BANDS_ENABLED
+    std::cout << "  Bollinger Bands  : "
+              << "mid=" << std::fixed << std::setprecision(4) << bollinger_bands.middle()
+              << "  up=" << bollinger_bands.upper()
+              << "  lo=" << bollinger_bands.lower()
+              << "  pct_b=" << std::setprecision(3) << bollinger_bands.pct_b()
+              << "  squeezes=" << bollinger_bands.squeeze_events()
+              << "  obs=" << bollinger_bands.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_IMPULSE_DETECTOR_ENABLED
+    std::cout << "  Impulse Detector : "
+              << "last_z=" << std::fixed << std::setprecision(3) << impulse_det.last_z()
+              << "  max_z=" << impulse_det.max_z()
+              << "  impulses=" << impulse_det.impulse_events()
+              << "  obs=" << impulse_det.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_TREND_STRENGTH_INDEX_ENABLED
+    std::cout << "  Trend Strength   : "
+              << "tsi=" << std::fixed << std::setprecision(2) << trend_strength.tsi()
+              << "  zero_crosses=" << trend_strength.zero_cross_events()
+              << "  strong=" << trend_strength.strong_events()
+              << "  obs=" << trend_strength.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_MASS_INDEX_ENABLED
+    std::cout << "  Mass Index       : "
+              << "mi=" << std::fixed << std::setprecision(3) << mass_idx.mass_index()
+              << "  in_bulge=" << (mass_idx.in_bulge() ? "Y" : "N")
+              << "  bulges=" << mass_idx.bulge_events()
+              << "  reversals=" << mass_idx.reversal_events()
+              << "  obs=" << mass_idx.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
+    std::cout << "  Choppiness Idx   : "
+              << "ci=" << std::fixed << std::setprecision(1) << choppiness.choppiness()
+              << "  trending=" << (choppiness.is_trending() ? "Y" : "N")
+              << "  choppy=" << (choppiness.is_choppy() ? "Y" : "N")
+              << "  trend_events=" << choppiness.trending_events()
+              << "  choppy_events=" << choppiness.choppy_events()
+              << "  obs=" << choppiness.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
     std::cout << "  Wavelet DWT      : "
               << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
@@ -7025,6 +7271,21 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_PARABOLIC_SAR_ENABLED
         std::cout << "  [json:psar]       " << parabolic_sar.to_stats_json() << "\n";
 #endif
+#ifdef LLMQUANT_BOLLINGER_BANDS_ENABLED
+        std::cout << "  [json:bollinger]  " << bollinger_bands.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_IMPULSE_DETECTOR_ENABLED
+        std::cout << "  [json:impulse]    " << impulse_det.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TREND_STRENGTH_INDEX_ENABLED
+        std::cout << "  [json:tsi]        " << trend_strength.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MASS_INDEX_ENABLED
+        std::cout << "  [json:mass_idx]   " << mass_idx.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CHOPPINESS_INDEX_ENABLED
+        std::cout << "  [json:choppiness] " << choppiness.to_stats_json() << "\n";
+#endif
 #ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
         std::cout << "  [json:wavelet]    " << wavelet_decomp.to_stats_json() << "\n";
 #endif
@@ -7033,6 +7294,15 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
         std::cout << "  [json:convexity]  " << convexity_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED
+        std::cout << "  [json:entropy_clock] " << entropy_clock.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED
+        std::cout << "  [json:halflife]   " << decay_halflife.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_BAYESIAN_SENTIMENT_ENABLED
+        std::cout << "  [json:bayes]      " << bayes_prior.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

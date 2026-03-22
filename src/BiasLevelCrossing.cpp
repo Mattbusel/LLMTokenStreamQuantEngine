@@ -36,13 +36,14 @@ void BiasLevelCrossing::record(double bias) {
             new_zcr = sum / n;
             new_mcr = new_zcr; // simplified: single level (zero)
 
-            if (prev_zcr_ >= 0.0 && std::fabs(new_zcr - prev_zcr_) > cfg_.zcr_change_threshold) {
+            if (prev_zcr_ < 0.0) {
+                // Establish baseline on first valid computation
+                prev_zcr_ = new_zcr;
+            } else if (std::fabs(new_zcr - prev_zcr_) > cfg_.zcr_change_threshold) {
                 changed = true;
                 change_events_.fetch_add(1, std::memory_order_relaxed);
+                prev_zcr_ = new_zcr;  // advance baseline to current
             }
-            double old_zcr_cb = prev_zcr_;
-            prev_zcr_ = new_zcr;
-            (void)old_zcr_cb;
         }
     }
 
@@ -51,13 +52,7 @@ void BiasLevelCrossing::record(double bias) {
     total_.fetch_add(1, std::memory_order_relaxed);
 
     if (changed && cfg_.on_zcr_change) {
-        // Retrieve old_zcr under lock is tricky — pass prev and new approx
-        double old_approx{};
-        {
-            std::lock_guard<std::mutex> lk(mutex_);
-            old_approx = prev_zcr_;
-        }
-        cfg_.on_zcr_change(old_approx, new_zcr);
+        cfg_.on_zcr_change(new_zcr - cfg_.zcr_change_threshold, new_zcr);
     }
 }
 

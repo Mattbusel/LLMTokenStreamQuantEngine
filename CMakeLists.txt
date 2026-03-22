@@ -1731,6 +1731,36 @@ else()
     message(STATUS "Feature: SignalConvexityMeter DISABLED (LLMQUANT_ENABLE_SIGNAL_CONVEXITY=OFF)")
 endif()
 
+# NarrativeEntropyClock: cumulative KL-divergence budget for narrative information exhaustion.
+option(LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK "Build NarrativeEntropyClock: accumulates KL surprisal from LLM token stream; fires on_budget_exhausted when narrative information runs out" ON)
+if(LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK)
+    target_sources(llmquant PRIVATE src/NarrativeEntropyClock.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED)
+    message(STATUS "Feature: NarrativeEntropyClock ENABLED (KL surprisal accumulation, budget exhaustion callback)")
+else()
+    message(STATUS "Feature: NarrativeEntropyClock DISABLED (LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK=OFF)")
+endif()
+
+# SignalDecayHalfLife: OLS log-regression half-life estimator for signal momentum decay.
+option(LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE "Build SignalDecayHalfLife: fits exponential decay to |bias| history via log-OLS; estimates momentum half-life in samples; fires on_fast/slow_decay" ON)
+if(LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE)
+    target_sources(llmquant PRIVATE src/SignalDecayHalfLife.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED)
+    message(STATUS "Feature: SignalDecayHalfLife ENABLED (log-OLS half-life, R², fast/slow decay callbacks)")
+else()
+    message(STATUS "Feature: SignalDecayHalfLife DISABLED (LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE=OFF)")
+endif()
+
+# BayesianSentimentPrior: Normal-Gamma conjugate Bayesian posterior over signal mean/precision.
+option(LLMQUANT_ENABLE_BAYESIAN_SENTIMENT "Build BayesianSentimentPrior: Normal-Gamma conjugate prior; provides posterior mean, std, 95% CI; fires on_belief_shift when mean moves decisively" ON)
+if(LLMQUANT_ENABLE_BAYESIAN_SENTIMENT)
+    target_sources(llmquant PRIVATE src/BayesianSentimentPrior.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BAYESIAN_SENTIMENT_ENABLED)
+    message(STATUS "Feature: BayesianSentimentPrior ENABLED (Normal-Gamma posterior, credible interval, belief shift callback)")
+else()
+    message(STATUS "Feature: BayesianSentimentPrior DISABLED (LLMQUANT_ENABLE_BAYESIAN_SENTIMENT=OFF)")
+endif()
+
 # BiasGarchEstimator: GARCH(1,1) conditional variance estimator for bias stream clustering.
 option(LLMQUANT_ENABLE_GARCH_ESTIMATOR "Build BiasGarchEstimator: GARCH(1,1) conditional vol; fires on_vol_spike when vol jumps by vol_spike_ratio" ON)
 if(LLMQUANT_ENABLE_GARCH_ESTIMATOR)
@@ -1829,6 +1859,86 @@ if(LLMQUANT_ENABLE_PARABOLIC_SAR)
     message(STATUS "Feature: SignalParabolicSAR ENABLED (SAR trailing stop, AF acceleration, on_reversal)")
 else()
     message(STATUS "Feature: SignalParabolicSAR DISABLED (LLMQUANT_ENABLE_PARABOLIC_SAR=OFF)")
+endif()
+
+# BiasImpulseDetector: Z-score impulse detector for sudden bias spikes.
+option(LLMQUANT_ENABLE_IMPULSE_DETECTOR "Build BiasImpulseDetector: rolling Z-score spike detector; fires on_impulse on |z|>threshold" ON)
+if(LLMQUANT_ENABLE_IMPULSE_DETECTOR)
+    target_sources(llmquant PRIVATE src/BiasImpulseDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_IMPULSE_DETECTOR_ENABLED)
+    message(STATUS "Feature: BiasImpulseDetector ENABLED (Z-score impulse detection, on_impulse callback)")
+else()
+    message(STATUS "Feature: BiasImpulseDetector DISABLED (LLMQUANT_ENABLE_IMPULSE_DETECTOR=OFF)")
+endif()
+
+# NarrativeEntropyClock: KL-divergence entropy clock for narrative exhaustion.
+option(LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK "Build NarrativeEntropyClock: accumulated KL divergence entropy clock; fires on_exhaustion near narrative saturation" ON)
+if(LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK)
+    target_sources(llmquant PRIVATE src/NarrativeEntropyClock.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_NARRATIVE_ENTROPY_CLOCK_ENABLED)
+    message(STATUS "Feature: NarrativeEntropyClock ENABLED (accumulated KL divergence, on_exhaustion)")
+else()
+    message(STATUS "Feature: NarrativeEntropyClock DISABLED (LLMQUANT_ENABLE_NARRATIVE_ENTROPY_CLOCK=OFF)")
+endif()
+
+# SignalBollingerBands: Bollinger Bands (SMA ± k*σ) over rolling bias window.
+option(LLMQUANT_ENABLE_BOLLINGER_BANDS "Build SignalBollingerBands: SMA ± k*std Bollinger Bands; fires on_upper_touch/on_lower_touch/on_squeeze" ON)
+if(LLMQUANT_ENABLE_BOLLINGER_BANDS)
+    target_sources(llmquant PRIVATE src/SignalBollingerBands.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BOLLINGER_BANDS_ENABLED)
+    message(STATUS "Feature: SignalBollingerBands ENABLED (SMA±k*σ bands, touch/squeeze callbacks)")
+else()
+    message(STATUS "Feature: SignalBollingerBands DISABLED (LLMQUANT_ENABLE_BOLLINGER_BANDS=OFF)")
+endif()
+
+# SignalTrendStrengthIndex: TSI double-smoothed momentum for trend strength.
+option(LLMQUANT_ENABLE_TREND_STRENGTH_INDEX "Build SignalTrendStrengthIndex: double-EMA TSI in [-1,1]; fires on_zero_cross/on_strong_signal" ON)
+if(LLMQUANT_ENABLE_TREND_STRENGTH_INDEX)
+    target_sources(llmquant PRIVATE src/SignalTrendStrengthIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TREND_STRENGTH_INDEX_ENABLED)
+    message(STATUS "Feature: SignalTrendStrengthIndex ENABLED (double-smoothed TSI, on_zero_cross)")
+else()
+    message(STATUS "Feature: SignalTrendStrengthIndex DISABLED (LLMQUANT_ENABLE_TREND_STRENGTH_INDEX=OFF)")
+endif()
+
+# BayesianSentimentPrior: Beta-Normal conjugate prior for bias posterior tracking.
+option(LLMQUANT_ENABLE_BAYESIAN_SENTIMENT "Build BayesianSentimentPrior: conjugate prior updating posterior mean/CI; fires on_belief_shift" ON)
+if(LLMQUANT_ENABLE_BAYESIAN_SENTIMENT)
+    target_sources(llmquant PRIVATE src/BayesianSentimentPrior.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BAYESIAN_SENTIMENT_ENABLED)
+    message(STATUS "Feature: BayesianSentimentPrior ENABLED (conjugate Bayesian prior, on_belief_shift)")
+else()
+    message(STATUS "Feature: BayesianSentimentPrior DISABLED (LLMQUANT_ENABLE_BAYESIAN_SENTIMENT=OFF)")
+endif()
+
+# NarrativeMassIndex: mass index for range-expansion reversal detection.
+option(LLMQUANT_ENABLE_MASS_INDEX "Build NarrativeMassIndex: range-expansion mass index; fires on_bulge_entry/on_reversal_setup" ON)
+if(LLMQUANT_ENABLE_MASS_INDEX)
+    target_sources(llmquant PRIVATE src/NarrativeMassIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MASS_INDEX_ENABLED)
+    message(STATUS "Feature: NarrativeMassIndex ENABLED (EMA range expansion bulge/reversal callbacks)")
+else()
+    message(STATUS "Feature: NarrativeMassIndex DISABLED (LLMQUANT_ENABLE_MASS_INDEX=OFF)")
+endif()
+
+# SignalChoppinessIndex: choppiness index [1, 100] for trend vs. range detection.
+option(LLMQUANT_ENABLE_CHOPPINESS_INDEX "Build SignalChoppinessIndex: log-ATR/log-range choppiness; fires on_trending/on_choppy on regime change" ON)
+if(LLMQUANT_ENABLE_CHOPPINESS_INDEX)
+    target_sources(llmquant PRIVATE src/SignalChoppinessIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CHOPPINESS_INDEX_ENABLED)
+    message(STATUS "Feature: SignalChoppinessIndex ENABLED (choppiness [1,100], trending/choppy callbacks)")
+else()
+    message(STATUS "Feature: SignalChoppinessIndex DISABLED (LLMQUANT_ENABLE_CHOPPINESS_INDEX=OFF)")
+endif()
+
+# SignalDecayHalfLife: OLS half-life estimation for mean-reversion speed.
+option(LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE "Build SignalDecayHalfLife: OLS AR(1) half-life of bias autocorrelation; fires on_fast_decay/on_slow_decay" ON)
+if(LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE)
+    target_sources(llmquant PRIVATE src/SignalDecayHalfLife.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_DECAY_HALFLIFE_ENABLED)
+    message(STATUS "Feature: SignalDecayHalfLife ENABLED (OLS AR(1) half-life, fast/slow decay callbacks)")
+else()
+    message(STATUS "Feature: SignalDecayHalfLife DISABLED (LLMQUANT_ENABLE_SIGNAL_DECAY_HALFLIFE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
