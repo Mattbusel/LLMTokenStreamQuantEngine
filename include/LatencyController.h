@@ -341,7 +341,7 @@ public:
      *
      * @return Vector of HistogramBucket with monotonically increasing bounds.
      */
-    std::vector<HistogramBucket> histogram_buckets() const;
+    [[nodiscard]] std::vector<HistogramBucket> histogram_buckets() const;
 
     /**
      * @brief Return the cumulative sum of all recorded latency values in microseconds.
