@@ -531,3 +531,62 @@ TEST(RestOmsAdapterParsingTest, test_parse_position_oversized_body_returns_false
     EXPECT_FALSE(adapter.test_parse_position(big_body, out))
         << "A 5 MB body of garbage must not parse as a valid position response";
 }
+
+// ---------------------------------------------------------------------------
+// Test: MockOmsAdapter stop() returns promptly even with a large emit_interval.
+// Before the interruptible-sleep fix, stop() could block for the full
+// emit_interval duration (potentially seconds) before the thread exited.
+// ---------------------------------------------------------------------------
+TEST(MockOmsAdapterTest, test_stop_returns_promptly_with_large_emit_interval) {
+    // Use a 2-second emit_interval so if the sleep is not interruptible, stop()
+    // will block the full 2 s and the test will time out or take too long.
+    MockOmsAdapter::Config cfg;
+    cfg.emit_interval = std::chrono::milliseconds{2000};
+
+    MockOmsAdapter adapter(cfg);
+    // Load one state so the emitter thread starts and enters the sleep.
+    adapter.load_states({make_pos(0.1, 1.0, 0.5, -10.0)});
+    adapter.start();
+
+    // Give the thread time to start and begin the inter-state sleep.
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+
+    auto t0 = std::chrono::steady_clock::now();
+    adapter.stop();
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0).count();
+
+    // Stop must return in well under 500 ms even though emit_interval is 2 s.
+    EXPECT_LT(elapsed_ms, 500)
+        << "stop() took " << elapsed_ms << " ms with emit_interval=2000ms; "
+        << "expected < 500 ms after interruptible-sleep fix";
+}
+
+// ---------------------------------------------------------------------------
+// Test: MockOmsAdapter stop() returns promptly when called before emission
+// starts (i.e., immediately after start()).
+// ---------------------------------------------------------------------------
+TEST(MockOmsAdapterTest, test_stop_before_emission_completes_returns_promptly) {
+    MockOmsAdapter::Config cfg;
+    cfg.emit_interval = std::chrono::milliseconds{5000};  // 5 s interval
+
+    MockOmsAdapter adapter(cfg);
+    // Load several states so the thread has work to do.
+    adapter.load_states({
+        make_pos(0.1, 1.0, 0.0, -10.0),
+        make_pos(0.2, 1.0, 0.0, -10.0),
+        make_pos(0.3, 1.0, 0.0, -10.0),
+    });
+    adapter.start();
+
+    // Stop immediately — the thread may not have emitted anything yet.
+    auto t0 = std::chrono::steady_clock::now();
+    adapter.stop();
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0).count();
+
+    EXPECT_LT(elapsed_ms, 500)
+        << "stop() took " << elapsed_ms << " ms; expected < 500 ms";
+    EXPECT_FALSE(adapter.is_running())
+        << "is_running() must return false after stop()";
+}
