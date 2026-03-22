@@ -9,7 +9,6 @@
 #include <atomic>
 #include <memory>
 #include <stdexcept>
-#include <immintrin.h>  // SSE2/AVX2 intrinsics
 
 namespace llmquant {
 

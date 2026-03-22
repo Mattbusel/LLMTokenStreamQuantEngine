@@ -5,7 +5,14 @@
 #include <sstream>
 #include <algorithm>
 #include <numeric>
-#include <immintrin.h>  // SSE2/AVX2 intrinsics
+// SSE2 intrinsics: only available on x86/x86-64 with SSE2 (always true for
+// x86-64 ABI, but not for ARM or 32-bit x86 without -msse2).
+// LLMQUANT_SIMD_DISABLED can be set via -DLLMQUANT_ENABLE_SIMD=OFF at
+// configure time to force the scalar fallback even on capable hardware.
+#if defined(__SSE2__) && !defined(LLMQUANT_SIMD_DISABLED)
+#  define LLMQUANT_HAVE_SSE2 1
+#  include <immintrin.h>
+#endif
 
 namespace llmquant {
 
@@ -143,10 +150,12 @@ void LLMAdapter::add_token_mapping(const std::string& token, const SemanticWeigh
         token_hit_counts_.emplace(norm, std::make_unique<std::atomic<uint64_t>>(0));
 }
 
+#ifdef LLMQUANT_HAVE_SSE2
 // SSE2-only horizontal add: returns [a[0]+a[1], b[0]+b[1]]
 static inline __m128d sse2_hadd(__m128d a, __m128d b) {
     return _mm_add_pd(_mm_unpacklo_pd(a, b), _mm_unpackhi_pd(a, b));
 }
+#endif
 
 SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tokens) const {
     if (tokens.empty()) return SemanticWeight{0.0, 0.0, 0.0, 0.0};
@@ -165,6 +174,7 @@ SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tok
 
     const size_t n = weights.size();
 
+#ifdef LLMQUANT_HAVE_SSE2
     // Four confidence-weighted sums packed into two SSE2 registers:
     //   acc_sv = [ sum(sentiment*conf) , sum(volatility*conf) ]
     //   acc_dc = [ sum(bias*conf)      , sum(conf)            ]
@@ -207,6 +217,18 @@ SemanticWeight LLMAdapter::map_sequence_simd(const std::vector<std::string>& tok
         sum_d += w.directional_bias * w.confidence_score;
         sum_c += w.confidence_score;
     }
+#else
+    // Scalar fallback: used when SSE2 is not available (ARM, 32-bit x86 without
+    // -msse2) or when LLMQUANT_ENABLE_SIMD=OFF is specified at configure time.
+    double sum_s = 0.0, sum_v = 0.0, sum_d = 0.0, sum_c = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const auto& w = weights[i];
+        sum_s += w.sentiment_score  * w.confidence_score;
+        sum_v += w.volatility_score * w.confidence_score;
+        sum_d += w.directional_bias * w.confidence_score;
+        sum_c += w.confidence_score;
+    }
+#endif
 
     SemanticWeight result{};
     if (sum_c > 0.0) {

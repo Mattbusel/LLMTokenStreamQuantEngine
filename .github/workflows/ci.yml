@@ -135,7 +135,8 @@ jobs:
             -DLLMQUANT_ENABLE_REDIS=OFF \
             -DLLMQUANT_ENABLE_HOT_RELOAD=OFF \
             -DLLMQUANT_ENABLE_STREAM_CLIENT=OFF \
-            -DLLMQUANT_ENABLE_SIGNAL_TRACE=OFF
+            -DLLMQUANT_ENABLE_SIGNAL_TRACE=OFF \
+            -DLLMQUANT_ENABLE_SIMD=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -159,6 +160,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_HOT_RELOAD
           - flag: LLMQUANT_ENABLE_STREAM_CLIENT
           - flag: LLMQUANT_ENABLE_SIGNAL_TRACE
+          - flag: LLMQUANT_ENABLE_SIMD
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

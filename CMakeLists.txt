@@ -29,6 +29,7 @@ option(LLMQUANT_ENABLE_REDIS      "Enable Redis-backed deduplication via hiredis
 option(LLMQUANT_ENABLE_HOT_RELOAD    "Enable config file hot-reload watcher thread"                                      ON)
 option(LLMQUANT_ENABLE_STREAM_CLIENT "Build the LLMStreamClient live-streaming adapter (disabling also removes OpenSSL dep when TLS=OFF)" ON)
 option(LLMQUANT_ENABLE_SIGNAL_TRACE  "Emit per-token spdlog::trace lines in the hot path (high verbosity, disable for production)" OFF)
+option(LLMQUANT_ENABLE_SIMD          "Use SSE2 intrinsics in LLMAdapter::map_sequence_simd (disable for ARM/non-SSE2 targets or reproducibility testing)" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -255,6 +256,12 @@ if(LLMQUANT_ENABLE_SIGNAL_TRACE)
     message(STATUS "Feature: Per-token signal trace logging ENABLED (high verbosity)")
 else()
     message(STATUS "Feature: Per-token signal trace logging DISABLED (LLMQUANT_ENABLE_SIGNAL_TRACE=OFF, default)")
+endif()
+if(NOT LLMQUANT_ENABLE_SIMD)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIMD_DISABLED)
+    message(STATUS "Feature: SSE2 SIMD batch processing DISABLED (LLMQUANT_ENABLE_SIMD=OFF)")
+else()
+    message(STATUS "Feature: SSE2 SIMD batch processing ENABLED (hardware-conditional)")
 endif()
 
 # ---------------------------------------------------------------------------
