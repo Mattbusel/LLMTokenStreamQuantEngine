@@ -1142,3 +1142,55 @@ TEST(LatencyControllerTest, test_to_stats_json_empty_controller_shows_zero) {
 
 } // namespace
 } // namespace llmquant
+
+// ---------------------------------------------------------------------------
+// Test: get_slo_breach_rate() returns value in [0, 1].
+// ---------------------------------------------------------------------------
+TEST(LatencyControllerTest, test_slo_breach_rate_zero_when_all_under_target) {
+    LatencyController::Config cfg = make_config();
+    cfg.target_latency = std::chrono::microseconds{1000};
+    LatencyController lc(cfg);
+    for (int i = 0; i < 10; ++i) {
+        lc.start_measurement();
+        lc.end_measurement();
+    }
+    double rate = lc.get_slo_breach_rate();
+    EXPECT_GE(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+    EXPECT_DOUBLE_EQ(rate, 0.0)
+        << "breach rate must be 0 when all samples are well under target";
+}
+
+TEST(LatencyControllerTest, test_slo_breach_rate_positive_after_breaches) {
+    LatencyController::Config cfg = make_config();
+    cfg.target_latency = std::chrono::microseconds{1};
+    LatencyController lc(cfg);
+    for (int i = 0; i < 5; ++i) {
+        lc.start_measurement();
+        std::this_thread::sleep_for(std::chrono::microseconds{200});
+        lc.end_measurement();
+    }
+    double rate = lc.get_slo_breach_rate();
+    EXPECT_GE(rate, 0.0);
+    EXPECT_LE(rate, 1.0);
+    EXPECT_GT(rate, 0.0)
+        << "breach rate must be > 0 when measured latency exceeds 1us target";
+}
+
+// ---------------------------------------------------------------------------
+// Test: get_p99_us / get_p95_us / get_p50_us are consistent with get_stats().
+// ---------------------------------------------------------------------------
+TEST(LatencyControllerTest, test_percentile_accessors_consistent_with_get_stats) {
+    LatencyController lc(make_config());
+    for (int i = 0; i < 20; ++i) {
+        lc.start_measurement();
+        std::this_thread::sleep_for(std::chrono::microseconds{10});
+        lc.end_measurement();
+    }
+    auto stats = lc.get_stats();
+    EXPECT_EQ(lc.get_p99_us(), stats.p99_latency.count());
+    EXPECT_EQ(lc.get_p95_us(), stats.p95_latency.count());
+    EXPECT_EQ(lc.get_p50_us(), stats.p50_latency.count());
+    EXPECT_GE(lc.get_p99_us(), lc.get_p95_us()) << "p99 >= p95";
+    EXPECT_GE(lc.get_p95_us(), lc.get_p50_us()) << "p95 >= p50";
+}
