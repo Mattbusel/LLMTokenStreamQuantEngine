@@ -8,7 +8,9 @@
 #ifdef LLMQUANT_DEDUP_ENABLED
 #  include "Deduplicator.h"
 #endif
-#include "LLMStreamClient.h"
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
+#  include "LLMStreamClient.h"
+#endif
 #include "OmsAdapter.h"
 #ifdef LLMQUANT_REST_OMS_ENABLED
 #  include "RestOmsAdapter.h"
@@ -181,7 +183,9 @@ int main(int argc, char* argv[]) {
                 "Usage: LLMTokenStreamQuantEngine [config.yaml] [options]\n"
                 "\n"
                 "Options:\n"
+#ifdef LLMQUANT_STREAM_CLIENT_ENABLED
                 "  --stream [key]    Enable live LLM stream mode (optional API key)\n"
+#endif
                 "  --oms host:port   Connect to REST OMS adapter\n"
                 "  --fix host:port   Connect to FIX 4.2 OMS adapter\n"
                 "  --config path     Path to config YAML (default: config.yaml)\n"
