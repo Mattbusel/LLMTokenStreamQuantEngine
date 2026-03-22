@@ -648,7 +648,9 @@ std::string Config::to_summary_string() const {
        << "  buffer=" << config_.token_stream.buffer_size
        << "  mem=" << (config_.token_stream.use_memory_stream ? "true" : "false")
        << "  dedup_ttl_ms=" << config_.token_stream.dedup_ttl_ms
-       << (config_.token_stream.dedup_ttl_ms == 0 ? " (auto)" : "") << "\n"
+       << (config_.token_stream.dedup_ttl_ms == 0 ? " (auto)" : "")
+       << (!config_.token_stream.redis_url.empty()
+           ? ("  redis_url=" + config_.token_stream.redis_url) : "") << "\n"
        << "[sem_wts]  sentiment=" << config_.semantic_weights.sentiment_multiplier
        << "  confidence=" << config_.semantic_weights.confidence_multiplier
        << "  volatility=" << config_.semantic_weights.volatility_multiplier
@@ -709,6 +711,7 @@ std::vector<std::string> Config::diff_from_defaults() const {
     u64("token_stream.buffer_size",       snap.token_stream.buffer_size,       def.token_stream.buffer_size);
     bl ("token_stream.use_memory_stream", snap.token_stream.use_memory_stream, def.token_stream.use_memory_stream);
     i32("token_stream.dedup_ttl_ms",      snap.token_stream.dedup_ttl_ms,      def.token_stream.dedup_ttl_ms);
+    str("token_stream.redis_url",         snap.token_stream.redis_url,         def.token_stream.redis_url);
 
     // trading
     dbl("trading.bias_sensitivity",      snap.trading.bias_sensitivity,      def.trading.bias_sensitivity);
