@@ -118,6 +118,10 @@
     unit/test_signal_echo_suppressor.cpp
     unit/test_signal_hurst_estimator.cpp
     unit/test_bias_change_point_detector.cpp
+    unit/test_bias_velocity_breaker.cpp
+    unit/test_signal_information_ratio_tracker.cpp
+    unit/test_narrative_consistency_meter.cpp
+    unit/test_signal_oscillation_detector.cpp
     unit/test_token_weight_histogram.cpp
     unit/test_signal_slope_meter.cpp
     unit/test_latency_jitter_monitor.cpp
@@ -126,6 +130,12 @@
     unit/test_bias_hysteresis_gate.cpp
     unit/test_realized_volatility_tracker.cpp
     unit/test_signal_causal_chain_tracer.cpp
+    unit/test_token_dependency_mapper.cpp
+    unit/test_bias_frequency_analyser.cpp
+    unit/test_signal_entropy_ratchet.cpp
+    unit/test_narrative_coherence_scorer.cpp
+    unit/test_cross_token_correlation_matrix.cpp
+    unit/test_adaptive_position_sizer.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
@@ -150,7 +160,7 @@ endif()
 # Labelled test targets for selective CI execution.
 add_test(NAME unit_tests
     COMMAND tests
-    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*:*NarrativeChange*:*PnLAttribution*:*PortfolioHeat*:*TokenBurstDetector*:*SignalPersistence*:*RollingSharpeBias*:*ContextWindowBudget*:*FractalDimension*:*MarketMicrostructure*:*SignalEnsemble*:*SignalMomentum*:*OrderBookSimulator*:*TokenSentimentHeatmap*:*CVaRCalculator*:*TemporalPattern*:*FeedbackLoop*:*SentimentCycle*:*AdaptiveSampling*:*MutualInformation*:*SignalBlindSpot*:*SignalSurprise*:*StreamHealth*:*RegimeSizer*:*ConfidenceDecay*:*CrossAsset*:*VelocityTracker*:*NarrativeMomentum*:*AdaptiveVelocity*:*SignalCalibration*:*WalkForward*:*OrderFlowImbalance*:*TokenBiasHeatmap*:*CrossSessionMemory*:*MarketRegimeProb*:*SignalReplay*:*TokenNgram*:*ExecutionQuality*:*SentimentDispersion*:*TokenInfluence*:*SentimentDivergence*:*AdversarialInput*:*SignalConfidence*:*TokenStreamRecorder*:*EnsembleSignal*:*SentimentPersistence*:*CausalImpact*:*PhasePortrait*:*OptionsFlow*:*NarrativeTopic*:*TokenClock*:*ShadowPortfolio*:*TokenIB*:*InformationBottleneck*:*ConfidenceBand*:*DecayScheduler*:*RegimeRouter*:*StreamDifferencer*:*SignalDrift*:*LifecycleTracker*:*TokenQuantiser*:*ConcentrationGuard*:*PositionConcentration*:*AutocorrMeter*:*AutoCorr*:*Autocorrelation*:*SignalSSI*:*SignalStrength*:*FlowPressure*:*TokenFlowPressure*:*SignalFatigue*:*FatigueMeter*:*Polarization*:*SignalPolarization*:*NarrativeTemperature*:*TemperatureGauge*:*SignalEchoSuppressor*:*EchoSuppressor*:*HurstEstimator*:*SignalHurst*:*ChangePoint*:*BiasChangePoint*:*WeightHistogram*:*TokenWeightHistogram*:*SignalSlope*:*SlopeMeter*:*RunLength*:*BiasRunLength*:*CoverageMeter*:*SignalCoverage*:*BiasHysteresis*:*HysteresisGate*:*RealizedVol*:*VolatilityTracker*:*CausalChain*:*CausalTracer*"
+    --gtest_filter="*Config*:*LLMAdapter*:*Latency*:*Metrics*:*TokenStream*:*TradeSignal*:*OutputSink*:*Risk*:*Dedup*:*LLMStream*:*Invariants*:*OmsAdapter*:*FixOmsAdapter*:*Prometheus*:*EdgeCase*:*NetworkError*:*ProductionReadiness*:*SentimentTrajectory*:*SignalAuditLog*:*CircuitBreaker*:*BacktestRunner*:*KellySizer*:*HealthServer*:*StaleToken*:*AdaptiveCooldown*:*SignalBlend*:*RegimeDetector*:*TokenReplay*:*ParameterSweep*:*AlertDispatcher*:*PositionTracker*:*TokenEntropyMeter*:*LatencyBudgetEnforcer*:*TokenEntropyMonitor*:*TradingHours*:*SignalCorrelation*:*WarmupSequencer*:*SentimentMomentum*:*SignalDecay*:*TokenCostBudget*:*LeadLag*:*GradientOptimiser*:*DrawdownProtector*:*MultiTimeframe*:*RegimeTransition*:*SignalThrottle*:*ConfidenceCalibrator*:*AnomalyDetector*:*BayesianSignalFilter*:*VolatilityForecaster*:*NarrativeChange*:*PnLAttribution*:*PortfolioHeat*:*TokenBurstDetector*:*SignalPersistence*:*RollingSharpeBias*:*ContextWindowBudget*:*FractalDimension*:*MarketMicrostructure*:*SignalEnsemble*:*SignalMomentum*:*OrderBookSimulator*:*TokenSentimentHeatmap*:*CVaRCalculator*:*TemporalPattern*:*FeedbackLoop*:*SentimentCycle*:*AdaptiveSampling*:*MutualInformation*:*SignalBlindSpot*:*SignalSurprise*:*StreamHealth*:*RegimeSizer*:*ConfidenceDecay*:*CrossAsset*:*VelocityTracker*:*NarrativeMomentum*:*AdaptiveVelocity*:*SignalCalibration*:*WalkForward*:*OrderFlowImbalance*:*TokenBiasHeatmap*:*CrossSessionMemory*:*MarketRegimeProb*:*SignalReplay*:*TokenNgram*:*ExecutionQuality*:*SentimentDispersion*:*TokenInfluence*:*SentimentDivergence*:*AdversarialInput*:*SignalConfidence*:*TokenStreamRecorder*:*EnsembleSignal*:*SentimentPersistence*:*CausalImpact*:*PhasePortrait*:*OptionsFlow*:*NarrativeTopic*:*TokenClock*:*ShadowPortfolio*:*TokenIB*:*InformationBottleneck*:*ConfidenceBand*:*DecayScheduler*:*RegimeRouter*:*StreamDifferencer*:*SignalDrift*:*LifecycleTracker*:*TokenQuantiser*:*ConcentrationGuard*:*PositionConcentration*:*AutocorrMeter*:*AutoCorr*:*Autocorrelation*:*SignalSSI*:*SignalStrength*:*FlowPressure*:*TokenFlowPressure*:*SignalFatigue*:*FatigueMeter*:*Polarization*:*SignalPolarization*:*NarrativeTemperature*:*TemperatureGauge*:*SignalEchoSuppressor*:*EchoSuppressor*:*HurstEstimator*:*SignalHurst*:*ChangePoint*:*BiasChangePoint*:*VelocityBreaker*:*BiasVelocity*:*InformationRatio*:*IRTracker*:*ConsistencyMeter*:*NarrativeConsistency*:*OscillationDetector*:*SignalOscillation*:*WeightHistogram*:*TokenWeightHistogram*:*SignalSlope*:*SlopeMeter*:*RunLength*:*BiasRunLength*:*CoverageMeter*:*SignalCoverage*:*BiasHysteresis*:*HysteresisGate*:*RealizedVol*:*VolatilityTracker*:*CausalChain*:*CausalTracer*:*DependencyMapper*:*TokenDependency*:*FreqAnalyser*:*FrequencyAnalyser*:*EntropyRatchet*:*CoherenceScorer*:*NarrativeCoherence*:*CrossTokenCorr*:*CorrelationMatrix*:*AdaptiveSizer*:*PositionSizer*"
 )
 set_tests_properties(unit_tests PROPERTIES LABELS "unit")
 

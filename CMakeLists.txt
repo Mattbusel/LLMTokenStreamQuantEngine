@@ -139,6 +139,20 @@ option(LLMQUANT_ENABLE_HURST_ESTIMATOR              "Build SignalHurstEstimator:
 option(LLMQUANT_ENABLE_CHANGE_POINT                 "Build BiasChangePointDetector: Page-CUSUM sequential change-point detector for LLM bias mean shifts; fires on_upshift/on_downshift" ON)
 option(LLMQUANT_ENABLE_RUN_LENGTH                   "Build BiasRunLengthEncoder: run-length stats on bias sign sequence (current_run, max_run, avg_run); fires on_long_run callback" ON)
 option(LLMQUANT_ENABLE_COVERAGE_METER               "Build SignalCoverageMeter: rolling min/max of bias values -> coverage fraction of configured range; fires on_range_expansion" ON)
+option(LLMQUANT_ENABLE_VELOCITY_BREAKER             "Build BiasVelocityBreaker: EMA-smoothed rate-of-change circuit breaker; trips when |Δbias| EMA > max_velocity threshold" ON)
+option(LLMQUANT_ENABLE_IR_TRACKER                   "Build SignalInformationRatioTracker: rolling IR = μ(bias)/σ(bias) quality index; fires on_high_ir when |IR| > threshold" ON)
+option(LLMQUANT_ENABLE_CONSISTENCY_METER            "Build NarrativeConsistencyMeter: AAD-based smoothness score; fires on_inconsistent when erratic bias jumps dominate the window" ON)
+option(LLMQUANT_ENABLE_OSCILLATION_DETECTOR         "Build SignalOscillationDetector: zero-crossing rate detector for alternating +/- bias flip-flop; fires on_oscillating callback" ON)
+option(LLMQUANT_ENABLE_DEPENDENCY_MAPPER            "Build TokenDependencyMapper: sliding-window token co-occurrence matrix with clique-based cluster detection and on_cluster_detected callback" ON)
+option(LLMQUANT_ENABLE_FREQ_ANALYSER                "Build BiasFrequencyAnalyser: DCT-II dominant oscillation frequency extractor; fires on_dominant_frequency_change when peak frequency shifts" ON)
+option(LLMQUANT_ENABLE_ENTROPY_RATCHET              "Build SignalEntropyRatchet: one-way ratchet on Shannon entropy of bias distribution; floor drops only after sustained stabilisation" ON)
+option(LLMQUANT_ENABLE_COHERENCE_SCORER             "Build NarrativeCoherenceScorer: |μ|/σ signal-to-noise coherence on bias series; fires on_coherence_drop/recover" ON)
+option(LLMQUANT_ENABLE_CROSS_TOKEN_CORR             "Build CrossTokenCorrelationMatrix: rolling Pearson correlation between N bias channels; fires on_divergence/on_convergence" ON)
+option(LLMQUANT_ENABLE_ADAPTIVE_SIZER               "Build AdaptivePositionSizer: synthesises coherence/confidence/vol/regime into a [0,1] position-size multiplier" ON)
+option(LLMQUANT_ENABLE_CLIP_MONITOR                 "Build BiasClipMonitor: tracks fraction of bias values that hit configured clipping bounds; fires on_excessive_clipping" ON)
+option(LLMQUANT_ENABLE_INTENSITY_RAMP               "Build NarrativeIntensityRamp: detects sustained upward or downward ramp in bias magnitude; fires on_ramp_start/stop" ON)
+option(LLMQUANT_ENABLE_ZSCORE_TRACKER               "Build SentimentZScoreTracker: rolling Z-score of bias relative to expanding or rolling mean/std; fires on_extreme_zscore" ON)
+option(LLMQUANT_ENABLE_CONFLUENCE_DETECTOR          "Build SignalConfluenceDetector: detects when multiple independent signal dimensions agree simultaneously; fires on_confluence" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1331,6 +1345,42 @@ else()
     message(STATUS "Feature: SignalCoverageMeter DISABLED (LLMQUANT_ENABLE_COVERAGE_METER=OFF)")
 endif()
 
+# BiasVelocityBreaker: EMA rate-of-change circuit breaker.
+if(LLMQUANT_ENABLE_VELOCITY_BREAKER)
+    target_sources(llmquant PRIVATE src/BiasVelocityBreaker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VELOCITY_BREAKER_ENABLED)
+    message(STATUS "Feature: BiasVelocityBreaker ENABLED (EMA velocity trip/clear)")
+else()
+    message(STATUS "Feature: BiasVelocityBreaker DISABLED (LLMQUANT_ENABLE_VELOCITY_BREAKER=OFF)")
+endif()
+
+# SignalInformationRatioTracker: rolling IR = μ(bias)/σ(bias).
+if(LLMQUANT_ENABLE_IR_TRACKER)
+    target_sources(llmquant PRIVATE src/SignalInformationRatioTracker.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_IR_TRACKER_ENABLED)
+    message(STATUS "Feature: SignalInformationRatioTracker ENABLED (rolling IR quality index)")
+else()
+    message(STATUS "Feature: SignalInformationRatioTracker DISABLED (LLMQUANT_ENABLE_IR_TRACKER=OFF)")
+endif()
+
+# NarrativeConsistencyMeter: AAD-based bias smoothness score.
+if(LLMQUANT_ENABLE_CONSISTENCY_METER)
+    target_sources(llmquant PRIVATE src/NarrativeConsistencyMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONSISTENCY_METER_ENABLED)
+    message(STATUS "Feature: NarrativeConsistencyMeter ENABLED (AAD consistency, on_inconsistent callback)")
+else()
+    message(STATUS "Feature: NarrativeConsistencyMeter DISABLED (LLMQUANT_ENABLE_CONSISTENCY_METER=OFF)")
+endif()
+
+# SignalOscillationDetector: zero-crossing rate for +/- flip-flop detection.
+if(LLMQUANT_ENABLE_OSCILLATION_DETECTOR)
+    target_sources(llmquant PRIVATE src/SignalOscillationDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_OSCILLATION_DETECTOR_ENABLED)
+    message(STATUS "Feature: SignalOscillationDetector ENABLED (ZCR oscillation detection)")
+else()
+    message(STATUS "Feature: SignalOscillationDetector DISABLED (LLMQUANT_ENABLE_OSCILLATION_DETECTOR=OFF)")
+endif()
+
 # BiasHysteresisGate: debounce / time-persistence gate for bias direction changes.
 option(LLMQUANT_ENABLE_BIAS_HYSTERESIS "Build BiasHysteresisGate: N-tick debounce that requires bias to sustain above threshold before opening, preventing whipsaw" ON)
 if(LLMQUANT_ENABLE_BIAS_HYSTERESIS)
@@ -1359,6 +1409,60 @@ if(LLMQUANT_ENABLE_CAUSAL_TRACER)
     message(STATUS "Feature: SignalCausalChainTracer ENABLED (token causal chain, strong-token callback)")
 else()
     message(STATUS "Feature: SignalCausalChainTracer DISABLED (LLMQUANT_ENABLE_CAUSAL_TRACER=OFF)")
+endif()
+
+# TokenDependencyMapper: sliding-window co-occurrence matrix with clique cluster detection.
+if(LLMQUANT_ENABLE_DEPENDENCY_MAPPER)
+    target_sources(llmquant PRIVATE src/TokenDependencyMapper.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_DEPENDENCY_MAPPER_ENABLED)
+    message(STATUS "Feature: TokenDependencyMapper ENABLED (token co-occurrence, cluster detection)")
+else()
+    message(STATUS "Feature: TokenDependencyMapper DISABLED (LLMQUANT_ENABLE_DEPENDENCY_MAPPER=OFF)")
+endif()
+
+# BiasFrequencyAnalyser: DCT-II dominant oscillation frequency extractor.
+if(LLMQUANT_ENABLE_FREQ_ANALYSER)
+    target_sources(llmquant PRIVATE src/BiasFrequencyAnalyser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_FREQ_ANALYSER_ENABLED)
+    message(STATUS "Feature: BiasFrequencyAnalyser ENABLED (DCT dominant frequency, on_change callback)")
+else()
+    message(STATUS "Feature: BiasFrequencyAnalyser DISABLED (LLMQUANT_ENABLE_FREQ_ANALYSER=OFF)")
+endif()
+
+# SignalEntropyRatchet: one-way ratchet on Shannon entropy of bias distribution.
+if(LLMQUANT_ENABLE_ENTROPY_RATCHET)
+    target_sources(llmquant PRIVATE src/SignalEntropyRatchet.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ENTROPY_RATCHET_ENABLED)
+    message(STATUS "Feature: SignalEntropyRatchet ENABLED (entropy floor ratchet, spike/floor-drop callbacks)")
+else()
+    message(STATUS "Feature: SignalEntropyRatchet DISABLED (LLMQUANT_ENABLE_ENTROPY_RATCHET=OFF)")
+endif()
+
+# NarrativeCoherenceScorer: |μ|/σ signal-to-noise coherence on rolling bias window.
+if(LLMQUANT_ENABLE_COHERENCE_SCORER)
+    target_sources(llmquant PRIVATE src/NarrativeCoherenceScorer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_COHERENCE_SCORER_ENABLED)
+    message(STATUS "Feature: NarrativeCoherenceScorer ENABLED (|mu|/sigma coherence, drop/recover callbacks)")
+else()
+    message(STATUS "Feature: NarrativeCoherenceScorer DISABLED (LLMQUANT_ENABLE_COHERENCE_SCORER=OFF)")
+endif()
+
+# CrossTokenCorrelationMatrix: rolling Pearson correlation across N bias channels.
+if(LLMQUANT_ENABLE_CROSS_TOKEN_CORR)
+    target_sources(llmquant PRIVATE src/CrossTokenCorrelationMatrix.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CROSS_TOKEN_CORR_ENABLED)
+    message(STATUS "Feature: CrossTokenCorrelationMatrix ENABLED (pairwise rolling correlation, divergence/convergence callbacks)")
+else()
+    message(STATUS "Feature: CrossTokenCorrelationMatrix DISABLED (LLMQUANT_ENABLE_CROSS_TOKEN_CORR=OFF)")
+endif()
+
+# AdaptivePositionSizer: synthesises coherence/confidence/vol/regime into position multiplier.
+if(LLMQUANT_ENABLE_ADAPTIVE_SIZER)
+    target_sources(llmquant PRIVATE src/AdaptivePositionSizer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADAPTIVE_SIZER_ENABLED)
+    message(STATUS "Feature: AdaptivePositionSizer ENABLED (multi-factor [0,1] multiplier, on_size_change callback)")
+else()
+    message(STATUS "Feature: AdaptivePositionSizer DISABLED (LLMQUANT_ENABLE_ADAPTIVE_SIZER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

@@ -291,6 +291,18 @@
 #ifdef LLMQUANT_CHANGE_POINT_ENABLED
 #  include "BiasChangePointDetector.h"
 #endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+#  include "BiasVelocityBreaker.h"
+#endif
+#ifdef LLMQUANT_IR_TRACKER_ENABLED
+#  include "SignalInformationRatioTracker.h"
+#endif
+#ifdef LLMQUANT_CONSISTENCY_METER_ENABLED
+#  include "NarrativeConsistencyMeter.h"
+#endif
+#ifdef LLMQUANT_OSCILLATION_DETECTOR_ENABLED
+#  include "SignalOscillationDetector.h"
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
 #  include "TokenWeightHistogram.h"
 #endif
@@ -2578,6 +2590,85 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+    // BiasVelocityBreaker: trips when EMA of |Δbias| exceeds max_velocity.
+    // Prevents trading on whipsaw signals between consecutive tokens.
+    llmquant::BiasVelocityBreaker velocity_breaker;
+    {
+        llmquant::BiasVelocityBreaker::Config vb_cfg;
+        vb_cfg.ema_alpha        = 0.2;
+        vb_cfg.max_velocity     = 0.15;
+        vb_cfg.clear_hysteresis = 0.75;
+        vb_cfg.on_trip = [](double v) {
+            spdlog::warn("[velocity_breaker] TRIPPED velocity={:.4f} — whipsaw detected, suppress signals", v);
+        };
+        vb_cfg.on_clear = [](double v) {
+            spdlog::info("[velocity_breaker] cleared velocity={:.4f}", v);
+        };
+        velocity_breaker.update_config(vb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_IR_TRACKER_ENABLED
+    // SignalInformationRatioTracker: rolling IR = μ(bias)/σ(bias).
+    // High |IR| = consistent directional signal above noise floor.
+    llmquant::SignalInformationRatioTracker ir_tracker;
+    {
+        llmquant::SignalInformationRatioTracker::Config ir_cfg;
+        ir_cfg.window       = 32;
+        ir_cfg.min_samples  = 8;
+        ir_cfg.reference    = 0.0;
+        ir_cfg.ir_threshold = 1.5;
+        ir_cfg.on_high_ir = [](double ir) {
+            spdlog::info("[ir_tracker] high IR={:.3f} — signal consistently above noise", ir);
+        };
+        ir_cfg.on_ir_normalized = [](double ir) {
+            spdlog::info("[ir_tracker] IR normalized={:.3f}", ir);
+        };
+        ir_tracker.update_config(ir_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CONSISTENCY_METER_ENABLED
+    // NarrativeConsistencyMeter: AAD-based smoothness score.
+    // Low score = chaotic, erratic bias jumps = signal quality unreliable.
+    llmquant::NarrativeConsistencyMeter consistency_meter;
+    {
+        llmquant::NarrativeConsistencyMeter::Config cm_cfg;
+        cm_cfg.window                = 32;
+        cm_cfg.min_samples           = 4;
+        cm_cfg.normalizer            = 0.3;
+        cm_cfg.consistency_threshold = 0.4;
+        cm_cfg.on_inconsistent = [](double s) {
+            spdlog::warn("[consistency] INCONSISTENT score={:.3f} — erratic narrative, reduce confidence", s);
+        };
+        cm_cfg.on_recovered = [](double s) {
+            spdlog::info("[consistency] recovered score={:.3f}", s);
+        };
+        consistency_meter.update_config(cm_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_OSCILLATION_DETECTOR_ENABLED
+    // SignalOscillationDetector: zero-crossing rate for alternating +/- patterns.
+    // High ZCR = model flip-flopping = suppress signal amplification.
+    llmquant::SignalOscillationDetector oscillation_detector;
+    {
+        llmquant::SignalOscillationDetector::Config od_cfg;
+        od_cfg.window                = 16;
+        od_cfg.min_samples           = 4;
+        od_cfg.oscillation_threshold = 0.65;
+        od_cfg.clear_hysteresis      = 0.75;
+        od_cfg.on_oscillating = [](double zcr) {
+            spdlog::warn("[oscillation] ZCR={:.3f} — model oscillating, suppress directional signals", zcr);
+        };
+        od_cfg.on_stabilized = [](double zcr) {
+            spdlog::info("[oscillation] stabilized ZCR={:.3f}", zcr);
+        };
+        oscillation_detector.update_config(od_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     // TokenWeightHistogram: 20-bucket histogram of bias values [-1, 1].
     // Tracks mode bucket and entropy; fires on_distribution_shift on mode change.
@@ -3210,6 +3301,18 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_CHANGE_POINT_ENABLED
         // CUSUM change-point: detect sustained mean shift in signal bias.
         change_point_detector.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+        velocity_breaker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_IR_TRACKER_ENABLED
+        ir_tracker.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_CONSISTENCY_METER_ENABLED
+        consistency_meter.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_OSCILLATION_DETECTOR_ENABLED
+        oscillation_detector.record(signal.delta_bias_shift);
 #endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
         // Update bias histogram — tracks distribution shape over session.
@@ -5054,6 +5157,32 @@ int main(int argc, char* argv[]) {
               << "  upshifts=" << change_point_detector.upshift_count()
               << "  downshifts=" << change_point_detector.downshift_count() << "\n";
 #endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+    std::cout << "  Velocity Breaker : "
+              << std::fixed << std::setprecision(4) << velocity_breaker.velocity()
+              << "  tripped=" << (velocity_breaker.is_tripped() ? "YES" : "no")
+              << "  trips=" << velocity_breaker.trip_count() << "\n";
+#endif
+#ifdef LLMQUANT_IR_TRACKER_ENABLED
+    std::cout << "  Info Ratio       : "
+              << std::fixed << std::setprecision(3) << ir_tracker.ir()
+              << "  mu=" << ir_tracker.mean()
+              << "  sigma=" << ir_tracker.stddev()
+              << "  high=" << (ir_tracker.is_high_ir() ? "YES" : "no") << "\n";
+#endif
+#ifdef LLMQUANT_CONSISTENCY_METER_ENABLED
+    std::cout << "  Consistency      : "
+              << std::fixed << std::setprecision(3) << consistency_meter.consistency_score()
+              << "  aad=" << consistency_meter.aad()
+              << "  incon=" << (consistency_meter.is_inconsistent() ? "YES" : "no")
+              << "  events=" << consistency_meter.inconsistency_events() << "\n";
+#endif
+#ifdef LLMQUANT_OSCILLATION_DETECTOR_ENABLED
+    std::cout << "  Oscillation      : "
+              << "zcr=" << std::fixed << std::setprecision(3) << oscillation_detector.zcr()
+              << "  osc=" << (oscillation_detector.is_oscillating() ? "YES" : "no")
+              << "  events=" << oscillation_detector.oscillation_events() << "\n";
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
               << "mode=" << weight_histogram.mode_bucket()
@@ -5327,6 +5456,18 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_CHANGE_POINT_ENABLED
         std::cout << "  [json:change_point] " << change_point_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_VELOCITY_BREAKER_ENABLED
+        std::cout << "  [json:velocity_breaker] " << velocity_breaker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_IR_TRACKER_ENABLED
+        std::cout << "  [json:ir_tracker] " << ir_tracker.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CONSISTENCY_METER_ENABLED
+        std::cout << "  [json:consistency] " << consistency_meter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_OSCILLATION_DETECTOR_ENABLED
+        std::cout << "  [json:oscillation] " << oscillation_detector.to_stats_json() << "\n";
 #endif
 #ifdef LLMQUANT_LATENCY_JITTER_ENABLED
         std::cout << "  [json:latency_jitter] " << latency_jitter.to_stats_json() << "\n";
