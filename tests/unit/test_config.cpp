@@ -1235,20 +1235,54 @@ TEST(ConfigTest, test_validate_accepts_csv_format) {
 
 TEST(ConfigTest, test_validate_rejects_negative_dedup_ttl) {
     Config cfg;
-    // Load a valid base config and then set dedup_ttl_ms to a negative value.
-    ASSERT_TRUE(cfg.load_from_yaml_string(kValidYaml));
-    // Inject negative dedup_ttl_ms via env var (Config::load_from_env parses it).
-    setenv("LLMQUANT_DEDUP_TTL_MS", "-1", 1);
-    cfg.load_from_env();
-    unsetenv("LLMQUANT_DEDUP_TTL_MS");
-    // Alternatively: YAML path for dedup_ttl_ms
-    // (it should be caught even if load_from_env doesn't set it)
+    // Use the YAML path only — cross-platform (no setenv/unsetenv).
     (void)cfg.load_from_yaml_string("token_stream:\n  dedup_ttl_ms: -5\n");
     auto errs = cfg.validate();
     bool found = false;
     for (const auto& e : errs)
         if (e.find("dedup_ttl_ms") != std::string::npos) { found = true; break; }
     EXPECT_TRUE(found) << "validate() must reject dedup_ttl_ms < 0";
+}
+
+TEST(ConfigTest, test_validate_accepts_valid_redis_url) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("token_stream:\n  redis_url: \"redis://127.0.0.1:6379\"\n");
+    auto errs = cfg.validate();
+    bool redis_err = false;
+    for (const auto& e : errs)
+        if (e.find("redis_url") != std::string::npos) { redis_err = true; break; }
+    EXPECT_FALSE(redis_err) << "validate() must accept redis://... URL";
+}
+
+TEST(ConfigTest, test_validate_accepts_rediss_url) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("token_stream:\n  redis_url: \"rediss://myredis.example.com:6380\"\n");
+    auto errs = cfg.validate();
+    bool redis_err = false;
+    for (const auto& e : errs)
+        if (e.find("redis_url") != std::string::npos) { redis_err = true; break; }
+    EXPECT_FALSE(redis_err) << "validate() must accept rediss://... URL";
+}
+
+TEST(ConfigTest, test_validate_rejects_invalid_redis_url_scheme) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("token_stream:\n  redis_url: \"http://localhost:6379\"\n");
+    auto errs = cfg.validate();
+    bool found = false;
+    for (const auto& e : errs)
+        if (e.find("redis_url") != std::string::npos) { found = true; break; }
+    EXPECT_TRUE(found) << "validate() must reject redis_url with non-redis:// scheme";
+}
+
+TEST(ConfigTest, test_validate_accepts_empty_redis_url) {
+    Config cfg;
+    // Empty redis_url means in-process backend — must not produce an error.
+    (void)cfg.load_from_yaml_string("token_stream:\n  redis_url: \"\"\n");
+    auto errs = cfg.validate();
+    bool redis_err = false;
+    for (const auto& e : errs)
+        if (e.find("redis_url") != std::string::npos) { redis_err = true; break; }
+    EXPECT_FALSE(redis_err) << "validate() must accept empty redis_url";
 }
 
 } // namespace

@@ -31,6 +31,7 @@ option(LLMQUANT_ENABLE_HOT_RELOAD    "Enable config file hot-reload watcher thre
 option(LLMQUANT_ENABLE_STREAM_CLIENT "Build the LLMStreamClient live-streaming adapter (disabling also removes OpenSSL dep when TLS=OFF)" ON)
 option(LLMQUANT_ENABLE_SIGNAL_TRACE  "Emit per-token spdlog::trace lines in the hot path (high verbosity, disable for production)" OFF)
 option(LLMQUANT_ENABLE_SIMD          "Use SSE2 intrinsics in LLMAdapter::map_sequence_simd (disable for ARM/non-SSE2 targets or reproducibility testing)" ON)
+option(LLMQUANT_ENABLE_MOCK_OMS      "Build MockOmsAdapter (deterministic test double); disable for production/minimal builds" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -146,9 +147,18 @@ add_library(llmquant STATIC
     src/LLMStreamClient.cpp
     src/RestOmsAdapter.cpp
     src/FixOmsAdapter.cpp
-    src/MockOmsAdapter.cpp
     src/PrometheusExporter.cpp
 )
+
+# MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).
+# Disable for production builds to strip the test double from the binary.
+if(LLMQUANT_ENABLE_MOCK_OMS)
+    target_sources(llmquant PRIVATE src/MockOmsAdapter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MOCK_OMS_ENABLED)
+    message(STATUS "Feature: MockOmsAdapter ENABLED (test double included)")
+else()
+    message(STATUS "Feature: MockOmsAdapter DISABLED (LLMQUANT_ENABLE_MOCK_OMS=OFF)")
+endif()
 
 target_include_directories(llmquant
     PUBLIC

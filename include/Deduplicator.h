@@ -128,6 +128,16 @@ public:
     virtual uint64_t total_novel()      const noexcept { return 0; }
     /** @brief Total duplicate hits since construction. */
     virtual uint64_t total_duplicates() const noexcept { return 0; }
+
+    /**
+     * @brief Start a periodic background thread that calls purge_expired().
+     *
+     * Default implementation is a no-op (e.g. Redis backends rely on server-side
+     * TTL expiry rather than client-side purging).
+     *
+     * @param interval_s Purge interval in seconds.
+     */
+    virtual void start_background_purge(int /*interval_s*/ = 60) {}
 };
 
 /**
@@ -274,7 +284,7 @@ public:
      *
      * @param interval_s Purge interval in seconds (default: 60).
      */
-    void start_background_purge(int interval_s = 60);
+    void start_background_purge(int interval_s = 60) override;
 
     /**
      * @brief Stop the background purge thread and join it.

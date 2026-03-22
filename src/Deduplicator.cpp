@@ -319,12 +319,9 @@ Deduplicator::Stats Deduplicator::get_stats() const {
 }
 
 void Deduplicator::start_background_purge(int interval_s) {
-    if (auto* ip = dynamic_cast<InProcessDeduplicator*>(backend_.get())) {
-        ip->start_background_purge(interval_s);
-    } else {
-        spdlog::info("[dedup] start_background_purge: backend is not InProcessDeduplicator; "
-                     "purge not started. Redis TTL handles expiry server-side.");
-    }
+    // Virtual dispatch: InProcessDeduplicator launches a background thread;
+    // RedisDeduplicator and other backends are no-ops (TTL handled server-side).
+    backend_->start_background_purge(interval_s);
 }
 
 } // namespace llmquant

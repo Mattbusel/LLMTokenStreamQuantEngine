@@ -615,6 +615,15 @@ std::vector<std::string> Config::validate() const {
     // dedup_ttl_ms == 0 means auto (10× token_interval_ms); negative is invalid.
     if (ts.dedup_ttl_ms < 0)
         errors.emplace_back("token_stream.dedup_ttl_ms must be >= 0 (0 = auto)");
+    // redis_url — if provided must start with "redis://" or "rediss://" (TLS).
+    if (!ts.redis_url.empty()) {
+        const bool ok = (ts.redis_url.rfind("redis://",  0) == 0 ||
+                         ts.redis_url.rfind("rediss://", 0) == 0);
+        if (!ok)
+            errors.emplace_back(
+                "token_stream.redis_url must start with \"redis://\" or \"rediss://\"; got \""
+                + ts.redis_url + "\"");
+    }
     return errors;
 }
 
