@@ -163,6 +163,8 @@ void SignalPolarizationMonitor::update_config(const Config& cfg) {
     skewness_.store(0.0, std::memory_order_relaxed);
     kurtosis_.store(0.0, std::memory_order_relaxed);
     polarized_.store(false, std::memory_order_relaxed);
+    events_.store(0, std::memory_order_relaxed);
+    total_.store(0, std::memory_order_relaxed);
 }
 
 } // namespace llmquant

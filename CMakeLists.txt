@@ -131,6 +131,9 @@ option(LLMQUANT_ENABLE_FLOW_PRESSURE                "Build TokenFlowPressureGaug
 option(LLMQUANT_ENABLE_SIGNAL_FATIGUE               "Build SignalFatigueMeter: consecutive same-direction signal streak counter with fatigue score and on_fatigue callback" ON)
 option(LLMQUANT_ENABLE_POLARIZATION_MONITOR         "Build SignalPolarizationMonitor: Sarle bimodality coefficient detector — fires when signal distribution splits into two opposing camps" ON)
 option(LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE        "Build NarrativeTemperatureGauge: combined |EMA(bias)|×σ(bias) temperature index for hot/volatile narrative detection" ON)
+option(LLMQUANT_ENABLE_ECHO_SUPPRESSOR              "Build SignalEchoSuppressor: rolling fraction of near-duplicate consecutive signals; fires on rising/falling echo-rate edge" ON)
+option(LLMQUANT_ENABLE_WEIGHT_HISTOGRAM             "Build TokenWeightHistogram: 20-bucket discretized histogram of bias values with entropy and mode tracking" ON)
+option(LLMQUANT_ENABLE_SIGNAL_SLOPE                 "Build SignalSlopeMeter: OLS linear regression slope over rolling window of bias values; fires on_trend_acceleration" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1249,6 +1252,33 @@ if(LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE)
     message(STATUS "Feature: NarrativeTemperatureGauge ENABLED (intensity × volatility temperature index)")
 else()
     message(STATUS "Feature: NarrativeTemperatureGauge DISABLED (LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE=OFF)")
+endif()
+
+# SignalEchoSuppressor: rolling echo-rate detector; fires on rising/falling edge.
+if(LLMQUANT_ENABLE_ECHO_SUPPRESSOR)
+    target_sources(llmquant PRIVATE src/SignalEchoSuppressor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ECHO_SUPPRESSOR_ENABLED)
+    message(STATUS "Feature: SignalEchoSuppressor ENABLED (rolling near-duplicate signal rate detector)")
+else()
+    message(STATUS "Feature: SignalEchoSuppressor DISABLED (LLMQUANT_ENABLE_ECHO_SUPPRESSOR=OFF)")
+endif()
+
+# TokenWeightHistogram: discretized histogram of bias values with entropy and mode.
+if(LLMQUANT_ENABLE_WEIGHT_HISTOGRAM)
+    target_sources(llmquant PRIVATE src/TokenWeightHistogram.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_WEIGHT_HISTOGRAM_ENABLED)
+    message(STATUS "Feature: TokenWeightHistogram ENABLED (20-bucket bias histogram, entropy, mode tracking)")
+else()
+    message(STATUS "Feature: TokenWeightHistogram DISABLED (LLMQUANT_ENABLE_WEIGHT_HISTOGRAM=OFF)")
+endif()
+
+# SignalSlopeMeter: OLS regression slope over rolling window for trend acceleration.
+if(LLMQUANT_ENABLE_SIGNAL_SLOPE)
+    target_sources(llmquant PRIVATE src/SignalSlopeMeter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_SLOPE_ENABLED)
+    message(STATUS "Feature: SignalSlopeMeter ENABLED (OLS slope, trend acceleration detection)")
+else()
+    message(STATUS "Feature: SignalSlopeMeter DISABLED (LLMQUANT_ENABLE_SIGNAL_SLOPE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

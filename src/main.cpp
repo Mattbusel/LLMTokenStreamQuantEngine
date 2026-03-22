@@ -282,6 +282,15 @@
 #ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
 #  include "NarrativeTemperatureGauge.h"
 #endif
+#ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
+#  include "SignalEchoSuppressor.h"
+#endif
+#ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
+#  include "TokenWeightHistogram.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
+#  include "SignalSlopeMeter.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2466,6 +2475,26 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
+    // SignalEchoSuppressor: rolling fraction of near-duplicate consecutive signals.
+    // High echo rate = model is stuck in a narrative loop; suppress downstream amplification.
+    llmquant::SignalEchoSuppressor echo_suppressor;
+    {
+        llmquant::SignalEchoSuppressor::Config es_cfg;
+        es_cfg.echo_threshold     = 1e-4;
+        es_cfg.window             = 32;
+        es_cfg.echo_rate_threshold = 0.6;
+        es_cfg.clear_hysteresis   = 0.75;
+        es_cfg.on_echo_detected = [](double rate) {
+            spdlog::warn("[echo_suppressor] echo state entered rate={:.3f} — model may be in narrative loop", rate);
+        };
+        es_cfg.on_echo_cleared = [](double rate) {
+            spdlog::info("[echo_suppressor] echo cleared rate={:.3f}", rate);
+        };
+        echo_suppressor.update_config(es_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_KELLY_SIZER_ENABLED
     // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
     // fraction given the observed win/loss history.  Outcomes should be fed
@@ -3022,6 +3051,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
         // Update narrative temperature: hot when direction and volatility both elevated.
         narrative_temperature.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
+        // Detect echo state: near-duplicate consecutive signals = narrative stutter.
+        echo_suppressor.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4828,6 +4861,13 @@ int main(int argc, char* argv[]) {
               << "  sigma=" << narrative_temperature.bias_sigma()
               << "  heat_events=" << narrative_temperature.heat_events() << "\n";
 #endif
+#ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
+    std::cout << "  Echo Suppressor  : "
+              << std::fixed << std::setprecision(3) << echo_suppressor.echo_rate()
+              << "  echoing=" << (echo_suppressor.is_echoing() ? "YES" : "no")
+              << "  echo_count=" << echo_suppressor.echo_count()
+              << "  events=" << echo_suppressor.echo_events() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -5063,6 +5103,9 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
         std::cout << "  [json:narrative_temp] " << narrative_temperature.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
+        std::cout << "  [json:echo_suppressor] " << echo_suppressor.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
