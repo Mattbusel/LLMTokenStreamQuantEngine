@@ -491,7 +491,7 @@ TEST(LLMAdapterTest, test_llm_adapter_remove_nonexistent_token_returns_false) {
 
 TEST(LLMAdapterTest, test_llm_adapter_remove_then_add_mapping_works) {
     LLMAdapter adapter;
-    adapter.remove_token_mapping("crash");
+    (void)adapter.remove_token_mapping("crash");
     SemanticWeight custom{0.5, 0.8, 0.1, 0.6};
     adapter.add_token_mapping("crash", custom);
     SemanticWeight retrieved;
@@ -1366,7 +1366,7 @@ TEST(LLMAdapterTest, test_format_stats_no_data_returns_sentinel) {
 
 TEST(LLMAdapterTest, test_format_stats_after_lookups_contains_expected_fields) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("bullish");      // hit
+    (void)adapter.map_token_to_weight("bullish");      // hit
     (void)adapter.map_token_to_weight("unknown_xyz");  // miss
     std::string s = adapter.format_stats();
     EXPECT_NE(s.find("tokens=2"), std::string::npos);
@@ -1432,7 +1432,7 @@ TEST(LLMAdapterTest, test_frequency_reset_zeroes_counts) {
 
 TEST(LLMAdapterTest, test_frequency_normalisation_case_insensitive) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("Bullish");   // normalised to "bullish"
+    (void)adapter.map_token_to_weight("Bullish");   // normalised to "bullish"
     EXPECT_EQ(adapter.get_token_hit_count("bullish"), 1u)
         << "Hit count must be accessible via normalised (lowercase) key";
 }
