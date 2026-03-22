@@ -85,6 +85,7 @@ option(LLMQUANT_ENABLE_SENTIMENT_CYCLE              "Build SentimentCycleDetecto
 option(LLMQUANT_ENABLE_ADAPTIVE_SAMPLING            "Build AdaptiveSamplingController: dynamically adjusts token-polling interval based on activity magnitude" ON)
 option(LLMQUANT_ENABLE_MUTUAL_INFORMATION           "Build MutualInformationEstimator: discretized MI between LLM sentiment and returns via 2D joint histogram" ON)
 option(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT            "Build SignalBlindSpotDetector: time-of-day win-rate tracker to identify low-predictability trading slots" ON)
+option(LLMQUANT_ENABLE_SIGNAL_SURPRISE              "Build SignalSurpriseIndex: Shannon self-information of bias signals relative to their empirical distribution" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -792,6 +793,15 @@ if(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT)
     message(STATUS "Feature: SignalBlindSpotDetector ENABLED (time-of-day blind-spot analysis)")
 else()
     message(STATUS "Feature: SignalBlindSpotDetector DISABLED (LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF)")
+endif()
+
+# SignalSurpriseIndex: Shannon self-information of bias signals.
+if(LLMQUANT_ENABLE_SIGNAL_SURPRISE)
+    target_sources(llmquant PRIVATE src/SignalSurpriseIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_SURPRISE_ENABLED)
+    message(STATUS "Feature: SignalSurpriseIndex ENABLED (surprise / self-information)")
+else()
+    message(STATUS "Feature: SignalSurpriseIndex DISABLED (LLMQUANT_ENABLE_SIGNAL_SURPRISE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

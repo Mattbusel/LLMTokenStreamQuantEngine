@@ -141,6 +141,15 @@
 #ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
 #  include "SentimentCycleDetector.h"
 #endif
+#ifdef LLMQUANT_ADAPTIVE_SAMPLING_ENABLED
+#  include "AdaptiveSamplingController.h"
+#endif
+#ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
+#  include "MutualInformationEstimator.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
+#  include "SignalBlindSpotDetector.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1088,6 +1097,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
     llmquant::ContextWindowBudget context_budget;
 #endif
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+    llmquant::TemporalPatternLibrary tpl;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1377,9 +1389,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
-    // TemporalPatternLibrary: trie-based multi-token phrase matcher.
-    // Detects compound sentiment phrases the single-token weights miss.
-    llmquant::TemporalPatternLibrary tpl;
+    // TemporalPatternLibrary: configure the instance declared before process_token.
     {
         tpl.register_pattern("earnings_beat",    {"earnings", "beat"},      0.6);
         tpl.register_pattern("earnings_miss",    {"earnings", "miss"},     -0.6);
@@ -1418,6 +1428,42 @@ int main(int argc, char* argv[]) {
             spdlog::info("[cycle] dominant period {}→{}  acf={:.3f}", old_p, new_p, strength);
         };
         sentiment_cycle.update_config(sc_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_ADAPTIVE_SAMPLING_ENABLED
+    // AdaptiveSamplingController: shrinks poll interval on high activity,
+    // grows it on quiet periods to reduce wasteful LLM API calls.
+    llmquant::AdaptiveSamplingController adaptive_sampler;
+    {
+        llmquant::AdaptiveSamplingController::Config as_cfg;
+        as_cfg.min_interval_ms  = 10;
+        as_cfg.max_interval_ms  = 2000;
+        as_cfg.initial_interval_ms = 100;
+        as_cfg.on_interval_change = [](int64_t new_ms) {
+            spdlog::debug("[sampler] poll interval → {} ms", new_ms);
+        };
+        adaptive_sampler.update_config(as_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
+    // MutualInformationEstimator: captures non-linear sentiment→return dependency.
+    llmquant::MutualInformationEstimator mi_estimator;
+    // record(sentiment, return) is called from the OMS PnL callback below.
+#endif
+
+#ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
+    // SignalBlindSpotDetector: flags calendar slots with poor historical win rate.
+    llmquant::SignalBlindSpotDetector blind_spot;
+    {
+        llmquant::SignalBlindSpotDetector::Config bs_cfg;
+        bs_cfg.min_samples         = 10;
+        bs_cfg.blind_spot_threshold = 0.4;
+        bs_cfg.on_blind_spot_found = [](int slot, double wr) {
+            spdlog::warn("[blind_spot] hour {} flagged — win_rate={:.2f}", slot, wr);
+        };
+        blind_spot.update_config(bs_cfg);
     }
 #endif
 
@@ -1813,6 +1859,11 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
         // Feed bias into ACF cycle detector.
         sentiment_cycle.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_ADAPTIVE_SAMPLING_ENABLED
+        // Adapt poll interval based on recent signal magnitude.
+        adaptive_sampler.record_activity(std::abs(signal.delta_bias_shift));
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -3116,6 +3167,25 @@ int main(int argc, char* argv[]) {
               << "  " << (sentiment_cycle.is_cyclic() ? "CYCLIC" : "none")
               << "  changes=" << sentiment_cycle.period_changes() << "\n";
 #endif
+#ifdef LLMQUANT_ADAPTIVE_SAMPLING_ENABLED
+    std::cout << "  Adaptive sampler : "
+              << "interval=" << adaptive_sampler.recommended_interval_ms() << "ms"
+              << "  accel=" << adaptive_sampler.accelerations()
+              << "  decel=" << adaptive_sampler.decelerations()
+              << "  " << (adaptive_sampler.is_at_min() ? "FAST" : adaptive_sampler.is_at_max() ? "SLOW" : "mid") << "\n";
+#endif
+#ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
+    std::cout << "  Mutual info      : "
+              << "mi=" << std::fixed << std::setprecision(4) << mi_estimator.mi()
+              << "  nmi=" << mi_estimator.normalized_mi()
+              << "  n=" << mi_estimator.sample_count() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
+    std::cout << "  Blind spots      : "
+              << "flagged_slots=" << blind_spot.blind_spot_count()
+              << "  outcomes=" << blind_spot.total_outcomes()
+              << "  events=" << blind_spot.detection_events() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3240,6 +3310,15 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
         std::cout << "  [json:cycle]   " << sentiment_cycle.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_SAMPLING_ENABLED
+        std::cout << "  [json:sampler] " << adaptive_sampler.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_MUTUAL_INFORMATION_ENABLED
+        std::cout << "  [json:mi]      " << mi_estimator.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED
+        std::cout << "  [json:bspot]   " << blind_spot.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
