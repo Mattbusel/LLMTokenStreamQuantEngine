@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (Cycle 31 — 2026-03-21)
+- **Bug fix** `LLMStreamClient::stream_reader`: HTTP 429 rate-limit back-off
+  used a 10-second blocking `sleep_for`, and the general HTTP error retry used a
+  2-second blocking `sleep_for`. Both prevented `stop()` from returning promptly.
+  Both are now interruptible 100ms-slice loops (same pattern as
+  `TokenStreamSimulator`, `RestOmsAdapter`, and `Config.cpp` watcher).
+- **Portability** `LLMAdapter`: `#include <immintrin.h>` is now guarded by
+  `#if defined(__SSE2__) && !defined(LLMQUANT_SIMD_DISABLED)`. This prevents
+  a build error on ARM and 32-bit x86 targets without SSE2. A full scalar
+  fallback path is compiled when SSE2 is absent or `LLMQUANT_ENABLE_SIMD=OFF`
+  is passed at configure time. The unconditional `immintrin.h` include is also
+  removed from `LLMAdapter.h` (it was leaking into all translation units that
+  included the header).
+
 ### Added (Cycle 30 — 2026-03-21)
 - **Docs**: README CMake options table expanded to document all 11 feature flags
   and 5 build/tooling options. Split into "Feature flags" and "Build/tooling"

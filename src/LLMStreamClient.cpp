@@ -439,12 +439,20 @@ void LLMStreamClient::reader_thread() {
                     } else if (status_code == 429) {
                         spdlog::warn("[llm_client] HTTP 429 rate-limited; backing off");
                         close_socket();
-                        std::this_thread::sleep_for(std::chrono::seconds(10));
+                        // Interruptible 10-second back-off: stop() returns promptly.
+                        { auto dl = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                          const auto sl = std::chrono::milliseconds{100};
+                          while (running_.load() && std::chrono::steady_clock::now() < dl)
+                              std::this_thread::sleep_for(sl); }
                         continue;
                     } else if (status_code < 200 || status_code >= 300) {
                         spdlog::warn("[llm_client] HTTP {} error; retrying", status_code);
                         close_socket();
-                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        // Interruptible 2-second back-off: stop() returns promptly.
+                        { auto dl = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+                          const auto sl = std::chrono::milliseconds{100};
+                          while (running_.load() && std::chrono::steady_clock::now() < dl)
+                              std::this_thread::sleep_for(sl); }
                         continue;
                     }
                 }
