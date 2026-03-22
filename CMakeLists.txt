@@ -28,6 +28,7 @@ option(LLMQUANT_ENABLE_TLS        "Enable TLS support via OpenSSL in LLMStreamCl
 option(LLMQUANT_ENABLE_REDIS      "Enable Redis-backed deduplication via hiredis (auto-disabled if hiredis not found)"     ON)
 option(LLMQUANT_ENABLE_HOT_RELOAD    "Enable config file hot-reload watcher thread"                                      ON)
 option(LLMQUANT_ENABLE_STREAM_CLIENT "Build the LLMStreamClient live-streaming adapter (disabling also removes OpenSSL dep when TLS=OFF)" ON)
+option(LLMQUANT_ENABLE_SIGNAL_TRACE  "Emit per-token spdlog::trace lines in the hot path (high verbosity, disable for production)" OFF)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -248,6 +249,12 @@ if(LLMQUANT_ENABLE_STREAM_CLIENT)
     message(STATUS "Feature: LLMStreamClient live-streaming adapter ENABLED")
 else()
     message(STATUS "Feature: LLMStreamClient live-streaming adapter DISABLED (LLMQUANT_ENABLE_STREAM_CLIENT=OFF)")
+endif()
+if(LLMQUANT_ENABLE_SIGNAL_TRACE)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_TRACE_ENABLED)
+    message(STATUS "Feature: Per-token signal trace logging ENABLED (high verbosity)")
+else()
+    message(STATUS "Feature: Per-token signal trace logging DISABLED (LLMQUANT_ENABLE_SIGNAL_TRACE=OFF, default)")
 endif()
 
 # ---------------------------------------------------------------------------

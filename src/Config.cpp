@@ -382,11 +382,16 @@ bool Config::start_watching(const std::string& filepath,
                         + std::chrono::milliseconds(poll_interval_ms);
 
         while (watching_.load()) {
-            // Compensating sleep: drift-free polling.
+            // Interruptible compensating sleep: wake every 50 ms to check
+            // watching_ so that stop_watching() returns promptly.
             auto now_s = std::chrono::steady_clock::now();
-            if (next_check > now_s) {
-                std::this_thread::sleep_for(next_check - now_s);
+            while (watching_.load() && now_s < next_check) {
+                auto remaining = next_check - now_s;
+                auto slice = std::chrono::milliseconds{50};
+                std::this_thread::sleep_for(remaining < slice ? remaining : slice);
+                now_s = std::chrono::steady_clock::now();
             }
+            if (!watching_.load()) break;
             next_check += std::chrono::milliseconds(poll_interval_ms);
 
             try {
