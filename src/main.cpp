@@ -227,13 +227,16 @@ int main(int argc, char* argv[]) {
         } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
             config_file = argv[++i];
         } else if (arg == "--stats-port" && i + 1 < argc) {
-            stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i]));
+            try { stats_port_override = static_cast<uint16_t>(std::stoi(argv[++i])); }
+            catch (...) { std::cerr << "error: --stats-port requires an integer\n"; return 1; }
         } else if (arg == "--token-interval" && i + 1 < argc) {
-            token_interval_override = std::max(1, std::stoi(argv[++i]));
+            try { token_interval_override = std::max(1, std::stoi(argv[++i])); }
+            catch (...) { std::cerr << "error: --token-interval requires an integer\n"; return 1; }
         } else if (arg == "--log-level" && i + 1 < argc) {
             log_level_str = argv[++i];
         } else if (arg == "--stats-interval" && i + 1 < argc) {
-            stats_interval_ms = std::max(100, std::stoi(argv[++i]));
+            try { stats_interval_ms = std::max(100, std::stoi(argv[++i])); }
+            catch (...) { std::cerr << "error: --stats-interval requires an integer\n"; return 1; }
         } else if (arg == "--no-prometheus") {
             no_prometheus = true;
         } else if (arg == "--no-dedup") {
@@ -519,7 +522,8 @@ int main(int argc, char* argv[]) {
         size_t colon = fix_address.find(':');
         if (colon != std::string::npos) {
             fix_cfg.host = fix_address.substr(0, colon);
-            fix_cfg.port = static_cast<uint16_t>(std::stoi(fix_address.substr(colon + 1)));
+            try { fix_cfg.port = static_cast<uint16_t>(std::stoi(fix_address.substr(colon + 1))); }
+            catch (...) { spdlog::error("--fix: invalid port in '{}'", fix_address); return 1; }
         } else {
             fix_cfg.host = fix_address;
         }
@@ -534,7 +538,8 @@ int main(int argc, char* argv[]) {
         size_t colon = endpoint.find(':');
         if (colon != std::string::npos) {
             oms_cfg.host = endpoint.substr(0, colon);
-            oms_cfg.port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon + 1)));
+            try { oms_cfg.port = static_cast<uint16_t>(std::stoi(endpoint.substr(colon + 1))); }
+            catch (...) { spdlog::error("--oms: invalid port in '{}'", endpoint); return 1; }
         } else {
             oms_cfg.host = endpoint;
         }
