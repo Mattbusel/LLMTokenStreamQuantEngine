@@ -291,6 +291,9 @@
 #ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
 #  include "SignalSlopeMeter.h"
 #endif
+#ifdef LLMQUANT_LATENCY_JITTER_ENABLED
+#  include "LatencyJitterMonitor.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1280,6 +1283,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_FLOW_PRESSURE_ENABLED
     llmquant::TokenFlowPressureGauge flow_pressure;
 #endif
+#ifdef LLMQUANT_LATENCY_JITTER_ENABLED
+    llmquant::LatencyJitterMonitor latency_jitter;
+#endif
 
     // Shared token processing lambda used by both the simulator and the
     // LLMStreamClient paths.  Encapsulates dedup, latency, logging, and
@@ -1434,6 +1440,12 @@ int main(int argc, char* argv[]) {
 #endif
 
         latency_ctrl.end_measurement();
+#ifdef LLMQUANT_LATENCY_JITTER_ENABLED
+        // Feed the most recent average latency as a per-token sample.
+        // avg_latency is a microsecond-resolution chrono duration.
+        latency_jitter.record(
+            static_cast<double>(latency_ctrl.get_stats().avg_latency.count()));
+#endif
 
         // Track token arrival for ingestion pressure.
         token_count_window++;
@@ -2454,6 +2466,25 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef LLMQUANT_LATENCY_JITTER_ENABLED
+    // LatencyJitterMonitor: MAD-based token processing latency consistency tracker.
+    // High MAD → inconsistent processing times → upstream backpressure warranted.
+    {
+        llmquant::LatencyJitterMonitor::Config ljm_cfg;
+        ljm_cfg.window_size         = 64;
+        ljm_cfg.min_samples         = 8;
+        ljm_cfg.jitter_threshold_us = 500.0;  // 500 μs MAD threshold
+        ljm_cfg.clear_hysteresis    = 0.75;
+        ljm_cfg.on_jitter_spike = [](double mad) {
+            spdlog::warn("[jitter] SPIKE MAD={:.1f}us — latency inconsistent; consider backpressure", mad);
+        };
+        ljm_cfg.on_jitter_clear = [](double mad) {
+            spdlog::info("[jitter] CLEAR MAD={:.1f}us — latency consistency restored", mad);
+        };
+        latency_jitter.update_config(ljm_cfg);
+    }
+#endif
+
 #ifdef LLMQUANT_NARRATIVE_TEMPERATURE_ENABLED
     // NarrativeTemperatureGauge: combined |EMA(bias)| × σ(bias) "temperature".
     // Hot narrative = strong direction AND high volatility = elevated execution risk.
@@ -2492,6 +2523,37 @@ int main(int argc, char* argv[]) {
             spdlog::info("[echo_suppressor] echo cleared rate={:.3f}", rate);
         };
         echo_suppressor.update_config(es_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
+    // TokenWeightHistogram: 20-bucket histogram of bias values [-1, 1].
+    // Tracks mode bucket and entropy; fires on_distribution_shift on mode change.
+    llmquant::TokenWeightHistogram weight_histogram;
+    {
+        llmquant::TokenWeightHistogram::Config wh_cfg;
+        wh_cfg.range_min = -1.0;
+        wh_cfg.range_max =  1.0;
+        wh_cfg.on_distribution_shift = [](int new_mode) {
+            spdlog::info("[histogram] distribution shift — new mode bucket={}", new_mode);
+        };
+        weight_histogram.update_config(wh_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
+    // SignalSlopeMeter: OLS regression slope over rolling window.
+    // Positive slope = accelerating bullish; negative = accelerating bearish.
+    llmquant::SignalSlopeMeter signal_slope;
+    {
+        llmquant::SignalSlopeMeter::Config ss_cfg;
+        ss_cfg.window                 = 20;
+        ss_cfg.acceleration_threshold = 0.02;
+        ss_cfg.saturation_slope       = 0.05;
+        ss_cfg.on_trend_acceleration  = [](double s) {
+            spdlog::info("[slope] ACCELERATING slope={:.4f}", s);
+        };
+        signal_slope.update_config(ss_cfg);
     }
 #endif
 
@@ -3055,6 +3117,14 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
         // Detect echo state: near-duplicate consecutive signals = narrative stutter.
         echo_suppressor.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
+        // Update bias histogram — tracks distribution shape over session.
+        weight_histogram.record(signal.delta_bias_shift);
+#endif
+#ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
+        // Update OLS slope of recent bias values for trend acceleration detection.
+        signal_slope.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -4868,6 +4938,20 @@ int main(int argc, char* argv[]) {
               << "  echo_count=" << echo_suppressor.echo_count()
               << "  events=" << echo_suppressor.echo_events() << "\n";
 #endif
+#ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
+    std::cout << "  Weight Histogram : "
+              << "mode=" << weight_histogram.mode_bucket()
+              << "  mode_val=" << std::fixed << std::setprecision(3) << weight_histogram.mode_value()
+              << "  entropy=" << std::setprecision(3) << weight_histogram.entropy()
+              << "  total=" << weight_histogram.total() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
+    std::cout << "  Signal Slope     : "
+              << std::fixed << std::setprecision(5) << signal_slope.slope()
+              << "  score=" << std::setprecision(3) << signal_slope.slope_score()
+              << "  accel=" << (signal_slope.is_accelerating() ? "YES" : "no")
+              << "  obs=" << signal_slope.observation_count() << "\n";
+#endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
         std::cout << "  OMS adapter      : " << oms_adapter->description() << "\n";
@@ -5106,6 +5190,15 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_ECHO_SUPPRESSOR_ENABLED
         std::cout << "  [json:echo_suppressor] " << echo_suppressor.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_LATENCY_JITTER_ENABLED
+        std::cout << "  [json:latency_jitter] " << latency_jitter.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
+        std::cout << "  [json:histogram]  " << weight_histogram.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_SLOPE_ENABLED
+        std::cout << "  [json:slope]      " << signal_slope.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

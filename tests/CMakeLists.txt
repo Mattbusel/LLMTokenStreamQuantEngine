@@ -118,6 +118,7 @@
     unit/test_signal_echo_suppressor.cpp
     unit/test_token_weight_histogram.cpp
     unit/test_signal_slope_meter.cpp
+    unit/test_latency_jitter_monitor.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

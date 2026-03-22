@@ -134,6 +134,7 @@ option(LLMQUANT_ENABLE_NARRATIVE_TEMPERATURE        "Build NarrativeTemperatureG
 option(LLMQUANT_ENABLE_ECHO_SUPPRESSOR              "Build SignalEchoSuppressor: rolling fraction of near-duplicate consecutive signals; fires on rising/falling echo-rate edge" ON)
 option(LLMQUANT_ENABLE_WEIGHT_HISTOGRAM             "Build TokenWeightHistogram: 20-bucket discretized histogram of bias values with entropy and mode tracking" ON)
 option(LLMQUANT_ENABLE_SIGNAL_SLOPE                 "Build SignalSlopeMeter: OLS linear regression slope over rolling window of bias values; fires on_trend_acceleration" ON)
+option(LLMQUANT_ENABLE_LATENCY_JITTER               "Build LatencyJitterMonitor: MAD-based latency jitter tracker; fires on_jitter_spike when consistency degrades beyond threshold" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1279,6 +1280,15 @@ if(LLMQUANT_ENABLE_SIGNAL_SLOPE)
     message(STATUS "Feature: SignalSlopeMeter ENABLED (OLS slope, trend acceleration detection)")
 else()
     message(STATUS "Feature: SignalSlopeMeter DISABLED (LLMQUANT_ENABLE_SIGNAL_SLOPE=OFF)")
+endif()
+
+# LatencyJitterMonitor: MAD-based latency jitter tracking.
+if(LLMQUANT_ENABLE_LATENCY_JITTER)
+    target_sources(llmquant PRIVATE src/LatencyJitterMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_LATENCY_JITTER_ENABLED)
+    message(STATUS "Feature: LatencyJitterMonitor ENABLED (MAD jitter tracking, spike/clear callbacks)")
+else()
+    message(STATUS "Feature: LatencyJitterMonitor DISABLED (LLMQUANT_ENABLE_LATENCY_JITTER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
