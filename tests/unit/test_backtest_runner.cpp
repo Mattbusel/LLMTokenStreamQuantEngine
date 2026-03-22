@@ -155,7 +155,6 @@ TEST(BacktestRunner, BlockedSignalsHaveZeroReturn) {
     // never contribute to PnL.
     BacktestRunner::Config cfg;
     cfg.engine.signal_cooldown = std::chrono::microseconds{0};
-    cfg.engine.signal_decay_rate = 0.0;
     // Very tight magnitude gate: block almost all signals.
     cfg.risk.max_bias_magnitude      = 1e-9;
     cfg.risk.max_volatility_magnitude = 1e-9;

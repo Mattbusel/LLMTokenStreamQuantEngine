@@ -4,6 +4,7 @@
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <stdexcept>
 
 namespace llmquant {
 
@@ -19,7 +20,10 @@ KellyPositionSizer::KellyPositionSizer(Config config)
     , win_rate_ema_(config.prior_win_rate)
     , avg_win_ema_(config.prior_avg_win)
     , avg_loss_ema_(config.prior_avg_loss)
-{}
+{
+    if (config.max_fraction <= 0.0)
+        throw std::invalid_argument("KellyPositionSizer: max_fraction must be > 0");
+}
 
 // ---------------------------------------------------------------------------
 // Outcome recording

@@ -57,7 +57,8 @@ BacktestRunner::BacktestResult BacktestRunner::run() {
     LLMAdapter adapter;
 
     TradeSignalEngine::Config eng_cfg = config_.engine;
-    eng_cfg.signal_cooldown = std::chrono::microseconds{0};  // no cooldown in backtest
+    // Remove cooldown so every signal is processed without rate-limiting.
+    eng_cfg.signal_cooldown = std::chrono::microseconds{0};
     TradeSignalEngine engine(eng_cfg);
     engine.set_backtest_mode(true);
 

@@ -113,7 +113,10 @@ jobs:
             -DLLMQUANT_ENABLE_MOCK_OMS=OFF \
             -DLLMQUANT_ENABLE_AUDIT_LOG=OFF \
             -DLLMQUANT_ENABLE_SENTIMENT_TRAJECTORY=OFF \
-            -DLLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF
+            -DLLMQUANT_ENABLE_CIRCUIT_BREAKER=OFF \
+            -DLLMQUANT_ENABLE_BACKTEST=OFF \
+            -DLLMQUANT_ENABLE_HEALTH_SERVER=OFF \
+            -DLLMQUANT_ENABLE_KELLY_SIZER=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -142,6 +145,9 @@ jobs:
           - flag: LLMQUANT_ENABLE_AUDIT_LOG
           - flag: LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY
           - flag: LLMQUANT_ENABLE_CIRCUIT_BREAKER
+          - flag: LLMQUANT_ENABLE_BACKTEST
+          - flag: LLMQUANT_ENABLE_HEALTH_SERVER
+          - flag: LLMQUANT_ENABLE_KELLY_SIZER
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

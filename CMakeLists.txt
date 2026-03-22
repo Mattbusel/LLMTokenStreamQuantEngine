@@ -36,6 +36,8 @@ option(LLMQUANT_ENABLE_SENTIMENT_TRAJECTORY "Build SentimentTrajectoryAnalyzer (
 option(LLMQUANT_ENABLE_AUDIT_LOG         "Build the async NDJSON signal audit log (SignalAuditLog)" ON)
 option(LLMQUANT_ENABLE_CIRCUIT_BREAKER   "Build the pipeline circuit-breaker (auto-pause on sustained high block rate)" ON)
 option(LLMQUANT_ENABLE_BACKTEST          "Build BacktestRunner: full-pipeline token-sequence replay with PnL statistics" ON)
+option(LLMQUANT_ENABLE_HEALTH_SERVER     "Build the HTTP /health JSON endpoint for Kubernetes liveness/readiness probes" ON)
+option(LLMQUANT_ENABLE_KELLY_SIZER       "Build KellyPositionSizer: Kelly Criterion adaptive position sizing" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -191,6 +193,24 @@ if(LLMQUANT_ENABLE_BACKTEST)
     message(STATUS "Feature: BacktestRunner ENABLED (full-pipeline replay with PnL stats)")
 else()
     message(STATUS "Feature: BacktestRunner DISABLED (LLMQUANT_ENABLE_BACKTEST=OFF)")
+endif()
+
+# HealthServer: lightweight HTTP /health endpoint for k8s liveness/readiness probes.
+if(LLMQUANT_ENABLE_HEALTH_SERVER)
+    target_sources(llmquant PRIVATE src/HealthServer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_HEALTH_SERVER_ENABLED)
+    message(STATUS "Feature: HealthServer ENABLED (HTTP /health endpoint on port 8080)")
+else()
+    message(STATUS "Feature: HealthServer DISABLED (LLMQUANT_ENABLE_HEALTH_SERVER=OFF)")
+endif()
+
+# KellyPositionSizer: Kelly Criterion adaptive position sizing.
+if(LLMQUANT_ENABLE_KELLY_SIZER)
+    target_sources(llmquant PRIVATE src/KellyPositionSizer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_KELLY_SIZER_ENABLED)
+    message(STATUS "Feature: KellyPositionSizer ENABLED (Kelly Criterion position sizing)")
+else()
+    message(STATUS "Feature: KellyPositionSizer DISABLED (LLMQUANT_ENABLE_KELLY_SIZER=OFF)")
 endif()
 
 # MockOmsAdapter is only compiled when LLMQUANT_ENABLE_MOCK_OMS=ON (default).

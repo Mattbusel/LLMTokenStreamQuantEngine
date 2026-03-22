@@ -1,16 +1,14 @@
-#include "HealthServer.h"
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 
-#include <atomic>
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+
+#include "HealthServer.h"
+
 #include <chrono>
 #include <string>
 #include <thread>
 
 using namespace llmquant;
-
-// Helper: find a free port in the ephemeral range.
-// We use a fixed high port and hope it's free; tests run sequentially.
-static uint16_t pick_port(uint16_t base) { return base; }
 
 namespace {
 
@@ -220,3 +218,11 @@ TEST(HealthServer, DestructorStopsServerGracefully) {
 }
 
 } // namespace
+
+#else  // LLMQUANT_HEALTH_SERVER_ENABLED not defined
+
+TEST(HealthServer, DisabledAtBuildTime) {
+    SUCCEED();
+}
+
+#endif  // LLMQUANT_HEALTH_SERVER_ENABLED

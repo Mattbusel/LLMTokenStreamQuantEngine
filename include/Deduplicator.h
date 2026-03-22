@@ -572,6 +572,17 @@ public:
              + ",\"size\":" + std::to_string(s.current_size) + "}";
     }
 
+    /**
+     * @brief Returns true if the backend has an active Redis connection.
+     *
+     * Always returns false for InProcessDeduplicator backends.
+     * Delegates to RedisDeduplicator::is_connected() when the backend is
+     * a RedisDeduplicator.  Thread-safe.
+     *
+     * @return true if Redis is connected and available.
+     */
+    [[nodiscard]] bool is_connected() const;
+
 private:
     std::shared_ptr<DeduplicatorBackend> backend_;
     std::chrono::milliseconds default_ttl_;

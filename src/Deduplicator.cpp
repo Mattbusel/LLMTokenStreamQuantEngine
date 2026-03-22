@@ -324,4 +324,12 @@ void Deduplicator::start_background_purge(int interval_s) {
     backend_->start_background_purge(interval_s);
 }
 
+bool Deduplicator::is_connected() const {
+#ifdef LLMQUANT_REDIS_ENABLED
+    auto* redis = dynamic_cast<RedisDeduplicator*>(backend_.get());
+    if (redis) return redis->is_connected();
+#endif
+    return false;
+}
+
 } // namespace llmquant

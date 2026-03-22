@@ -269,11 +269,11 @@ private:
     double avg_win_ema_;    ///< EMA average win return.
     double avg_loss_ema_;   ///< EMA average loss magnitude.
 
-    std::atomic<uint64_t> total_wins_{0};
-    std::atomic<uint64_t> total_losses_{0};
-    std::atomic<uint64_t> total_sized_{0};
-    std::atomic<uint64_t> sized_full_{0};
-    std::atomic<uint64_t> sized_zero_{0};
+    mutable std::atomic<uint64_t> total_wins_{0};
+    mutable std::atomic<uint64_t> total_losses_{0};
+    mutable std::atomic<uint64_t> total_sized_{0};
+    mutable std::atomic<uint64_t> sized_full_{0};
+    mutable std::atomic<uint64_t> sized_zero_{0};
 };
 
 } // namespace llmquant

@@ -30,6 +30,12 @@
 #ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
 #  include "PipelineCircuitBreaker.h"
 #endif
+#ifdef LLMQUANT_KELLY_SIZER_ENABLED
+#  include "KellyPositionSizer.h"
+#endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+#  include "HealthServer.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -189,6 +195,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_AUDIT_LOG_ENABLED
     std::string audit_log_path;                  // non-empty = enable audit log at this path
 #endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+    uint16_t    health_port_override = 0;        // 0 = use default (8080)
+    bool        no_health_server     = false;    // skip health server
+#endif
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--help" || arg == "-h") {
@@ -222,6 +232,10 @@ int main(int argc, char* argv[]) {
                 "  --no-hot-reload   Disable config file hot-reload watcher\n"
 #ifdef LLMQUANT_AUDIT_LOG_ENABLED
                 "  --audit-log FILE  Write per-signal NDJSON audit log to FILE\n"
+#endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+                "  --health-port N   Override HTTP /health endpoint port (default: 8080)\n"
+                "  --no-health       Disable the HTTP /health endpoint\n"
 #endif
                 "  --version         Print version and exit\n"
                 "  --show-flags      Print compile-time feature flags and exit\n"
@@ -379,6 +393,17 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--audit-log" && i + 1 < argc) {
             audit_log_path = argv[++i];
 #endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+        } else if (arg == "--health-port" && i + 1 < argc) {
+            try {
+                int p = std::stoi(argv[++i]);
+                if (p <= 0 || p > 65535) throw std::out_of_range("port");
+                health_port_override = static_cast<uint16_t>(p);
+            }
+            catch (...) { std::cerr << "error: --health-port requires an integer in range 1-65535\n"; return 1; }
+        } else if (arg == "--no-health") {
+            no_health_server = true;
+#endif
         }
     }
 
@@ -427,6 +452,9 @@ int main(int argc, char* argv[]) {
             if (env_p && env_p[0] != '\0') audit_log_path = env_p;
 #endif
         }
+#endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+        if (!no_health_server && env_flag("LLMQUANT_NO_HEALTH")) no_health_server = true;
 #endif
     }
 
@@ -1002,10 +1030,23 @@ int main(int argc, char* argv[]) {
         });
 #endif
 
+#ifdef LLMQUANT_KELLY_SIZER_ENABLED
+    // Kelly Criterion position sizer: scales delta_bias_shift by the optimal
+    // fraction given the observed win/loss history.  Outcomes should be fed
+    // back via kelly_sizer.record_outcome() from the OMS P&L callback.
+    llmquant::KellyPositionSizer kelly_sizer;
+#endif
+
     // Sparkline ring buffer: 24 most-recent delta_bias_shift values → unicode blocks.
     constexpr int kSparkSlots = 24;
     std::array<double, kSparkSlots> spark_ring{};
     std::atomic<int> spark_head{0};
+
+    // Signal velocity: rate of change of delta_bias_shift (units/second).
+    // Written by signal callback (single writer), read by stats ticker.
+    double sig_vel_prev_bias = 0.0;
+    std::chrono::steady_clock::time_point sig_vel_prev_time{};
+    std::atomic<double> sig_velocity{0.0};  // current velocity estimate
 
     risk_mgr.set_oms_callback([&](const std::string& event,
                                    const llmquant::RiskManager::PositionState&,
@@ -1021,7 +1062,14 @@ int main(int argc, char* argv[]) {
                               std::chrono::high_resolution_clock::now() - signal.timestamp
                           ).count();
 
+#ifdef LLMQUANT_KELLY_SIZER_ENABLED
+        // Scale delta_bias_shift by the current Kelly fraction before risk gating.
+        const TradeSignal sized_signal = kelly_sizer.size_signal(signal);
+        bool passed = risk_mgr.evaluate(sized_signal);
+#else
+        const TradeSignal& sized_signal = signal;
         bool passed = risk_mgr.evaluate(signal);
+#endif
 
 #ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
         circuit_breaker.record_signal(!passed);
@@ -1036,6 +1084,20 @@ int main(int argc, char* argv[]) {
         {
             int idx = spark_head.fetch_add(1, std::memory_order_relaxed) % kSparkSlots;
             spark_ring[idx] = signal.delta_bias_shift;
+        }
+
+        // Signal velocity: delta_bias_shift per second (first-order finite difference).
+        {
+            auto now = std::chrono::steady_clock::now();
+            if (sig_vel_prev_time.time_since_epoch().count() != 0) {
+                double dt_s = std::chrono::duration<double>(now - sig_vel_prev_time).count();
+                if (dt_s > 1e-6) {
+                    double vel = (signal.delta_bias_shift - sig_vel_prev_bias) / dt_s;
+                    sig_velocity.store(vel, std::memory_order_relaxed);
+                }
+            }
+            sig_vel_prev_bias = signal.delta_bias_shift;
+            sig_vel_prev_time = now;
         }
 
         // Capture the rejection reason once, under the lock, so it is available
@@ -1063,8 +1125,8 @@ int main(int argc, char* argv[]) {
             std::cout << "\n  "
                       << std::setw(12) << ts_ms          << "  "
                       << std::setw(8)  << std::fixed << std::setprecision(4)
-                                       << signal.delta_bias_shift  << "  "
-                      << std::setw(8)  << signal.volatility_adjustment << "  "
+                                       << sized_signal.delta_bias_shift  << "  "
+                      << std::setw(8)  << sized_signal.volatility_adjustment << "  "
                       << std::setw(6)  << latency_us << "μs"
                       << gate_str
                       << std::flush;
@@ -1072,11 +1134,11 @@ int main(int argc, char* argv[]) {
 
         if (passed) {
             logger.log_trade_signal(
-                signal.delta_bias_shift,
-                signal.volatility_adjustment,
-                signal.confidence,
+                sized_signal.delta_bias_shift,
+                sized_signal.volatility_adjustment,
+                sized_signal.confidence,
                 static_cast<double>(latency_us),
-                signal.signal_quality);
+                sized_signal.signal_quality);
         } else {
             logger.log_risk_rejection(block_reason_copy,
                                       signal.delta_bias_shift,
@@ -1219,6 +1281,71 @@ int main(int argc, char* argv[]) {
         spdlog::info("Prometheus scrape endpoint not available "
                      "(built with LLMQUANT_ENABLE_PROMETHEUS=OFF)");
 #endif
+
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+    uint16_t eff_health_port = (health_port_override != 0) ? health_port_override : uint16_t{8080};
+    llmquant::HealthServer::Config health_cfg;
+    health_cfg.port         = eff_health_port;
+    health_cfg.bind_address = sys_config.metrics.bind_address;
+    llmquant::HealthServer health_server(health_cfg);
+    health_server.set_health_callback([&]() -> std::pair<bool, std::string> {
+        auto lc_stats         = latency_ctrl.get_stats();
+        auto te_stats         = trade_engine.get_stats();
+        const auto& rm_stats  = risk_mgr.get_stats();
+        auto uptime_s  = std::chrono::duration_cast<std::chrono::seconds>(
+                             std::chrono::steady_clock::now() - engine_start_time).count();
+        bool oms_ok    = oms_adapter && oms_adapter->is_running();
+#  ifdef LLMQUANT_CIRCUIT_BREAKER_ENABLED
+        bool cb_open         = circuit_breaker.is_open();
+        double blk_rate      = circuit_breaker.block_rate();
+        std::string cb_name  = circuit_breaker.state_name();
+#  else
+        bool cb_open         = false;
+        double blk_rate      = 0.0;
+        std::string cb_name  = "closed";
+#  endif
+#  if defined(LLMQUANT_DEDUP_ENABLED) && defined(LLMQUANT_REDIS_ENABLED)
+        bool redis_ok = deduplicator.is_connected();
+#  else
+        bool redis_ok = false;
+#  endif
+        bool ok = !cb_open && oms_ok;
+        uint64_t blocked = rm_stats.signals_blocked_magnitude.load()
+                         + rm_stats.signals_blocked_confidence.load()
+                         + rm_stats.signals_blocked_rate.load()
+                         + rm_stats.signals_blocked_drawdown.load();
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf),
+            "{\"ok\":%s"
+            ",\"uptime_s\":%lld"
+            ",\"circuit_breaker\":\"%s\""
+            ",\"block_rate\":%.4f"
+            ",\"oms_connected\":%s"
+            ",\"p99_latency_us\":%lld"
+            ",\"signals_generated\":%llu"
+            ",\"signals_blocked\":%llu"
+            ",\"redis_connected\":%s"
+            ",\"version\":\"%s\"}",
+            ok ? "true" : "false",
+            static_cast<long long>(uptime_s),
+            cb_name.c_str(),
+            blk_rate,
+            oms_ok ? "true" : "false",
+            static_cast<long long>(lc_stats.p99_latency.count()),
+            static_cast<unsigned long long>(te_stats.signals_generated.load()),
+            static_cast<unsigned long long>(blocked),
+            redis_ok ? "true" : "false",
+            LLMQUANT_VERSION
+        );
+        return {ok, std::string(buf)};
+    });
+    if (!no_health_server) {
+        if (!health_server.start())
+            spdlog::warn("[health_server] failed to bind on port {}", eff_health_port);
+    } else {
+        spdlog::info("--no-health: HTTP /health endpoint disabled");
+    }
+#endif  // LLMQUANT_HEALTH_SERVER_ENABLED
 
     // Main monitoring loop — prints a rolling stats bar every second.
     // Interruptible sleep: wake every 100ms to check g_running so that
@@ -1736,6 +1863,19 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
                       << [&]() -> std::string {
+                            // Signal velocity: bias per second. Skip if no signal yet.
+                            double vel = sig_velocity.load(std::memory_order_relaxed);
+                            if (vel == 0.0) return "";
+                            std::ostringstream o;
+                            o << "  VEL:";
+                            if (vel > 0.01)       o << C("\033[32m");
+                            else if (vel < -0.01) o << C("\033[31m");
+                            else                  o << C("\033[90m");
+                            o << std::showpos << std::fixed << std::setprecision(3) << vel;
+                            o << "/s" << C("\033[0m");
+                            return o.str();
+                         }()
+                      << [&]() -> std::string {
                             // Render 24-slot sparkline of recent delta_bias_shift values.
                             // Values are clamped to [-1, 1] and mapped to 8 block levels.
                             // Slots not yet written (head < kSparkSlots) render as '·'.
@@ -1787,6 +1927,9 @@ int main(int argc, char* argv[]) {
     oms_adapter->stop();
 #ifdef LLMQUANT_PROMETHEUS_ENABLED
     prom_exporter.stop();
+#endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+    health_server.stop();
 #endif
     // Flush all output sinks (CSV/JSON) before printing the session summary
     // so any buffered writes are visible if a crash follows.
@@ -1886,6 +2029,9 @@ int main(int argc, char* argv[]) {
               << "  recoveries=" << circuit_breaker.recoveries()
               << "  block_rate=" << std::fixed << std::setprecision(1)
               << (circuit_breaker.block_rate() * 100.0) << "%\n";
+#endif
+#ifdef LLMQUANT_HEALTH_SERVER_ENABLED
+    std::cout << "  Health requests  : " << health_server.requests_served() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
