@@ -9,6 +9,34 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (Cycle 35 — 2026-03-21)
+- **New module `KellyPositionSizer`** (`include/KellyPositionSizer.h`,
+  `src/KellyPositionSizer.cpp`): adaptive position sizing using the Kelly
+  Criterion.  EMA-smoothed win/loss history drives an optimal fraction
+  `f* = (p·w − (1-p)·l) / (w·l)` capped at a configurable `max_fraction`
+  (default 0.25 = "quarter Kelly").  `size_signal()` scales
+  `delta_bias_shift` by the current fraction; returns signal unchanged until
+  `min_history` outcomes are recorded; zeroes the signal on negative edge.
+  Exposes `record_outcome()`, `get_kelly_fraction()`, `get_edge()`,
+  `get_win_rate()`, `get_stats()`, `to_stats_json()`, `update_config()`,
+  `reset()`.  Feature flag: `LLMQUANT_ENABLE_KELLY_SIZER` (default ON).
+  16 new tests in `test_kelly_sizer.cpp`.  Wired into `main.cpp`'s signal
+  callback so every emitted signal is automatically sized before risk gating.
+- **New module `HealthServer`** (`include/HealthServer.h`,
+  `src/HealthServer.cpp`): HTTP `/health` JSON endpoint for Kubernetes
+  liveness/readiness probes.  Returns 200 with `{ok:true,...}` when the
+  pipeline is healthy, 503 when degraded (circuit breaker open or OMS down).
+  Includes uptime, p99 latency, signal counts, version, and Redis/OMS
+  connectivity.  Feature flag: `LLMQUANT_ENABLE_HEALTH_SERVER` (default ON).
+  8 new tests in `test_health_server.cpp`.  Fixed 404 routing for unknown
+  paths (previously matched root redirect).
+- **Bug fix**: `main.cpp` health callback used non-existent
+  `OmsAdapter::is_connected()` — corrected to `is_running()`.
+- **Bug fix**: `main.cpp` health callback referenced `LLMQUANT_VERSION_STRING`
+  — corrected to `LLMQUANT_VERSION` (the actual macro from the generated
+  version header).
+- Total tests: 1034 (up from 986).
+
 ### Added (Cycle 34 — 2026-03-21)
 - **New module `SentimentTrajectoryAnalyzer`** (`include/SentimentTrajectoryAnalyzer.h`,
   `src/SentimentTrajectoryAnalyzer.cpp`): real-time online linear-regression

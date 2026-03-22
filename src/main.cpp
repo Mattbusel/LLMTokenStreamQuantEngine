@@ -1363,7 +1363,8 @@ int main(int argc, char* argv[]) {
     // Interruptible sleep: wake every 100ms to check g_running so that
     // SIGINT/SIGTERM is handled promptly regardless of --stats-interval.
     uint64_t last_tick = 0;
-    std::string last_regime;  // For regime-change transition alerts.
+    std::string last_regime;    // For regime-change transition alerts.
+    std::string last_morphology; // Last detected sparkline pattern name.
     while (g_running) {
         {
             auto deadline = std::chrono::steady_clock::now()
@@ -1859,6 +1860,47 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Signal morphology detector: scan the last 6 sparkline values for
+        // named candlestick-like shapes in the bias stream.
+        // Patterns: RALLY (4+ up), SELLOFF (4+ down), V_RVSL (3d+3u),
+        //           INV_V (3u+3d), CONSOLIDATE (6 within ±0.02).
+        std::string current_morphology;
+        {
+            int morph_head = spark_head.load(std::memory_order_relaxed);
+            int morph_n    = std::min(morph_head, kSparkSlots);
+            if (morph_n >= 6) {
+                int morph_start = (morph_head >= kSparkSlots) ? (morph_head % kSparkSlots) : 0;
+                // Extract the 6 most-recent values (indices morph_n-6 .. morph_n-1).
+                double v[6];
+                for (int i = 0; i < 6; ++i)
+                    v[i] = spark_ring[(morph_start + morph_n - 6 + i) % kSparkSlots];
+
+                // Compute differences
+                int up6 = 0, dn6 = 0;
+                for (int i = 1; i < 6; ++i) {
+                    if (v[i] > v[i-1] + 0.005) ++up6;
+                    else if (v[i] < v[i-1] - 0.005) ++dn6;
+                }
+                // First-half and second-half runs
+                int up3a = (v[1]>v[0]+0.005)+(v[2]>v[1]+0.005);
+                int dn3a = (v[1]<v[0]-0.005)+(v[2]<v[1]-0.005);
+                int up3b = (v[4]>v[3]+0.005)+(v[5]>v[4]+0.005);
+                int dn3b = (v[4]<v[3]-0.005)+(v[5]<v[4]-0.005);
+                double band = *std::max_element(v, v+6) - *std::min_element(v, v+6);
+
+                if      (up6 >= 4)                  current_morphology = "RALLY";
+                else if (dn6 >= 4)                  current_morphology = "SELLOFF";
+                else if (dn3a >= 2 && up3b >= 2)    current_morphology = "V_RVSL";
+                else if (up3a >= 2 && dn3b >= 2)    current_morphology = "INV_V";
+                else if (band < 0.02)               current_morphology = "CONSOL";
+
+                if (!current_morphology.empty() && current_morphology != last_morphology) {
+                    spdlog::info("[morphology] pattern detected: {}", current_morphology);
+                }
+                last_morphology = current_morphology;
+            }
+        }
+
         // Overwrite the stats line in-place. Suppressed in --quiet mode.
         if (!quiet) {
             std::cout << "\n  -- STATS "
@@ -1933,6 +1975,17 @@ int main(int argc, char* argv[]) {
                             return out;
                          }()
                       << [&]() -> std::string { return current_regime_str; }()
+                      << [&]() -> std::string {
+                            if (current_morphology.empty()) return "";
+                            // Colour by pattern type
+                            const char* col;
+                            if      (current_morphology == "RALLY")  col = "\033[32m";
+                            else if (current_morphology == "SELLOFF") col = "\033[31m";
+                            else if (current_morphology == "V_RVSL") col = "\033[36m";
+                            else if (current_morphology == "INV_V")  col = "\033[35m";
+                            else                                      col = "\033[90m";
+                            return std::string("  MORPH:") + C(col) + current_morphology + C("\033[0m");
+                         }()
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -2061,6 +2114,12 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_HEALTH_SERVER_ENABLED
     std::cout << "  Health requests  : " << health_server.requests_served() << "\n";
+#endif
+#ifdef LLMQUANT_ADAPTIVE_COOLDOWN_ENABLED
+    std::cout << "  Adaptive cooldown: " << std::fixed << std::setprecision(0)
+              << adaptive_cooldown.get_cooldown_us() << "µs"
+              << "  expansions=" << adaptive_cooldown.pressure_expansions()
+              << "  recoveries=" << adaptive_cooldown.recoveries() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
