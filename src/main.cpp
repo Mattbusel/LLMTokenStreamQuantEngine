@@ -4248,12 +4248,33 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
     std::cout << "  Phase portrait   : "
-              << "cell=(" << phase_portrait.current_row() << "," << phase_portrait.current_col() << ")"
-              << "  attractor=(" << phase_portrait.attractor_row() << "," << phase_portrait.attractor_col() << ")"
-              << "  cycle=" << (phase_portrait.cycle_detected() ? "YES" : "no")
-              << "  divergence=" << std::fixed << std::setprecision(4) << phase_portrait.divergence_index()
-              << "  transitions=" << phase_portrait.cell_transitions()
-              << "  records=" << phase_portrait.total_records() << "\n";
+              << "cell=(" << sentiment_phase_portrait.current_row() << "," << sentiment_phase_portrait.current_col() << ")"
+              << "  attractor=(" << sentiment_phase_portrait.attractor_row() << "," << sentiment_phase_portrait.attractor_col() << ")"
+              << "  cycle=" << (sentiment_phase_portrait.cycle_detected() ? "YES" : "no")
+              << "  divergence=" << std::fixed << std::setprecision(4) << sentiment_phase_portrait.divergence_index()
+              << "  transitions=" << sentiment_phase_portrait.cell_transitions()
+              << "  records=" << sentiment_phase_portrait.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+    std::cout << "  Narrative topic  : "
+              << "dominant=" << narrative_classifier.dominant_topic()
+              << "  mult=" << std::fixed << std::setprecision(2) << narrative_classifier.dominant_multiplier()
+              << "  classified=" << narrative_classifier.classified_count() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+    std::cout << "  Token clock      : "
+              << "rate=" << std::fixed << std::setprecision(1) << token_clock.rate_hz() << "Hz"
+              << "  budget_scale=" << std::setprecision(2) << token_clock.budget_scale() << "x"
+              << "  jitter_cv=" << std::setprecision(3) << token_clock.jitter_cv()
+              << "  tokens=" << token_clock.token_count()
+              << "  rate_changes=" << token_clock.rate_change_count() << "\n";
+#endif
+#ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
+    std::cout << "  Shadow portfolio : "
+              << "shadow_pnl=" << std::fixed << std::setprecision(2) << shadow_portfolio.shadow_pnl()
+              << "  live_pnl=" << shadow_portfolio.live_pnl()
+              << "  drag=" << shadow_portfolio.constraint_drag()
+              << "  drag_alerts=" << shadow_portfolio.drag_alert_count() << "\n";
 #endif
 #ifdef LLMQUANT_CAUSAL_IMPACT_ENABLED
     std::cout << "  Causal impact    : "
@@ -4454,6 +4475,18 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_OPTIONS_FLOW_BRIDGE_ENABLED
         std::cout << "  [json:optflow]    " << options_flow_bridge.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_PHASE_PORTRAIT_ENABLED
+        std::cout << "  [json:phase]      " << sentiment_phase_portrait.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_NARRATIVE_TOPIC_CLASSIFIER_ENABLED
+        std::cout << "  [json:topic]      " << narrative_classifier.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TOKEN_CLOCK_RECALIBRATOR_ENABLED
+        std::cout << "  [json:tkclock]    " << token_clock.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SHADOW_PORTFOLIO_ENABLED
+        std::cout << "  [json:shadow]     " << shadow_portfolio.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

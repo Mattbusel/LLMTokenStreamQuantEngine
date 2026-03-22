@@ -194,7 +194,8 @@ jobs:
             -DLLMQUANT_ENABLE_SENTIMENT_PHASE_PORTRAIT=OFF \
             -DLLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER=OFF \
             -DLLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR=OFF \
-            -DLLMQUANT_ENABLE_SHADOW_PORTFOLIO=OFF
+            -DLLMQUANT_ENABLE_SHADOW_PORTFOLIO=OFF \
+            -DLLMQUANT_ENABLE_TOKEN_IB=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -304,6 +305,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER
           - flag: LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR
           - flag: LLMQUANT_ENABLE_SHADOW_PORTFOLIO
+          - flag: LLMQUANT_ENABLE_TOKEN_IB
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

@@ -116,6 +116,7 @@ option(LLMQUANT_ENABLE_SENTIMENT_PHASE_PORTRAIT     "Build SentimentPhasePortrai
 option(LLMQUANT_ENABLE_NARRATIVE_TOPIC_CLASSIFIER   "Build NarrativeTopicClassifier: lightweight topic-tagging of token streams for multi-theme signal routing" ON)
 option(LLMQUANT_ENABLE_TOKEN_CLOCK_RECALIBRATOR     "Build TokenClockRecalibrator: detects drift between token-stream timestamps and wall-clock time, compensates token weights" ON)
 option(LLMQUANT_ENABLE_SHADOW_PORTFOLIO             "Build SignalShadowPortfolio: paper-trades every signal in parallel to measure P&L drag from risk constraints" ON)
+option(LLMQUANT_ENABLE_TOKEN_IB                     "Build TokenInformationBottleneck: per-token IB relevance/complexity scoring for online vocabulary pruning" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1101,6 +1102,15 @@ if(LLMQUANT_ENABLE_SHADOW_PORTFOLIO)
     message(STATUS "Feature: SignalShadowPortfolio ENABLED (shadow P&L vs live attribution)")
 else()
     message(STATUS "Feature: SignalShadowPortfolio DISABLED (LLMQUANT_ENABLE_SHADOW_PORTFOLIO=OFF)")
+endif()
+
+# TokenInformationBottleneck: per-token IB relevance/complexity score for vocabulary pruning.
+if(LLMQUANT_ENABLE_TOKEN_IB)
+    target_sources(llmquant PRIVATE src/TokenInformationBottleneck.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_IB_ENABLED)
+    message(STATUS "Feature: TokenInformationBottleneck ENABLED (IB vocabulary pruning)")
+else()
+    message(STATUS "Feature: TokenInformationBottleneck DISABLED (LLMQUANT_ENABLE_TOKEN_IB=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
