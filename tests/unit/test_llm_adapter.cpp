@@ -334,8 +334,8 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_clears_counters) {
     LLMAdapter adapter;
 
     // Process some tokens to populate the stats.
-    adapter.map_token_to_weight("bullish");    // cache hit
-    adapter.map_token_to_weight("unknown_xyz"); // cache miss
+    (void)adapter.map_token_to_weight("bullish");    // cache hit
+    (void)adapter.map_token_to_weight("unknown_xyz"); // cache miss
     ASSERT_GT(adapter.get_stats().tokens_processed, 0u);
 
     adapter.reset_stats();
@@ -346,7 +346,7 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_clears_counters) {
     EXPECT_EQ(stats.cache_misses,     0u);
 
     // Must still work normally after reset.
-    adapter.map_token_to_weight("bearish");
+    (void)adapter.map_token_to_weight("bearish");
     EXPECT_EQ(adapter.get_stats().tokens_processed, 1u);
 }
 
@@ -356,7 +356,7 @@ TEST(LLMAdapterTest, test_llm_adapter_reset_stats_preserves_dictionary) {
     ASSERT_GT(dict_before, 0u);
 
     // Process some tokens to populate counters, then reset.
-    adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("bullish");
     adapter.reset_stats();
 
     // Dictionary must be unchanged — reset_stats only clears counters.
@@ -1230,9 +1230,9 @@ TEST(LLMAdapterTest, test_get_cache_hit_rate_rises_after_repeated_lookup) {
     adapter.add_token_mapping("bull", {0.9, 0.9, 0.1, 0.8});
     adapter.reset_stats();
     // First lookup: cache miss; subsequent: cache hits.
-    adapter.map_token_to_weight("bull");
-    adapter.map_token_to_weight("bull");
-    adapter.map_token_to_weight("bull");
+    (void)adapter.map_token_to_weight("bull");
+    (void)adapter.map_token_to_weight("bull");
+    (void)adapter.map_token_to_weight("bull");
     double rate = adapter.get_cache_hit_rate();
     EXPECT_GT(rate, 0.0);
     EXPECT_LE(rate, 1.0);
@@ -1244,7 +1244,7 @@ TEST(LLMAdapterTest, test_get_cache_hit_rate_in_range) {
     adapter.add_token_mapping("tok", {0.5, 0.7, 0.2, 0.4});
     adapter.reset_stats();
     for (int i = 0; i < 10; ++i)
-        adapter.map_token_to_weight("tok");
+        (void)adapter.map_token_to_weight("tok");
     double rate = adapter.get_cache_hit_rate();
     EXPECT_GE(rate, 0.0);
     EXPECT_LE(rate, 1.0);
@@ -1367,7 +1367,7 @@ TEST(LLMAdapterTest, test_format_stats_no_data_returns_sentinel) {
 TEST(LLMAdapterTest, test_format_stats_after_lookups_contains_expected_fields) {
     LLMAdapter adapter;
     adapter.map_token_to_weight("bullish");      // hit
-    adapter.map_token_to_weight("unknown_xyz");  // miss
+    (void)adapter.map_token_to_weight("unknown_xyz");  // miss
     std::string s = adapter.format_stats();
     EXPECT_NE(s.find("tokens=2"), std::string::npos);
     EXPECT_NE(s.find("hits=1"),   std::string::npos);
@@ -1389,15 +1389,15 @@ TEST(LLMAdapterTest, test_frequency_initial_zero) {
 
 TEST(LLMAdapterTest, test_frequency_increments_on_hit) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("crash");
-    adapter.map_token_to_weight("crash");
+    (void)adapter.map_token_to_weight("crash");
+    (void)adapter.map_token_to_weight("crash");
     EXPECT_EQ(adapter.get_token_hit_count("crash"), 2u)
         << "Hit count should equal the number of successful lookups";
 }
 
 TEST(LLMAdapterTest, test_frequency_miss_does_not_increment) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("nonexistent_xyz_token");
+    (void)adapter.map_token_to_weight("nonexistent_xyz_token");
     EXPECT_EQ(adapter.get_token_hit_count("nonexistent_xyz_token"), 0u)
         << "Cache miss must not increment the hit counter";
 }
@@ -1405,10 +1405,10 @@ TEST(LLMAdapterTest, test_frequency_miss_does_not_increment) {
 TEST(LLMAdapterTest, test_frequency_top_tokens_by_frequency_order) {
     LLMAdapter adapter;
     // "bullish" 3 hits, "crash" 1 hit
-    adapter.map_token_to_weight("bullish");
-    adapter.map_token_to_weight("bullish");
-    adapter.map_token_to_weight("bullish");
-    adapter.map_token_to_weight("crash");
+    (void)adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("crash");
 
     auto top = adapter.top_tokens_by_frequency(2);
     ASSERT_EQ(top.size(), 2u);
@@ -1420,8 +1420,8 @@ TEST(LLMAdapterTest, test_frequency_top_tokens_by_frequency_order) {
 
 TEST(LLMAdapterTest, test_frequency_reset_zeroes_counts) {
     LLMAdapter adapter;
-    adapter.map_token_to_weight("bullish");
-    adapter.map_token_to_weight("crash");
+    (void)adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("crash");
     EXPECT_GT(adapter.get_token_hit_count("bullish"), 0u);
 
     adapter.reset_frequency_counts();
@@ -1520,8 +1520,8 @@ TEST(LLMAdapterTest, test_top_tokens_by_directional_bias_n_greater_than_dict) {
 TEST(LLMAdapterTest, test_to_stats_json_returns_valid_json_with_required_fields) {
     LLMAdapter adapter;
     adapter.add_token_mapping("bullish", {0.9, 0.8, 0.3, 0.7});
-    adapter.map_token_to_weight("bullish");
-    adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("bullish");
+    (void)adapter.map_token_to_weight("bullish");
 
     std::string json = adapter.to_stats_json();
     ASSERT_FALSE(json.empty());
@@ -1568,7 +1568,7 @@ TEST(LLMAdapterTest, test_export_hot_tokens_high_freq_high_bias_tops_list) {
 
     // Make "hot" heavily hit
     for (int i = 0; i < 10; ++i) adapter.map_token_to_weight("hot");
-    adapter.map_token_to_weight("cold");
+    (void)adapter.map_token_to_weight("cold");
 
     auto top = adapter.export_hot_tokens(3);
     ASSERT_GE(top.size(), 1u);
@@ -1578,8 +1578,8 @@ TEST(LLMAdapterTest, test_export_hot_tokens_high_freq_high_bias_tops_list) {
 TEST(LLMAdapterTest, test_export_hot_tokens_scores_in_range) {
     LLMAdapter adapter;
     adapter.add_token_mapping("a", {0.5, 0.5, 0.5, 0.5});
-    adapter.map_token_to_weight("a");
-    adapter.map_token_to_weight("a");
+    (void)adapter.map_token_to_weight("a");
+    (void)adapter.map_token_to_weight("a");
 
     auto top = adapter.export_hot_tokens(10);
     for (const auto& [tok, score] : top) {
@@ -1616,8 +1616,8 @@ TEST(LLMAdapterTest, test_clear_dictionary_removes_all_tokens) {
 TEST(LLMAdapterTest, test_clear_dictionary_resets_stats) {
     LLMAdapter adapter;
     adapter.add_token_mapping("tok", {0.5, 0.5, 0.5, 0.5});
-    adapter.map_token_to_weight("tok");
-    adapter.map_token_to_weight("tok");
+    (void)adapter.map_token_to_weight("tok");
+    (void)adapter.map_token_to_weight("tok");
     ASSERT_EQ(adapter.get_stats().tokens_processed, 2u);
 
     adapter.clear_dictionary();

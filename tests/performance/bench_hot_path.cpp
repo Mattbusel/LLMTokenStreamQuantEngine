@@ -95,7 +95,7 @@ TEST(PerformanceBench, bench_llm_adapter_1m_tokens_under_2s) {
 
     auto t0 = high_resolution_clock::now();
     for (size_t i = 0; i < n; ++i) {
-        adapter.map_token_to_weight(tokens[i % tokens.size()]);
+        (void)adapter.map_token_to_weight(tokens[i % tokens.size()]);
     }
     auto t1 = high_resolution_clock::now();
 
@@ -116,8 +116,8 @@ TEST(PerformanceBench, bench_simd_batch_faster_than_scalar_for_large_sequence) {
     tokens.reserve(64);
     for (size_t i = 0; i < 64; ++i) tokens.push_back(vocab[i % vocab.size()]);
 
-    auto scalar_samples = measure_us([&]{ adapter.map_sequence_to_weight(tokens); }, 100, 1000);
-    auto simd_samples   = measure_us([&]{ adapter.map_sequence_simd(tokens); },     100, 1000);
+    auto scalar_samples = measure_us([&]{ (void)adapter.map_sequence_to_weight(tokens); }, 100, 1000);
+    auto simd_samples   = measure_us([&]{ (void)adapter.map_sequence_simd(tokens); },     100, 1000);
 
     double scalar_p50 = percentile(scalar_samples, 0.50);
     double simd_p50   = percentile(simd_samples,   0.50);

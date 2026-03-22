@@ -613,7 +613,7 @@ int main(int argc, char* argv[]) {
         std::cout << "token\tsentiment\tconfidence\tvolatility\tbias\n";
         for (const auto& k : keys) {
             SemanticWeight w;
-            llm_adapter.get_token_mapping(k, w);
+            (void)llm_adapter.get_token_mapping(k, w);
             std::cout << k
                       << "\t" << std::fixed << std::setprecision(3) << w.sentiment_score
                       << "\t" << w.confidence_score
