@@ -96,8 +96,9 @@ TEST(SignalDriftMonitor, DriftClears) {
     for (int i = 0; i < 40; ++i) sdm.record(0.001);
     // Cause drift.
     for (int i = 0; i < 10; ++i) sdm.record(1.0);
-    // Return to baseline.
-    for (int i = 0; i < 30; ++i) sdm.record(0.001);
+    // Return to baseline: need ≥32 records to push all 10 drift records out of
+    // the 32-entry baseline window so W1 drops back below the clear threshold.
+    for (int i = 0; i < 45; ++i) sdm.record(0.001);
 
     EXPECT_GT(cleared.load(), 0);
 }

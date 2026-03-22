@@ -107,11 +107,15 @@ TEST(PositionConcentrationGuard, DiversificationCallbackFires) {
     // Concentrate.
     for (int i = 0; i < 6; ++i) pcg.record_signal("dom", 10.0);
     pcg.record_signal("minor", 0.01);
-    // Now diversify by feeding equal themes.
+    // Flush "dom"'s window: record 8 zeros so all 10.0 entries are evicted.
+    for (int i = 0; i < 8; ++i) pcg.record_signal("dom", 0.0);
+    // Now diversify with 5 equal themes (HHI = 5×(1/5)² = 0.2 < threshold×hysteresis).
     for (int i = 0; i < 20; ++i) {
         pcg.record_signal("a", 1.0);
         pcg.record_signal("b", 1.0);
         pcg.record_signal("c", 1.0);
+        pcg.record_signal("d", 1.0);
+        pcg.record_signal("e", 1.0);
     }
     EXPECT_GT(divs.load(), 0);
 }
