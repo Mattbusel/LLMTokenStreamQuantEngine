@@ -158,8 +158,11 @@ std::string RestOmsAdapter::build_request() const {
     };
 
     std::ostringstream oss;
-    oss << "GET " << config_.path << " HTTP/1.1\r\n"
-        << "Host: " << config_.host << "\r\n";
+    // Sanitise all user-configurable values embedded in the request line or
+    // headers — config_.path and config_.host are sanitised for the same
+    // reason as api_key: a CR/LF in either value would inject extra headers.
+    oss << "GET " << sanitise_header_value(config_.path) << " HTTP/1.1\r\n"
+        << "Host: " << sanitise_header_value(config_.host) << "\r\n";
     if (!config_.api_key.empty()) {
         oss << "Authorization: Bearer " << sanitise_header_value(config_.api_key) << "\r\n";
     }

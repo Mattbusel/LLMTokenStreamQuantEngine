@@ -260,7 +260,7 @@ std::string LLMStreamClient::build_http_request(const std::string& body) const {
 
     std::ostringstream oss;
     oss << "POST /v1/chat/completions HTTP/1.1\r\n"
-        << "Host: " << config_.host << "\r\n"
+        << "Host: " << sanitise_header_value(config_.host) << "\r\n"
         << "Authorization: Bearer " << sanitise_header_value(config_.api_key) << "\r\n"
         << "Content-Type: application/json\r\n"
         << "Content-Length: " << body.size() << "\r\n"

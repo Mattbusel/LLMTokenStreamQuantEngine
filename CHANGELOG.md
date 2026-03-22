@@ -16,6 +16,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`test_metrics_logger.cpp`).
 - **Docs**: README test count badge updated 907 → 914.
 
+### Fixed (Cycle 39 — 2026-03-21)
+- **Security** `LLMStreamClient::build_http_request` and
+  `RestOmsAdapter::build_request`: `config_.host` (and `config_.path` in
+  RestOmsAdapter) were embedded in HTTP request headers and the request-line
+  without CR/LF sanitization, while `config_.api_key` was already sanitized.
+  A config value containing `\r\n` could inject arbitrary extra HTTP headers.
+  Both fields now pass through `sanitise_header_value()` before inclusion.
+
 ### Fixed (Cycle 38 — 2026-03-21)
 - **Bug fix** `FixOmsAdapter::handle_message`: FIX SequenceReset (35=4) with
   `GapFillFlag=N` (hard reset) may legally arrive with a lower sequence number
@@ -24,6 +32,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the session looped forever sending ResendRequests. Fixed by reading
   MsgType (tag 35) first; the duplicate guard now exempts msg_type "4".
   Per FIX 4.2 spec §4.3.2.
+- **Bug fix** `RestOmsAdapter` receive buffer: HTTP polling response accumulation
+  had no upper bound. A misbehaving REST OMS server could exhaust process memory.
+  Added a 4 MB cap with a warning log and clean abandonment of the current poll
+  cycle.
+- **Validation** `Config::validate()`: two new rules — `logging.format` must be
+  `"CSV"` or `"JSON"` (other values silently accepted before); `token_stream.
+  dedup_ttl_ms` must be `>= 0` (negative is not meaningful). Two regression tests
+  added to `test_config.cpp`.
 
 ### Fixed (Cycle 37 — 2026-03-21)
 - **Bug fix / security** `FixOmsAdapter` receive buffer: no cap existed on the
