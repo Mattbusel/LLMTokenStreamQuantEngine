@@ -10,6 +10,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 30 — 2026-03-21)
+- **Docs**: README CMake options table expanded to document all 11 feature flags
+  and 5 build/tooling options. Split into "Feature flags" and "Build/tooling"
+  sub-sections for clarity.
+
+### Added (Cycle 30 — 2026-03-21 — hook additions)
 - **Bug fix** `TokenStreamSimulator::stream_worker`: both the normal cadence
   sleep and the back-off-empty sleep were blocking `sleep_for(token_interval)`.
   When `token_interval` is set to seconds (e.g. `--token-interval 5000`),
