@@ -1179,5 +1179,33 @@ TEST(ConfigTest, test_diff_from_defaults_contains_current_and_default_value) {
     EXPECT_TRUE(has_default) << "diff entry must contain the word 'default'";
 }
 
+// ---------------------------------------------------------------------------
+// Cycle 27: Config::set_token_interval_ms()
+// ---------------------------------------------------------------------------
+
+TEST(ConfigTest, test_set_token_interval_ms_updates_interval) {
+    Config cfg;
+    cfg.set_token_interval_ms(42);
+    auto snap = cfg.get();
+    EXPECT_EQ(snap.token_stream.token_interval_ms, 42)
+        << "set_token_interval_ms(42) must update token_interval_ms to 42";
+}
+
+TEST(ConfigTest, test_set_token_interval_ms_ignores_zero) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("token_stream:\n  token_interval_ms: 100\n");
+    cfg.set_token_interval_ms(0);  // must be ignored
+    EXPECT_EQ(cfg.get().token_stream.token_interval_ms, 100)
+        << "set_token_interval_ms(0) must be a no-op";
+}
+
+TEST(ConfigTest, test_set_token_interval_ms_ignores_negative) {
+    Config cfg;
+    (void)cfg.load_from_yaml_string("token_stream:\n  token_interval_ms: 50\n");
+    cfg.set_token_interval_ms(-1);  // must be ignored
+    EXPECT_EQ(cfg.get().token_stream.token_interval_ms, 50)
+        << "set_token_interval_ms(-1) must be a no-op";
+}
+
 } // namespace
 } // namespace llmquant
