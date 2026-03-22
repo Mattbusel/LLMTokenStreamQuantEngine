@@ -1974,3 +1974,45 @@ TEST(RiskManagerTest, test_pnl_gate_trip_callback_is_separate_from_position) {
     (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
     EXPECT_EQ(pnl_trips, 2) << "pnl trip callback must re-fire after gate re-arms";
 }
+
+// Regression test: when position hard-breach AND pnl breach occur simultaneously,
+// gate_pnl_last_blocked_ must be updated so that a subsequent pure-pnl block
+// does NOT incorrectly re-fire the pnl trip callback.
+TEST(RiskManagerTest, test_pnl_trip_not_double_fire_after_simultaneous_position_pnl_breach) {
+    RiskManager::Config cfg;
+    cfg.max_bias_magnitude       = 10.0;
+    cfg.max_volatility_magnitude = 10.0;
+    cfg.max_spread_magnitude     = 10.0;
+    cfg.min_confidence           = 0.0;
+    cfg.max_signals_per_second   = 1000000;
+    cfg.max_drawdown             = 10000.0;
+    cfg.disable_magnitude_gate   = true;
+    cfg.disable_confidence_gate  = true;
+    cfg.disable_rate_gate        = true;
+    cfg.disable_drawdown_gate    = true;
+    RiskManager rm(cfg);
+
+    int pnl_trips = 0;
+    rm.set_gate_trip_callback("pnl",
+        [&](const std::string&, const TradeSignal&) { ++pnl_trips; });
+
+    // Simultaneously: position hard-breached AND pnl breached.
+    RiskManager::PositionState pos;
+    pos.net_position   = 2.0;   // will project past limit on a positive bias signal
+    pos.position_limit = 0.5;   // so projected = 2.0 + 0.1 = 2.1 > 0.5
+    pos.pnl            = -50.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    // Position hard-breach dominates; pnl trip must NOT fire (hard_breach branch).
+    EXPECT_EQ(pnl_trips, 0) << "pnl trip must not fire when position hard-breach also present";
+
+    // Now only pnl breach (position brought back within limit).
+    pos.net_position = 0.1;
+    rm.update_position(pos);
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    // gate_pnl_last_blocked_ was set true by the simultaneous breach, so the
+    // trip callback must NOT re-fire here (we were already in pnl-blocked state).
+    EXPECT_EQ(pnl_trips, 0) << "pnl trip must not re-fire after transitioning from combined to pure-pnl breach";
+}

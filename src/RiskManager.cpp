@@ -117,8 +117,11 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
                                         trip_cb_copy = gate_trip_pnl_cb_;
                                         trip_gate_name = "pnl";
                                     }
-                                    gate_pnl_last_blocked_ = true;
                                 }
+                                // Always update pnl gate state regardless of hard_breach so that
+                                // a subsequent pure-pnl block does not incorrectly re-fire the
+                                // trip callback after a combined position+pnl breach.
+                                gate_pnl_last_blocked_ = true;
                             }
                         }
                         if (reject_reason.empty()) {

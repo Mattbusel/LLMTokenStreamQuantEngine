@@ -184,8 +184,11 @@ TEST(OmsPipelineIntegration, test_oms_pipeline_pnl_breach_blocks_all_signals) {
 
     EXPECT_EQ(sink->get_signals().size(), 0u)
         << "No signal must reach the sink when PnL is below the limit";
-    EXPECT_GT(risk_mgr.get_stats().signals_blocked_position.load(), 0u)
-        << "All signals must be counted as position-blocked due to PnL breach";
+    // PnL-only breaches increment signals_blocked_pnl, not signals_blocked_position.
+    EXPECT_GT(risk_mgr.get_stats().signals_blocked_pnl.load(), 0u)
+        << "All signals must be counted in signals_blocked_pnl when PnL limit is breached";
+    EXPECT_EQ(risk_mgr.get_stats().signals_blocked_position.load(), 0u)
+        << "signals_blocked_position must stay 0 for a pnl-only breach";
 }
 
 // ---------------------------------------------------------------------------
