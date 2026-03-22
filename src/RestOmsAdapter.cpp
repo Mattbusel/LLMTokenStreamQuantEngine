@@ -302,7 +302,7 @@ void RestOmsAdapter::poller_thread() {
         bool success = false;
 
         if (!open_socket()) {
-            error_count_++;
+            error_count_.fetch_add(1, std::memory_order_relaxed);
         } else {
             std::string request = build_request();
 
@@ -344,13 +344,13 @@ void RestOmsAdapter::poller_thread() {
                 RiskManager::PositionState state;
                 if (parse_position(response, state)) {
                     if (callback_) callback_(state);
-                    update_count_++;
+                    update_count_.fetch_add(1, std::memory_order_relaxed);
                     success = true;
                 } else {
-                    error_count_++;
+                    error_count_.fetch_add(1, std::memory_order_relaxed);
                 }
             } else {
-                error_count_++;
+                error_count_.fetch_add(1, std::memory_order_relaxed);
             }
         }
 

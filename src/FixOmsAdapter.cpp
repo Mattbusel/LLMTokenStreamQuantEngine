@@ -264,7 +264,7 @@ FixOmsAdapter::FixFields FixOmsAdapter::parse_fix(const std::string& raw) {
 }
 
 void FixOmsAdapter::handle_message(const FixFields& fields) {
-    messages_parsed_++;
+    messages_parsed_.fetch_add(1, std::memory_order_relaxed);
 
     // Peek at message type before sequence-number gating so that a
     // SequenceReset (35=4, GapFillFlag=N) is never discarded as a
