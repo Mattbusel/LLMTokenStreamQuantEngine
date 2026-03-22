@@ -319,7 +319,10 @@ TEST(RiskManagerTest, test_risk_manager_oms_pnl_breach_blocks_signal) {
     bool result = rm.evaluate(sig);
 
     EXPECT_FALSE(result);
-    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(), 1u);
+    // PnL-only breaches increment signals_blocked_pnl, not signals_blocked_position.
+    // signals_blocked_position is reserved for position-limit (hard-breach) blocks.
+    EXPECT_EQ(rm.get_stats().signals_blocked_pnl.load(), 1u);
+    EXPECT_EQ(rm.get_stats().signals_blocked_position.load(), 0u);
 }
 
 // ============================================================
@@ -1895,4 +1898,79 @@ TEST(RiskManagerTest, test_pnl_block_does_not_increment_position_counter) {
     auto bg = rm.get_blocked_by_gate();
     EXPECT_EQ(bg.pnl,      1u) << "pnl counter must be 1";
     EXPECT_EQ(bg.position, 0u) << "position counter must stay 0 for a pnl-only block";
+}
+
+TEST(RiskManagerTest, test_format_stats_includes_pnl_field) {
+    // format_stats() must include a pnl= field and count pnl blocks in the total.
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.0;
+    pos.position_limit = 1.0;
+    pos.pnl            = -30.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    (void)rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+
+    std::string s = rm.format_stats();
+    EXPECT_NE(s.find("pnl=1"), std::string::npos)
+        << "format_stats must contain pnl=1; got: " << s;
+    // blocked total must include the pnl block
+    EXPECT_NE(s.find("blocked=1"), std::string::npos)
+        << "blocked total must be 1; got: " << s;
+    // position counter must be 0 (pnl block must not spill into pos counter)
+    EXPECT_NE(s.find("pos=0"), std::string::npos)
+        << "pos must be 0 for pnl-only block; got: " << s;
+}
+
+// ---------------------------------------------------------------------------
+// Regression test: separate "pnl" gate trip-wire callback fires on first block
+// and does NOT re-fire on subsequent blocks until the gate clears.
+// Also verifies that position gate callback is NOT triggered by a pnl-only block.
+// ---------------------------------------------------------------------------
+TEST(RiskManagerTest, test_pnl_gate_trip_callback_is_separate_from_position) {
+    RiskManager::Config cfg = default_config();
+    cfg.disable_rate_gate = true;
+    RiskManager rm(cfg);
+
+    int pnl_trips      = 0;
+    int position_trips = 0;
+    rm.set_gate_trip_callback("pnl",
+        [&](const std::string& gate, const TradeSignal&) {
+            EXPECT_EQ(gate, "pnl");
+            ++pnl_trips;
+        });
+    rm.set_gate_trip_callback("position",
+        [&](const std::string&, const TradeSignal&) { ++position_trips; });
+
+    // PnL breached, position within limit.
+    RiskManager::PositionState pos;
+    pos.net_position   = 0.1;
+    pos.position_limit = 1.0;
+    pos.pnl            = -50.0;
+    pos.pnl_limit      = -10.0;
+    rm.update_position(pos);
+
+    // First block: pnl callback fires once.
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    EXPECT_EQ(pnl_trips,      1) << "pnl trip callback must fire on first pnl block";
+    EXPECT_EQ(position_trips, 0) << "position callback must NOT fire for pnl-only block";
+
+    // Second consecutive block: callback must NOT re-fire.
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    EXPECT_EQ(pnl_trips, 1) << "pnl trip callback must not re-fire on consecutive pnl block";
+
+    // Restore position state so gate clears.
+    pos.pnl = 0.0;
+    rm.update_position(pos);
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));  // passes
+
+    // Re-trip: callback fires again.
+    pos.pnl = -50.0;
+    rm.update_position(pos);
+    rm.evaluate(make_signal(0.1, 0.1, 0.05, 0.9));
+    EXPECT_EQ(pnl_trips, 2) << "pnl trip callback must re-fire after gate re-arms";
 }
