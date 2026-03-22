@@ -108,6 +108,7 @@ option(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE         "Build SentimentDivergenceDe
 option(LLMQUANT_ENABLE_ADVERSARIAL_DETECT           "Build AdversarialInputDetector: z-score + repetition + vocabulary-inflation adversarial token detector" ON)
 option(LLMQUANT_ENABLE_SIGNAL_CI                    "Build SignalConfidenceInterval: rolling jackknife confidence interval estimator for trade signal uncertainty" ON)
 option(LLMQUANT_ENABLE_TOKEN_RECORDER               "Build TokenStreamRecorder: append-only binary audit log with CRC-32 integrity and auto-rotation for regulatory compliance" ON)
+option(LLMQUANT_ENABLE_ENSEMBLE_VOTER               "Build EnsembleSignalVoter: weighted vote aggregation (majority/confidence/rank) across multiple named signal sub-models" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -1022,6 +1023,15 @@ if(LLMQUANT_ENABLE_TOKEN_RECORDER)
     message(STATUS "Feature: TokenStreamRecorder ENABLED (audit log)")
 else()
     message(STATUS "Feature: TokenStreamRecorder DISABLED (LLMQUANT_ENABLE_TOKEN_RECORDER=OFF)")
+endif()
+
+# EnsembleSignalVoter: weighted vote aggregation across multiple sub-models.
+if(LLMQUANT_ENABLE_ENSEMBLE_VOTER)
+    target_sources(llmquant PRIVATE src/EnsembleSignalVoter.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ENSEMBLE_VOTER_ENABLED)
+    message(STATUS "Feature: EnsembleSignalVoter ENABLED (multi-model consensus)")
+else()
+    message(STATUS "Feature: EnsembleSignalVoter DISABLED (LLMQUANT_ENABLE_ENSEMBLE_VOTER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
