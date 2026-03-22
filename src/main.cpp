@@ -255,6 +255,12 @@
 #ifdef LLMQUANT_STREAM_DIFFERENCER_ENABLED
 #  include "TokenStreamDifferencer.h"
 #endif
+#ifdef LLMQUANT_LIFECYCLE_TRACKER_ENABLED
+#  include "SignalLifecycleTracker.h"
+#endif
+#ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
+#  include "TokenWeightQuantiser.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -2092,7 +2098,7 @@ int main(int argc, char* argv[]) {
     // NarrativeTopicClassifier: online bag-of-centroids topic labeller.
     // Registers macro-topic buckets keyed on token weight centroids.
     // The dominant topic's signal_multiplier scales the downstream signal.
-    llmquant::NarrativeTopicClassifier narrative_classifier;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::NarrativeTopicClassifier::Config ntc_cfg;
         ntc_cfg.freq_alpha     = 0.10;
@@ -2115,7 +2121,7 @@ int main(int argc, char* argv[]) {
     // TokenClockRecalibrator: estimates live LLM token emission rate and
     // computes a budget_scale_factor so latency gates stay calibrated even
     // when model throughput varies 2-5× from the default assumption.
-    llmquant::TokenClockRecalibrator token_clock;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::TokenClockRecalibrator::Config tcr_cfg;
         tcr_cfg.window_size            = 64;
@@ -2171,7 +2177,7 @@ int main(int argc, char* argv[]) {
     // TokenImportanceDecayScheduler: applies true wall-clock exponential decay
     // to per-token weights.  A token emitted 30 s ago carries far less signal
     // weight than the same token just received.
-    llmquant::TokenImportanceDecayScheduler decay_scheduler;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::TokenImportanceDecayScheduler::Config tds_cfg;
         tds_cfg.half_life_s  = 10.0;
@@ -2215,7 +2221,7 @@ int main(int argc, char* argv[]) {
     // TokenStreamDifferencer: tracks velocity, acceleration, and jerk of the
     // token weight series.  Jerk spike = abrupt narrative reversal — fires
     // one derivative earlier than a momentum peak.
-    llmquant::TokenStreamDifferencer stream_differencer;
+    // (Declared in the pre-lambda block above; configure here.)
     {
         llmquant::TokenStreamDifferencer::Config sd_cfg;
         sd_cfg.ema_alpha       = 0.20;
