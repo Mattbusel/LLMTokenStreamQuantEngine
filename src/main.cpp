@@ -82,7 +82,7 @@ static double get_process_cpu_fraction() {
     return static_cast<double>(dk + du) / static_cast<double>(dw);
 #else
     // Linux: read /proc/self/stat fields utime+stime (jiffies), compare with wall clock.
-    static uint64_t prev_cpu_jiffies = 0;
+    static uint64_t prev_cpu_jiffies = UINT64_MAX;  // sentinel: UINT64_MAX = uninitialized
     static std::chrono::steady_clock::time_point prev_tp = std::chrono::steady_clock::now();
     std::ifstream f("/proc/self/stat");
     if (!f.is_open()) return 0.0;
@@ -104,6 +104,12 @@ static double get_process_cpu_fraction() {
     uint64_t cpu_jiffies = utime + stime;
     auto now = std::chrono::steady_clock::now();
     double elapsed_s = std::chrono::duration<double>(now - prev_tp).count();
+    // On first call prev_cpu_jiffies == UINT64_MAX (sentinel): seed and return 0.
+    if (prev_cpu_jiffies == UINT64_MAX) {
+        prev_cpu_jiffies = cpu_jiffies;
+        prev_tp = now;
+        return 0.0;
+    }
     double delta_jiffies = static_cast<double>(cpu_jiffies - prev_cpu_jiffies);
     prev_cpu_jiffies = cpu_jiffies;
     prev_tp = now;
