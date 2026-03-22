@@ -27,16 +27,23 @@ void NarrativePersistenceIndex::record(double bias) {
 
         if (fill_ >= cfg_.min_samples) {
             int n = fill_;
+            int w = cfg_.window;
+            // Build chronological snapshot (oldest first)
             double sum = 0.0;
-            for (int i = 0; i < n; ++i) sum += buf_[i];
+            for (int i = 0; i < n; ++i) {
+                int idx = (head_ - n + i + w * 2) % w;
+                sum += buf_[static_cast<std::size_t>(idx)];
+            }
             double mean = sum / n;
 
             // Count runs: consecutive values above or below the mean
             // Average run length / window ∈ (0, 1]
             int runs = 1;
-            bool above = (buf_[0] >= mean);
+            int idx0 = (head_ - n + w * 2) % w;
+            bool above = (buf_[static_cast<std::size_t>(idx0)] >= mean);
             for (int i = 1; i < n; ++i) {
-                bool a = (buf_[i] >= mean);
+                int idx = (head_ - n + i + w * 2) % w;
+                bool a = (buf_[static_cast<std::size_t>(idx)] >= mean);
                 if (a != above) { ++runs; above = a; }
             }
             // avg run length = n / runs; normalise to [0, 1] via n

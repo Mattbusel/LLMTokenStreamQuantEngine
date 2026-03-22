@@ -195,6 +195,10 @@
     unit/test_bias_entropy_rate.cpp
     unit/test_signal_drawdown_meter.cpp
     unit/test_token_cadence_analyser.cpp
+    unit/test_signal_mean_reversion_speed.cpp
+    unit/test_narrative_cluster_detector.cpp
+    unit/test_bias_volatility_breakout.cpp
+    unit/test_signal_stochastic_oscillator.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

@@ -2041,6 +2041,46 @@ else()
     message(STATUS "Feature: TokenCadenceAnalyser DISABLED (LLMQUANT_ENABLE_CADENCE_ANALYSER=OFF)")
 endif()
 
+# SignalMeanReversionSpeed: OLS AR(1) mean-reversion speed estimator.
+option(LLMQUANT_ENABLE_MEAN_REVERSION_SPEED "Build SignalMeanReversionSpeed: OLS AR(1) θ; κ=−log(θ); fires on_fast_reversion/on_explosive" ON)
+if(LLMQUANT_ENABLE_MEAN_REVERSION_SPEED)
+    target_sources(llmquant PRIVATE src/SignalMeanReversionSpeed.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MEAN_REVERSION_SPEED_ENABLED)
+    message(STATUS "Feature: SignalMeanReversionSpeed ENABLED (AR(1) θ/κ estimation, reversion/explosive callbacks)")
+else()
+    message(STATUS "Feature: SignalMeanReversionSpeed DISABLED (LLMQUANT_ENABLE_MEAN_REVERSION_SPEED=OFF)")
+endif()
+
+# NarrativeClusterDetector: online k-means bias regime classifier.
+option(LLMQUANT_ENABLE_CLUSTER_DETECTOR "Build NarrativeClusterDetector: k-means-like EMA clustering; fires on_cluster_change on regime switch" ON)
+if(LLMQUANT_ENABLE_CLUSTER_DETECTOR)
+    target_sources(llmquant PRIVATE src/NarrativeClusterDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CLUSTER_DETECTOR_ENABLED)
+    message(STATUS "Feature: NarrativeClusterDetector ENABLED (k-means EMA clustering, cluster_change callback)")
+else()
+    message(STATUS "Feature: NarrativeClusterDetector DISABLED (LLMQUANT_ENABLE_CLUSTER_DETECTOR=OFF)")
+endif()
+
+# BiasVolatilityBreakout: short/long rolling vol ratio for vol regime detection.
+option(LLMQUANT_ENABLE_VOL_BREAKOUT "Build BiasVolatilityBreakout: short/long rolling std ratio; fires on_expansion/on_contraction" ON)
+if(LLMQUANT_ENABLE_VOL_BREAKOUT)
+    target_sources(llmquant PRIVATE src/BiasVolatilityBreakout.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_VOL_BREAKOUT_ENABLED)
+    message(STATUS "Feature: BiasVolatilityBreakout ENABLED (short/long vol ratio, expansion/contraction callbacks)")
+else()
+    message(STATUS "Feature: BiasVolatilityBreakout DISABLED (LLMQUANT_ENABLE_VOL_BREAKOUT=OFF)")
+endif()
+
+# SignalStochasticOscillator: %K/%D stochastic applied to bias stream.
+option(LLMQUANT_ENABLE_STOCHASTIC_OSC "Build SignalStochasticOscillator: %K/%D overbought/oversold exhaustion detector" ON)
+if(LLMQUANT_ENABLE_STOCHASTIC_OSC)
+    target_sources(llmquant PRIVATE src/SignalStochasticOscillator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STOCHASTIC_OSC_ENABLED)
+    message(STATUS "Feature: SignalStochasticOscillator ENABLED (%K/%D stochastic, overbought/oversold callbacks)")
+else()
+    message(STATUS "Feature: SignalStochasticOscillator DISABLED (LLMQUANT_ENABLE_STOCHASTIC_OSC=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
