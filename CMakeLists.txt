@@ -81,6 +81,10 @@ option(LLMQUANT_ENABLE_SENTIMENT_HEATMAP            "Build TokenSentimentHeatmap
 option(LLMQUANT_ENABLE_CVAR                         "Build CVaRCalculator: rolling Conditional Value-at-Risk / Expected Shortfall risk metric" ON)
 option(LLMQUANT_ENABLE_TEMPORAL_PATTERN             "Build TemporalPatternLibrary: trie-based multi-token pattern matcher with pre-computed sentiment boosts" ON)
 option(LLMQUANT_ENABLE_FEEDBACK_LOOP                "Build FeedbackLoopDetector: cross-correlation detector for market-impact reflexivity in the LLM token stream" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_CYCLE              "Build SentimentCycleDetector: rolling ACF periodicity analysis to detect news-cycle patterns in the bias stream" ON)
+option(LLMQUANT_ENABLE_ADAPTIVE_SAMPLING            "Build AdaptiveSamplingController: dynamically adjusts token-polling interval based on activity magnitude" ON)
+option(LLMQUANT_ENABLE_MUTUAL_INFORMATION           "Build MutualInformationEstimator: discretized MI between LLM sentiment and returns via 2D joint histogram" ON)
+option(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT            "Build SignalBlindSpotDetector: time-of-day win-rate tracker to identify low-predictability trading slots" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -754,6 +758,41 @@ else()
     message(STATUS "Feature: FeedbackLoopDetector DISABLED (LLMQUANT_ENABLE_FEEDBACK_LOOP=OFF)")
 endif()
 
+# SentimentCycleDetector: rolling ACF periodicity analysis on bias stream.
+if(LLMQUANT_ENABLE_SENTIMENT_CYCLE)
+    target_sources(llmquant PRIVATE src/SentimentCycleDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_CYCLE_ENABLED)
+    message(STATUS "Feature: SentimentCycleDetector ENABLED (ACF news-cycle analysis)")
+else()
+    message(STATUS "Feature: SentimentCycleDetector DISABLED (LLMQUANT_ENABLE_SENTIMENT_CYCLE=OFF)")
+endif()
+
+# AdaptiveSamplingController: multiplicative interval adaptation for token polling.
+if(LLMQUANT_ENABLE_ADAPTIVE_SAMPLING)
+    target_sources(llmquant PRIVATE src/AdaptiveSamplingController.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ADAPTIVE_SAMPLING_ENABLED)
+    message(STATUS "Feature: AdaptiveSamplingController ENABLED (adaptive token-poll interval)")
+else()
+    message(STATUS "Feature: AdaptiveSamplingController DISABLED (LLMQUANT_ENABLE_ADAPTIVE_SAMPLING=OFF)")
+endif()
+
+# MutualInformationEstimator: discretized MI between LLM sentiment and returns.
+if(LLMQUANT_ENABLE_MUTUAL_INFORMATION)
+    target_sources(llmquant PRIVATE src/MutualInformationEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MUTUAL_INFORMATION_ENABLED)
+    message(STATUS "Feature: MutualInformationEstimator ENABLED (sentiment-return MI)")
+else()
+    message(STATUS "Feature: MutualInformationEstimator DISABLED (LLMQUANT_ENABLE_MUTUAL_INFORMATION=OFF)")
+endif()
+
+# SignalBlindSpotDetector: time-of-day win-rate slot analysis.
+if(LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT)
+    target_sources(llmquant PRIVATE src/SignalBlindSpotDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_BLIND_SPOT_ENABLED)
+    message(STATUS "Feature: SignalBlindSpotDetector ENABLED (time-of-day blind-spot analysis)")
+else()
+    message(STATUS "Feature: SignalBlindSpotDetector DISABLED (LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF)")
+endif()
 
 # ---------------------------------------------------------------------------
 # Main executable

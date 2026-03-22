@@ -105,9 +105,11 @@ TEST(SignalMomentumOscillator, BullishCrossDetected) {
     };
     SignalMomentumOscillator osc(cfg);
 
-    // Negative phase.
+    // Settlement phase: both EMAs converge to +1 (histogram ≈ 0).
+    for (int i = 0; i < 50; ++i) osc.record(1.0);
+    // Negative phase: fast drops first → histogram goes negative.
     for (int i = 0; i < 50; ++i) osc.record(-1.0);
-    // Positive phase.
+    // Positive phase: fast rises first → histogram crosses zero upward (bullish).
     for (int i = 0; i < 50; ++i) osc.record(1.0);
 
     EXPECT_GT(crosses.load(), 0);
@@ -130,9 +132,11 @@ TEST(SignalMomentumOscillator, BearishCrossDetected) {
     };
     SignalMomentumOscillator osc(cfg);
 
-    // Positive phase.
+    // Settlement phase: both EMAs converge to -1 (histogram ≈ 0).
+    for (int i = 0; i < 50; ++i) osc.record(-1.0);
+    // Positive phase: fast rises first → histogram goes positive.
     for (int i = 0; i < 50; ++i) osc.record(1.0);
-    // Negative phase.
+    // Negative phase: fast drops first → histogram crosses zero downward (bearish).
     for (int i = 0; i < 50; ++i) osc.record(-1.0);
 
     EXPECT_TRUE(got_bearish.load());
@@ -234,11 +238,13 @@ TEST(SignalMomentumOscillator, DirectionFlagsReflectLastCross) {
     cfg.signal_alpha = 0.5;
     SignalMomentumOscillator osc(cfg);
 
-    // Drive bearish then bullish.
+    // Settle at +1, then drive bearish (histogram negative), then bullish
+    // (histogram crosses zero upward → last cross is Bullish).
+    for (int i = 0; i < 60; ++i) osc.record(1.0);
     for (int i = 0; i < 60; ++i) osc.record(-1.0);
     for (int i = 0; i < 60; ++i) osc.record(1.0);
 
-    // After bullish phase the last cross should be bullish.
+    // After the final bullish phase the last cross should be bullish.
     EXPECT_TRUE(osc.is_bullish());
     EXPECT_FALSE(osc.is_bearish());
 }

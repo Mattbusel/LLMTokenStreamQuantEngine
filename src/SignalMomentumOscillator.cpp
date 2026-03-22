@@ -33,8 +33,12 @@ void SignalMomentumOscillator::record(double bias) noexcept {
         sig_val   = signal_ema_;
         hist_val  = macd_val - sig_val;
 
-        // Detect histogram zero-cross.
-        if (prev_histogram_ * hist_val < 0.0) {
+        // Detect histogram zero-cross (including transitions from zero).
+        // prev * curr < 0 misses 0?nonzero; use explicit sign comparison instead.
+        bool prev_pos = prev_histogram_ > 0.0, prev_neg = prev_histogram_ < 0.0;
+        bool curr_pos = hist_val > 0.0,       curr_neg = hist_val < 0.0;
+        bool crossed  = (curr_pos && !prev_pos) || (curr_neg && !prev_neg);
+        if (crossed && seeded_) {
             cross_dir  = (hist_val > 0.0) ? CrossDirection::Bullish : CrossDirection::Bearish;
             fire_cross = true;
             crosses_.fetch_add(1, std::memory_order_relaxed);

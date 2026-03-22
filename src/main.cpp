@@ -129,6 +129,18 @@
 #ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
 #  include "SignalMomentumOscillator.h"
 #endif
+#ifdef LLMQUANT_CVAR_ENABLED
+#  include "CVaRCalculator.h"
+#endif
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+#  include "TemporalPatternLibrary.h"
+#endif
+#ifdef LLMQUANT_FEEDBACK_LOOP_ENABLED
+#  include "FeedbackLoopDetector.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+#  include "SentimentCycleDetector.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1087,6 +1099,10 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_NARRATIVE_CHANGE_ENABLED
         narrative_detector.record(std::hash<std::string>{}(text));
 #endif
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+        // Feed raw token text into the phrase matcher; fires on complete patterns.
+        tpl.push_token(text);
+#endif
 #ifdef LLMQUANT_CONTEXT_WINDOW_BUDGET_ENABLED
         context_budget.consume(1);
 #endif
@@ -1342,6 +1358,66 @@ int main(int argc, char* argv[]) {
                           macd, sig, hist);
         };
         signal_momentum_osc.update_config(smo_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_CVAR_ENABLED
+    // CVaRCalculator: rolling Expected Shortfall at α=0.95 for tail-risk gating.
+    // Records delta_bias_shift as a proxy PnL; fires on_breach when CVaR < -5%.
+    llmquant::CVaRCalculator cvar_calc;
+    {
+        llmquant::CVaRCalculator::Config cv_cfg;
+        cv_cfg.breach_threshold = -0.05;
+        cv_cfg.on_breach = [](double cvar, double var, double alpha) {
+            spdlog::warn("[cvar] tail-risk breach  cvar={:.4f}  var={:.4f}  alpha={:.2f}",
+                         cvar, var, alpha);
+        };
+        cvar_calc.update_config(cv_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+    // TemporalPatternLibrary: trie-based multi-token phrase matcher.
+    // Detects compound sentiment phrases the single-token weights miss.
+    llmquant::TemporalPatternLibrary tpl;
+    {
+        tpl.register_pattern("earnings_beat",    {"earnings", "beat"},      0.6);
+        tpl.register_pattern("earnings_miss",    {"earnings", "miss"},     -0.6);
+        tpl.register_pattern("rate_hike",        {"rate", "hike"},         -0.4);
+        tpl.register_pattern("rate_cut",         {"rate", "cut"},           0.4);
+        tpl.register_pattern("guidance_raised",  {"guidance", "raised"},    0.5);
+        tpl.register_pattern("guidance_lowered", {"guidance", "lowered"},  -0.5);
+        tpl.register_pattern("short_squeeze",    {"short", "squeeze"},      0.7);
+        tpl.register_pattern("margin_call",      {"margin", "call"},       -0.8);
+    }
+#endif
+
+#ifdef LLMQUANT_FEEDBACK_LOOP_ENABLED
+    // FeedbackLoopDetector: cross-correlation reflexivity trap detector.
+    // Warns when the system's own trades appear to drive the LLM sentiment signal.
+    llmquant::FeedbackLoopDetector feedback_detector;
+    {
+        llmquant::FeedbackLoopDetector::Config fb_cfg;
+        fb_cfg.threshold  = 0.65;
+        fb_cfg.on_feedback = [](double score, int lag) {
+            spdlog::warn("[feedback] reflexivity suspected  score={:.3f}  peak_lag={}", score, lag);
+        };
+        feedback_detector.update_config(fb_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+    // SentimentCycleDetector: detects periodic news-cycle patterns via ACF analysis.
+    llmquant::SentimentCycleDetector sentiment_cycle;
+    {
+        llmquant::SentimentCycleDetector::Config sc_cfg;
+        sc_cfg.window_size       = 256;
+        sc_cfg.max_lag           = 64;
+        sc_cfg.cyclic_threshold  = 0.35;
+        sc_cfg.on_period_change  = [](int new_p, int old_p, double strength) {
+            spdlog::info("[cycle] dominant period {}→{}  acf={:.3f}", old_p, new_p, strength);
+        };
+        sentiment_cycle.update_config(sc_cfg);
     }
 #endif
 
@@ -1721,6 +1797,22 @@ int main(int argc, char* argv[]) {
                                 : (signal.strategy_toggle < 0) ? "bear" : "neutral";
             sentiment_heatmap.record(dir_key, signal.delta_bias_shift);
         }
+#endif
+
+#ifdef LLMQUANT_CVAR_ENABLED
+        // Treat delta_bias_shift as proxy PnL for tail-risk tracking.
+        cvar_calc.record(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_FEEDBACK_LOOP_ENABLED
+        // Own-activity = |bias shift| emitted; sentiment = raw bias shift.
+        feedback_detector.record_own_activity(std::abs(signal.delta_bias_shift));
+        feedback_detector.record_sentiment(signal.delta_bias_shift);
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+        // Feed bias into ACF cycle detector.
+        sentiment_cycle.record(signal.delta_bias_shift);
 #endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
@@ -2752,6 +2844,22 @@ int main(int argc, char* argv[]) {
                             return o.str();
                          }()
 #endif
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+                      << [&]() -> std::string {
+                            // Dominant cycle period; highlighted when cyclic pattern detected.
+                            int    p  = sentiment_cycle.dominant_period();
+                            bool   cy = sentiment_cycle.is_cyclic();
+                            std::ostringstream o;
+                            o << "  CYC:";
+                            if      (cy && p > 0)  o << C("\033[36m");  // cyan  = active cycle
+                            else if (p > 0)         o << C("\033[33m");  // yellow= weak cycle
+                            else                    o << C("\033[90m");  // grey  = none
+                            if (p > 0) o << p;
+                            else       o << "?";
+                            o << C("\033[0m");
+                            return o.str();
+                         }()
+#endif
                       << std::flush;
 
             // Regime-change alert: log to spdlog when classified regime transitions.
@@ -3001,6 +3109,13 @@ int main(int argc, char* argv[]) {
                            signal_momentum_osc.is_bearish() ? "BEAR" : "FLAT")
               << "  crosses=" << signal_momentum_osc.total_crosses() << "\n";
 #endif
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+    std::cout << "  Sentiment cycle  : "
+              << "period=" << sentiment_cycle.dominant_period()
+              << "  strength=" << std::fixed << std::setprecision(3) << sentiment_cycle.cycle_strength()
+              << "  " << (sentiment_cycle.is_cyclic() ? "CYCLIC" : "none")
+              << "  changes=" << sentiment_cycle.period_changes() << "\n";
+#endif
 #ifdef LLMQUANT_ORDER_BOOK_SIM_ENABLED
     std::cout << "  Order book sim   : "
               << "mid=" << std::fixed << std::setprecision(4) << order_book_sim.mid_price()
@@ -3011,6 +3126,27 @@ int main(int argc, char* argv[]) {
     std::cout << "  Sentiment heatmap: "
               << "tokens=" << sentiment_heatmap.token_count()
               << "  records=" << sentiment_heatmap.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_CVAR_ENABLED
+    std::cout << "  CVaR (ES α=0.95) : "
+              << "cvar=" << std::showpos << std::fixed << std::setprecision(5) << cvar_calc.cvar()
+              << "  var=" << cvar_calc.var()
+              << std::noshowpos
+              << "  breach=" << (cvar_calc.is_in_breach() ? "YES" : "no")
+              << "  events=" << cvar_calc.breach_events() << "\n";
+#endif
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+    std::cout << "  Phrase patterns  : "
+              << "patterns=" << tpl.pattern_count()
+              << "  tokens=" << tpl.total_tokens()
+              << "  matches=" << tpl.total_matches() << "\n";
+#endif
+#ifdef LLMQUANT_FEEDBACK_LOOP_ENABLED
+    std::cout << "  Feedback loop    : "
+              << "score=" << std::fixed << std::setprecision(3) << feedback_detector.feedback_score()
+              << "  peak_lag=" << feedback_detector.peak_lag()
+              << "  detected=" << (feedback_detector.feedback_detected() ? "YES" : "no")
+              << "  events=" << feedback_detector.feedback_events() << "\n";
 #endif
     std::cout << "  Latency summary  : " << latency_ctrl.format_stats() << "\n";
     {
@@ -3092,6 +3228,18 @@ int main(int argc, char* argv[]) {
 #endif
 #ifdef LLMQUANT_SIGNAL_MOMENTUM_OSC_ENABLED
         std::cout << "  [json:smo]     " << signal_momentum_osc.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_CVAR_ENABLED
+        std::cout << "  [json:cvar]    " << cvar_calc.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_TEMPORAL_PATTERN_ENABLED
+        std::cout << "  [json:tpl]     " << tpl.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_FEEDBACK_LOOP_ENABLED
+        std::cout << "  [json:fbl]     " << feedback_detector.to_stats_json() << "\n";
+#endif
+#ifdef LLMQUANT_SENTIMENT_CYCLE_ENABLED
+        std::cout << "  [json:cycle]   " << sentiment_cycle.to_stats_json() << "\n";
 #endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY

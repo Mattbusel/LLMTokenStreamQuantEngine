@@ -159,7 +159,11 @@ jobs:
             -DLLMQUANT_ENABLE_SENTIMENT_HEATMAP=OFF \
             -DLLMQUANT_ENABLE_CVAR=OFF \
             -DLLMQUANT_ENABLE_TEMPORAL_PATTERN=OFF \
-            -DLLMQUANT_ENABLE_FEEDBACK_LOOP=OFF
+            -DLLMQUANT_ENABLE_FEEDBACK_LOOP=OFF \
+            -DLLMQUANT_ENABLE_SENTIMENT_CYCLE=OFF \
+            -DLLMQUANT_ENABLE_ADAPTIVE_SAMPLING=OFF \
+            -DLLMQUANT_ENABLE_MUTUAL_INFORMATION=OFF \
+            -DLLMQUANT_ENABLE_SIGNAL_BLIND_SPOT=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -234,6 +238,10 @@ jobs:
           - flag: LLMQUANT_ENABLE_CVAR
           - flag: LLMQUANT_ENABLE_TEMPORAL_PATTERN
           - flag: LLMQUANT_ENABLE_FEEDBACK_LOOP
+          - flag: LLMQUANT_ENABLE_SENTIMENT_CYCLE
+          - flag: LLMQUANT_ENABLE_ADAPTIVE_SAMPLING
+          - flag: LLMQUANT_ENABLE_MUTUAL_INFORMATION
+          - flag: LLMQUANT_ENABLE_SIGNAL_BLIND_SPOT
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
