@@ -4841,6 +4841,9 @@ int main(int argc, char* argv[]) {
 #ifdef LLMQUANT_TOKEN_QUANTISER_ENABLED
         std::cout << "  [json:quantiser]  " << token_quantiser.to_stats_json() << "\n";
 #endif
+#ifdef LLMQUANT_POSITION_CONCENTRATION_ENABLED
+        std::cout << "  [json:conc_guard] " << concentration_guard.to_stats_json() << "\n";
+#endif
     }
 #endif // LLMQUANT_JSON_STATS_SUMMARY
 
