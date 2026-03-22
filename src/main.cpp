@@ -6336,6 +6336,29 @@ int main(int argc, char* argv[]) {
                   << "  obs=" << saliency_ranker.total_records() << "\n";
     }
 #endif
+#ifdef LLMQUANT_WAVELET_DECOMPOSER_ENABLED
+    std::cout << "  Wavelet DWT      : "
+              << "approx=" << std::fixed << std::setprecision(4) << wavelet_decomp.approx_mean()
+              << "  max_detail=" << wavelet_decomp.max_detail_energy()
+              << "  spiking=" << (wavelet_decomp.is_spiking() ? "YES" : "no")
+              << "  spikes=" << wavelet_decomp.spike_events()
+              << "  obs=" << wavelet_decomp.total_records() << "\n";
+#endif
+#ifdef LLMQUANT_RL_SIGNAL_WEIGHTER_ENABLED
+    std::cout << "  RL Weighter      : "
+              << "dominant='" << rl_weighter.dominant_arm() << "'"
+              << "  changes=" << rl_weighter.dominant_arm_changes()
+              << "  updates=" << rl_weighter.total_updates() << "\n";
+#endif
+#ifdef LLMQUANT_SIGNAL_CONVEXITY_ENABLED
+    std::cout << "  Convexity        : "
+              << "d1=" << std::fixed << std::setprecision(4) << convexity_meter.first_derivative()
+              << "  d2=" << convexity_meter.second_derivative()
+              << "  accel=" << (convexity_meter.is_accelerating() ? "YES" : "no")
+              << "  decel=" << (convexity_meter.is_decelerating() ? "YES" : "no")
+              << "  changes=" << convexity_meter.regime_changes()
+              << "  obs=" << convexity_meter.total_records() << "\n";
+#endif
 #ifdef LLMQUANT_WEIGHT_HISTOGRAM_ENABLED
     std::cout << "  Weight Histogram : "
               << "mode=" << weight_histogram.mode_bucket()
