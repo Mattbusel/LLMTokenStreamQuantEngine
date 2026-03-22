@@ -98,6 +98,13 @@ option(LLMQUANT_ENABLE_WALK_FORWARD                 "Build WalkForwardValidator:
 option(LLMQUANT_ENABLE_SIGNAL_CALIBRATION           "Build SignalCalibrationEngine: online Platt-scaling logistic calibration for raw signal confidence scores" ON)
 option(LLMQUANT_ENABLE_TOKEN_BIAS_HEATMAP           "Build TokenBiasHeatmap: per-token cumulative bias contribution tracker with top-N query and capacity cap" ON)
 option(LLMQUANT_ENABLE_CROSS_SESSION_MEMORY         "Build CrossSessionMemory: persist Kelly/drawdown state across process restarts for warm-start behaviour" ON)
+option(LLMQUANT_ENABLE_REGIME_PROB                  "Build MarketRegimeProbabilityEstimator: online 2-state HMM Bayesian filter for risk-on/risk-off regime probability" ON)
+option(LLMQUANT_ENABLE_SIGNAL_REPLAY_BUFFER         "Build SignalReplayBuffer: fixed-capacity ring buffer of recent TradeSignals for replay and post-hoc analysis" ON)
+option(LLMQUANT_ENABLE_TOKEN_NGRAM_PROFILER         "Build TokenNgramProfiler: sliding-window n-gram frequency tracker for detecting repeated narrative patterns" ON)
+option(LLMQUANT_ENABLE_EXECUTION_QUALITY            "Build ExecutionQualityMonitor: tracks fill latency and slippage distribution between signal emission and OMS ack" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_DISPERSION         "Build SentimentDispersionIndex: measures disagreement across sentiment dimensions (bias, vol, confidence)" ON)
+option(LLMQUANT_ENABLE_TOKEN_INFLUENCE              "Build TokenInfluenceAttributor: Shapley-inspired per-token marginal contribution attribution at signal generation time" ON)
+option(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE         "Build SentimentDivergenceDetector: multi-stream pairwise divergence detector that fires when sources disagree" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -922,6 +929,69 @@ if(LLMQUANT_ENABLE_CROSS_SESSION_MEMORY)
     message(STATUS "Feature: CrossSessionMemory ENABLED (warm-start state persistence)")
 else()
     message(STATUS "Feature: CrossSessionMemory DISABLED (LLMQUANT_ENABLE_CROSS_SESSION_MEMORY=OFF)")
+endif()
+
+# MarketRegimeProbabilityEstimator: online 2-state HMM Bayesian filter.
+if(LLMQUANT_ENABLE_REGIME_PROB)
+    target_sources(llmquant PRIVATE src/MarketRegimeProbabilityEstimator.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_PROB_ENABLED)
+    message(STATUS "Feature: MarketRegimeProbabilityEstimator ENABLED")
+else()
+    message(STATUS "Feature: MarketRegimeProbabilityEstimator DISABLED (LLMQUANT_ENABLE_REGIME_PROB=OFF)")
+endif()
+
+# SignalReplayBuffer: fixed-capacity ring buffer for recent TradeSignals.
+if(LLMQUANT_ENABLE_SIGNAL_REPLAY_BUFFER)
+    target_sources(llmquant PRIVATE src/SignalReplayBuffer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED)
+    message(STATUS "Feature: SignalReplayBuffer ENABLED")
+else()
+    message(STATUS "Feature: SignalReplayBuffer DISABLED (LLMQUANT_ENABLE_SIGNAL_REPLAY_BUFFER=OFF)")
+endif()
+
+# TokenNgramProfiler: n-gram frequency tracker on the token stream.
+if(LLMQUANT_ENABLE_TOKEN_NGRAM_PROFILER)
+    target_sources(llmquant PRIVATE src/TokenNgramProfiler.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED)
+    message(STATUS "Feature: TokenNgramProfiler ENABLED")
+else()
+    message(STATUS "Feature: TokenNgramProfiler DISABLED (LLMQUANT_ENABLE_TOKEN_NGRAM_PROFILER=OFF)")
+endif()
+
+# ExecutionQualityMonitor: fill latency and slippage distribution tracker.
+if(LLMQUANT_ENABLE_EXECUTION_QUALITY)
+    target_sources(llmquant PRIVATE src/ExecutionQualityMonitor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_EXECUTION_QUALITY_ENABLED)
+    message(STATUS "Feature: ExecutionQualityMonitor ENABLED")
+else()
+    message(STATUS "Feature: ExecutionQualityMonitor DISABLED (LLMQUANT_ENABLE_EXECUTION_QUALITY=OFF)")
+endif()
+
+# SentimentDispersionIndex: disagreement index across sentiment dimensions.
+if(LLMQUANT_ENABLE_SENTIMENT_DISPERSION)
+    target_sources(llmquant PRIVATE src/SentimentDispersionIndex.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_DISPERSION_ENABLED)
+    message(STATUS "Feature: SentimentDispersionIndex ENABLED")
+else()
+    message(STATUS "Feature: SentimentDispersionIndex DISABLED (LLMQUANT_ENABLE_SENTIMENT_DISPERSION=OFF)")
+endif()
+
+# TokenInfluenceAttributor: Shapley-inspired per-token marginal contribution attribution.
+if(LLMQUANT_ENABLE_TOKEN_INFLUENCE)
+    target_sources(llmquant PRIVATE src/TokenInfluenceAttributor.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_INFLUENCE_ENABLED)
+    message(STATUS "Feature: TokenInfluenceAttributor ENABLED (per-token Shapley attribution)")
+else()
+    message(STATUS "Feature: TokenInfluenceAttributor DISABLED (LLMQUANT_ENABLE_TOKEN_INFLUENCE=OFF)")
+endif()
+
+# SentimentDivergenceDetector: multi-stream pairwise divergence detector.
+if(LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE)
+    target_sources(llmquant PRIVATE src/SentimentDivergenceDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SENTIMENT_DIVERGENCE_ENABLED)
+    message(STATUS "Feature: SentimentDivergenceDetector ENABLED (multi-stream divergence)")
+else()
+    message(STATUS "Feature: SentimentDivergenceDetector DISABLED (LLMQUANT_ENABLE_SENTIMENT_DIVERGENCE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

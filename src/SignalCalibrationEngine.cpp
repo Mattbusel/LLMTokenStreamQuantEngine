@@ -229,10 +229,10 @@ std::string SignalCalibrationEngine::to_stats_json() const {
     std::ostringstream os;
     os << std::fixed;
     os.precision(6);
-    os << "{\"platt_a\":"  << a
-       << ",\"platt_b\":"  << b
-       << ",\"ece\":"      << ece
-       << ",\"samples\":"  << sc
+    os << "{\"platt_A\":"      << a
+       << ",\"platt_B\":"      << b
+       << ",\"ece\":"          << ece
+       << ",\"sample_count\":" << sc
        << ",\"total_recorded\":" << tr << "}";
     return os.str();
 }

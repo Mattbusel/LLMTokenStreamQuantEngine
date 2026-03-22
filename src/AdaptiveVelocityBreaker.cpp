@@ -84,7 +84,7 @@ std::string AdaptiveVelocityBreaker::to_stats_json() const {
     }
     char buf[256];
     std::snprintf(buf, sizeof(buf),
-        "{\"open\":%s,\"velocity_ema\":%.6f,\"trip_threshold\":%.3f,"
+        "{\"is_open\":%s,\"velocity_ema\":%.6f,\"trip_threshold\":%.3f,"
         "\"trip_count\":%llu,\"recovery_count\":%llu}",
         open ? "true" : "false", vel, thr,
         static_cast<unsigned long long>(trip_count_.load(std::memory_order_relaxed)),

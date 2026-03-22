@@ -54,16 +54,17 @@ int CrossAssetCorrelationMonitor::register_asset(const std::string& name) {
 
     // Allocate pair states for all existing assets vs new one.
     int max_pairs = kMaxAssets * (kMaxAssets - 1) / 2;
-    if (static_cast<int>(pairs_.size()) < max_pairs) {
+    if (static_cast<int>(pairs_.size()) < max_pairs)
         pairs_.resize(static_cast<size_t>(max_pairs));
-        // Initialise ring for new pairs.
-        for (int i = 0; i < id; ++i) {
-            auto& ps = pairs_[static_cast<size_t>(pair_index(i, id))];
-            ps.ring.assign(static_cast<size_t>(config_.window_size), {0.0, 0.0});
-            ps.head = ps.fill = 0;
-            ps.sum_a = ps.sum_b = ps.sum_aa = ps.sum_bb = ps.sum_ab = 0.0;
-            ps.rho = 0.0;
-        }
+
+    // Initialise ring for every new pair — must run regardless of whether
+    // we just resized, because subsequent registrations skip the resize.
+    for (int i = 0; i < id; ++i) {
+        auto& ps = pairs_[static_cast<size_t>(pair_index(i, id))];
+        ps.ring.assign(static_cast<size_t>(config_.window_size), {0.0, 0.0});
+        ps.head = ps.fill = 0;
+        ps.sum_a = ps.sum_b = ps.sum_aa = ps.sum_bb = ps.sum_ab = 0.0;
+        ps.rho = 0.0;
     }
 
     return id;

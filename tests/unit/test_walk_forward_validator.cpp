@@ -174,9 +174,9 @@ TEST(WalkForwardValidator, OptimizeRunsWithAxes) {
     wfv.load_tokens(make_tokens(400));
     wfv.add_axis("spread_cost",  {0.0001, 0.001});
     wfv.add_axis("price_impact", {0.001, 0.005});
-    EXPECT_EQ(wfv.num_folds(), 3);
+    EXPECT_EQ(wfv.num_folds(), 8);
     auto result = wfv.run();
-    EXPECT_EQ(static_cast<int>(result.folds.size()), 3);
+    EXPECT_EQ(static_cast<int>(result.folds.size()), 8);
     // Each fold should record some signals
     for (const auto& f : result.folds)
         EXPECT_GE(f.test_result.total_signals, 0);

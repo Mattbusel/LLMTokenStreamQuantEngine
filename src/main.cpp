@@ -186,6 +186,21 @@
 #ifdef LLMQUANT_CROSS_SESSION_MEMORY_ENABLED
 #  include "CrossSessionMemory.h"
 #endif
+#ifdef LLMQUANT_REGIME_PROB_ENABLED
+#  include "MarketRegimeProbabilityEstimator.h"
+#endif
+#ifdef LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED
+#  include "SignalReplayBuffer.h"
+#endif
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+#  include "TokenNgramProfiler.h"
+#endif
+#ifdef LLMQUANT_EXECUTION_QUALITY_ENABLED
+#  include "ExecutionQualityMonitor.h"
+#endif
+#ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
+#  include "SentimentDispersionIndex.h"
+#endif
 #include "llmquant_version.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
@@ -1220,6 +1235,10 @@ int main(int argc, char* argv[]) {
         // Also feed raw token text into the keyword dictionary matcher.
         order_flow_detector.record(text);
 #endif
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+        // Track n-gram frequencies; fires on repeated patterns.
+        ngram_profiler.push(text);
+#endif
 
         // In dry-run mode, tokens are mapped through LLMAdapter for
         // dictionary coverage analysis but no signals are emitted.
@@ -1549,7 +1568,6 @@ int main(int argc, char* argv[]) {
         };
         stream_health.update_config(sh_cfg);
     }
-#endif
 
 #ifdef LLMQUANT_REGIME_SIZER_ENABLED
     // RegimeAwareSizer: scales notional by Hurst exponent × vol-targeting factor.
@@ -1657,16 +1675,7 @@ int main(int argc, char* argv[]) {
     llmquant::SignalCalibrationEngine signal_calibration;
 #endif
 
-#ifdef LLMQUANT_TOKEN_BIAS_HEATMAP_ENABLED
-    // TokenBiasHeatmap: accumulates per-token signed bias contributions so
-    // operators can spot which tokens dominate the signal energy.
-    llmquant::TokenBiasHeatmap token_bias_heatmap;
-#endif
-
 #ifdef LLMQUANT_ORDER_FLOW_IMBALANCE_ENABLED
-    // OrderFlowImbalanceDetector: EMA of buy/sell pressure from LLM token
-    // keywords; fires callback when imbalance exceeds the threshold.
-    llmquant::OrderFlowImbalanceDetector order_flow_detector;
     {
         llmquant::OrderFlowImbalanceDetector::Config of_cfg;
         of_cfg.ema_alpha            = 0.1;
@@ -1693,6 +1702,79 @@ int main(int argc, char* argv[]) {
         };
         cross_session_mem.update_config(csm_cfg);
         cross_session_mem.load();  // warm start
+    }
+#endif
+
+#ifdef LLMQUANT_REGIME_PROB_ENABLED
+    // MarketRegimeProbabilityEstimator: online 2-state HMM Bayesian filter
+    // that produces a soft probability distribution over risk-on/risk-off regimes.
+    llmquant::MarketRegimeProbabilityEstimator regime_prob_est;
+    {
+        llmquant::MarketRegimeProbabilityEstimator::Config rp_cfg;
+        rp_cfg.min_observations = 20;
+        rp_cfg.transition_threshold = 0.70;
+        rp_cfg.on_regime_change = [](double prob_on, bool is_on) {
+            spdlog::info("[regime_hmm] {} → p_risk_on={:.4f}",
+                         is_on ? "RISK-ON" : "RISK-OFF", prob_on);
+        };
+        regime_prob_est.update_config(rp_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED
+    // SignalReplayBuffer: retains the last 1024 signals for replay and
+    // post-hoc analysis without needing to re-run the full token stream.
+    llmquant::SignalReplayBuffer signal_replay;
+#endif
+
+#ifdef LLMQUANT_TOKEN_NGRAM_PROFILER_ENABLED
+    // TokenNgramProfiler: tracks 2-gram and 3-gram frequencies; fires on
+    // hot n-grams that may indicate adversarial injection or stuck LLM output.
+    llmquant::TokenNgramProfiler ngram_profiler;
+    {
+        llmquant::TokenNgramProfiler::Config ng_cfg;
+        ng_cfg.hot_threshold = 10;
+        ng_cfg.on_hot_ngram = [](const std::string& ng, uint64_t cnt, int n) {
+            spdlog::warn("[ngram] hot {}-gram \"{}\" count={}", n, ng, cnt);
+        };
+        ngram_profiler.update_config(ng_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_EXECUTION_QUALITY_ENABLED
+    // ExecutionQualityMonitor: tracks fill latency and slippage between signal
+    // emission and OMS acknowledgment; fires on SLA breaches.
+    llmquant::ExecutionQualityMonitor exec_quality;
+    {
+        llmquant::ExecutionQualityMonitor::Config eq_cfg;
+        eq_cfg.latency_sla_us   = 5000.0;  // 5 ms SLA
+        eq_cfg.slippage_sla_bps = 5.0;
+        eq_cfg.on_sla_breach = [](const llmquant::ExecutionQualityMonitor::FillRecord& f,
+                                  bool lat_breach, bool slip_breach) {
+            spdlog::warn("[exec_quality] SLA breach sig={} lat={:.0f}us slip={:.2f}bps "
+                         "lat_breach={} slip_breach={}",
+                         f.signal_id, f.latency_us, f.slippage_bps,
+                         lat_breach, slip_breach);
+        };
+        exec_quality.update_config(eq_cfg);
+    }
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
+    // SentimentDispersionIndex: measures incoherence across bias / vol / confidence
+    // streams via coefficient of variation; fires on high/low dispersion events.
+    llmquant::SentimentDispersionIndex sentiment_dispersion;
+    {
+        llmquant::SentimentDispersionIndex::Config sd_cfg;
+        sd_cfg.high_threshold = 0.8;
+        sd_cfg.low_threshold  = 0.2;
+        sd_cfg.on_high_dispersion = [](double sdi) {
+            spdlog::warn("[dispersion] HIGH sdi={:.4f} — signals incoherent", sdi);
+        };
+        sd_cfg.on_low_dispersion = [](double sdi) {
+            spdlog::info("[dispersion] COHERENT sdi={:.4f}", sdi);
+        };
+        sentiment_dispersion.update_config(sd_cfg);
     }
 #endif
 
@@ -2146,6 +2228,23 @@ int main(int argc, char* argv[]) {
         order_flow_detector.record_pressure(signal.delta_bias_shift);
 #endif
 
+#ifdef LLMQUANT_REGIME_PROB_ENABLED
+        // Feed sentiment + volatility into the HMM filter for regime probability.
+        regime_prob_est.update(signal.delta_bias_shift,
+                               signal.volatility_adjustment);
+#endif
+
+#ifdef LLMQUANT_SIGNAL_REPLAY_BUFFER_ENABLED
+        // Capture signal in the replay ring for post-hoc analysis.
+        signal_replay.push(signal);
+#endif
+
+#ifdef LLMQUANT_SENTIMENT_DISPERSION_ENABLED
+        // Measure incoherence across bias, vol, and confidence dimensions.
+        sentiment_dispersion.record(std::abs(signal.delta_bias_shift),
+                                    signal.volatility_adjustment,
+                                    signal.confidence);
+#endif
 
         // Record bias value in sparkline ring (lock-free: only one writer thread).
         {
