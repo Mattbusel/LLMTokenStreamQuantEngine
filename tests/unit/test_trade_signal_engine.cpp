@@ -1877,3 +1877,4 @@ TEST(TradeSignalEngineTest, test_time_decay_reduces_bias_over_elapsed_time) {
         << "After ≥1 half-life elapsed, bias must have decayed by at least 50%;"
         << " initial=" << bias_initial << " decayed=" << bias_decayed;
 }
+
