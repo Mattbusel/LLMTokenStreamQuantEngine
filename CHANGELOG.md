@@ -10,6 +10,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added (Cycle 27 — 2026-03-21)
+- **Bug fix**: Cycle 26 CHANGELOG claimed `RiskManager::format_gate_blocks()` was
+  added, but the identical functionality already existed as
+  `format_blocked_by_gate()` (implemented in `RiskManager.cpp`, declared at
+  `RiskManager.h:370`, tested in `test_risk_manager.cpp`). Removed the spurious
+  duplicate inline method that was briefly added and reverted the CHANGELOG entry.
+- **CI: cppcheck static analysis step** added to the `check` job in `ci.yml`
+  (runs on gcc/Release matrix cell only to avoid duplication). Invokes cppcheck
+  with `--enable=warning,performance,portability` on `src/*.cpp`.
+- **Tests**: `Config::set_token_interval_ms()` now has three unit tests covering
+  positive update, zero-is-no-op, and negative-is-no-op paths
+  (`test_config.cpp`).
+- **Bug fix**: `cpu_fraction()` in `src/main.cpp` now initialises
+  `prev_cpu_jiffies` to `UINT64_MAX` (sentinel) and returns 0.0 on the first
+  call instead of computing `cpu_jiffies - 0`, which produced a grossly
+  inflated first reading.
+
+### Added (Cycle 27 — 2026-03-21 — hook additions)
 - **CI: feature-flags-matrix job** in `ci.yml`: six-job matrix that builds and
   tests with each `LLMQUANT_ENABLE_*` flag individually set to OFF, confirming
   every optional subsystem compiles and passes tests when disabled in isolation.
