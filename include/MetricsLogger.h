@@ -43,6 +43,12 @@ public:
         bool enable_console_output{true};
         /** @brief How frequently the file sink should be flushed to disk. */
         std::chrono::milliseconds flush_interval{std::chrono::milliseconds{100}};
+        /**
+         * @brief When true, log_token_received() writes entries to the log file.
+         *        Default is true. Set false to suppress per-token noise in high-throughput
+         *        environments where only signal/risk events are relevant.
+         */
+        bool enable_token_logging{true};
     };
 
     /**

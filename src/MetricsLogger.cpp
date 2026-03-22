@@ -106,8 +106,9 @@ void MetricsLogger::write_csv_header() {
 }
 
 void MetricsLogger::log_token_received(const std::string& token, uint64_t sequence_id) {
+    if (!config_.enable_token_logging) return;
     log_entries_++;
-    
+
     auto now = std::chrono::high_resolution_clock::now();
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
     

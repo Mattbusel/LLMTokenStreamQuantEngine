@@ -15,6 +15,17 @@ namespace {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Read non-empty lines from a text file into a vector.
+static std::vector<std::string> read_log_lines(const std::string& path) {
+    std::vector<std::string> lines;
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty()) lines.push_back(line);
+    }
+    return lines;
+}
+
 static MetricsLogger::Config make_csv_config(const std::string& path) {
     MetricsLogger::Config cfg;
     cfg.log_file_path        = path;
@@ -678,5 +689,45 @@ TEST(MetricsLoggerTest, test_json_token_with_newline_is_escaped) {
         << "raw newline in token must be escaped in JSON output";
     EXPECT_NE(content.find("line1\\nline2"), std::string::npos)
         << "newline must be escaped as \\n; content=" << content;
+    std::remove(path.c_str());
+}
+
+// ----------------------------------------------------------------
+// enable_token_logging = false must suppress log_token_received()
+// ----------------------------------------------------------------
+TEST(MetricsLoggerTest, test_enable_token_logging_false_suppresses_entries) {
+    const std::string path = "/tmp/test_metrics_token_logging_disabled.log";
+    {
+        MetricsLogger::Config cfg = make_csv_config(path);
+        cfg.enable_token_logging = false;
+        MetricsLogger logger(cfg);
+        logger.log_token_received("bullish", 1);
+        logger.log_token_received("bearish", 2);
+        logger.flush();
+    }
+    auto lines = read_log_lines(path);
+    // Only the CSV header line should be present — no TOKEN_RECEIVED rows.
+    for (const auto& line : lines) {
+        EXPECT_EQ(line.find("TOKEN_RECEIVED"), std::string::npos)
+            << "TOKEN_RECEIVED must not appear when enable_token_logging=false; line=" << line;
+    }
+    std::remove(path.c_str());
+}
+
+TEST(MetricsLoggerTest, test_enable_token_logging_true_writes_entries) {
+    const std::string path = "/tmp/test_metrics_token_logging_enabled.log";
+    {
+        MetricsLogger::Config cfg = make_csv_config(path);
+        cfg.enable_token_logging = true;
+        MetricsLogger logger(cfg);
+        logger.log_token_received("bullish", 1);
+        logger.flush();
+    }
+    auto lines = read_log_lines(path);
+    bool found = false;
+    for (const auto& line : lines) {
+        if (line.find("TOKEN_RECEIVED") != std::string::npos) { found = true; break; }
+    }
+    EXPECT_TRUE(found) << "TOKEN_RECEIVED must appear when enable_token_logging=true";
     std::remove(path.c_str());
 }
