@@ -81,7 +81,7 @@ jobs:
             libspdlog-dev libfmt-dev libyaml-cpp-dev \
             libgtest-dev nlohmann-json3-dev \
             libssl-dev libhiredis-dev \
-            clang clang-tidy
+            clang
       - name: Configure (ASan + UBSan)
         run: |
           cmake -B build-asan \
@@ -106,7 +106,8 @@ jobs:
       - name: Check formatting
         run: |
           clang-format --dry-run --Werror \
-            src/*.cpp include/*.h
+            src/*.cpp include/*.h \
+            tests/unit/*.cpp tests/integration/*.cpp tests/perf/*.cpp
 
   minimal:
     name: Minimal build (all optional features OFF)
@@ -131,7 +132,8 @@ jobs:
             -DLLMQUANT_ENABLE_PROFILING=OFF \
             -DLLMQUANT_ENABLE_JSON_STATS_SUMMARY=OFF \
             -DLLMQUANT_ENABLE_TLS=OFF \
-            -DLLMQUANT_ENABLE_REDIS=OFF
+            -DLLMQUANT_ENABLE_REDIS=OFF \
+            -DLLMQUANT_ENABLE_HOT_RELOAD=OFF
       - name: Build
         run: cmake --build build-minimal --parallel $(nproc)
       - name: Test
@@ -152,6 +154,7 @@ jobs:
           - flag: LLMQUANT_ENABLE_JSON_STATS_SUMMARY
           - flag: LLMQUANT_ENABLE_TLS
           - flag: LLMQUANT_ENABLE_REDIS
+          - flag: LLMQUANT_ENABLE_HOT_RELOAD
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
