@@ -287,6 +287,8 @@ add_library(llmquant STATIC
     src/PrometheusExporter.cpp
     src/BeamSearchDecoder.cpp
     src/SpeculativeDecoder.cpp
+    src/AttentionCache.cpp
+    src/TokenValidator.cpp
 )
 
 # SentimentTrajectoryAnalyzer: optional online trend-detection module.

@@ -243,6 +243,8 @@
     unit/test_StreamCompressor.cpp
     unit/test_TokenProfiler.cpp
     unit/test_VocabularyManager.cpp
+    unit/test_AttentionCache.cpp
+    unit/test_TokenValidator.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
