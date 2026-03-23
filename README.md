@@ -478,6 +478,88 @@ JSON import/export for cross-session persistence.
 
 ---
 
+## Round 2 Features
+
+### Sentiment Trend Tracker (`include/sentiment_trend.hpp` + `src/sentiment_trend.cpp`)
+
+Tracks how LLM-derived `delta_bias_shift` evolves over a trading session by fitting
+an online OLS regression on a rolling window of signals.
+
+**`SentimentTrendTracker`**:
+- Maintains a deque of the last N bias values
+- Fits `bias = slope × t + intercept` (OLS) on every push
+- Classifies the trend as `Bullish`, `Bearish`, `Flat`, or `Reversing`
+- Returns `TrendResult { slope, intercept, r_squared, trend_direction, n_samples }`
+
+**`RegimeSwitchDetector`**:
+- Wraps `SentimentTrendTracker`
+- Fires a `RegimeSwitch { from, to, confidence, timestamp_ms }` when sentiment
+  crosses from positive to negative territory (or vice versa)
+- Confirmation requires `confirm_bars` (default 5) consecutive same-direction samples
+- While switching: `is_switching()` returns `true` for `uncertainty_bars` (default 20)
+  samples — `RiskManager` should pause emission during this window
+
+```cpp
+SentimentTrendTracker tracker;
+tracker.push(signal);
+if (auto res = tracker.fit()) {
+    // res->trend_direction: Bullish / Bearish / Flat / Reversing
+    // res->slope:           bias units per sample
+    // res->r_squared:       goodness-of-fit [0, 1]
+}
+
+RegimeSwitchDetector detector;
+detector.set_switch_callback([&risk_mgr](const RegimeSwitch& sw) {
+    risk_mgr.disable_all_gates();   // halt trading during switch uncertainty
+});
+detector.push(signal);
+if (detector.is_switching()) return;  // skip signal during uncertainty window
+```
+
+---
+
+### Market Calendar Integration (`include/market_calendar.hpp` + `src/market_calendar.cpp`)
+
+Provides trading-hours awareness and economic event suppression for the signal pipeline.
+
+**`MarketCalendar`**:
+
+| Market | Session model |
+|--------|--------------|
+| `NYSE_NASDAQ` | Mon–Fri 09:30–16:00 ET, pre-market 04:00–09:30, AH 16:00–20:00 |
+| `CME` | ~23 h session (Mon–Fri), approximated via NYSE extended hours |
+| `Crypto` | Always open (24 × 7) |
+
+Returns `TradingSession { is_open, session_type, next_open_ms, next_close_ms }`.
+
+**`EconomicEventFilter`**:
+
+Pre-loaded with all 2026 FOMC, NFP, and CPI dates.  Suppresses signals for
+±30 minutes around each event (configurable per-event).  Events can also be
+loaded from a JSON file at runtime:
+
+```cpp
+EconomicEventFilter filter;
+filter.load_defaults_2026();
+filter.load_json("/etc/llmquant/custom_events.json");  // optional
+
+if (filter.should_suppress(now_ms)) {
+    // near a major event — skip signal emission
+}
+```
+
+**RiskManager integration** — use the helper function:
+
+```cpp
+if (should_suppress_signal(calendar, filter, Market::NYSE_NASDAQ, now_ms)) {
+    return;   // market closed or economic event in window
+}
+```
+
+Covered 2026 events: 8 FOMC meetings, 12 NFP releases, 12 CPI reports (36 events total).
+
+---
+
 ## Contributing
 
 1. Fork the repository and create a feature branch.
