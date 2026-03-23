@@ -296,6 +296,8 @@ add_library(llmquant STATIC
     src/TokenValidator.cpp
     src/LogitsProcessor.cpp
     src/GenerationConfig.cpp
+    src/OutputFormatter.cpp
+    src/EmbeddingCache.cpp
 )
 
 # SentimentTrajectoryAnalyzer: optional online trend-detection module.

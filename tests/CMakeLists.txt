@@ -257,6 +257,8 @@
     unit/TokenStreamBufferTest.cpp
     unit/AttentionScorerTest.cpp
     unit/PromptEncoderTest.cpp
+    unit/OutputFormatterTest.cpp
+    unit/EmbeddingCacheTest.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
