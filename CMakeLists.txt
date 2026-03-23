@@ -2361,6 +2361,32 @@ else()
     message(STATUS "Feature: TokenBacktester DISABLED (LLMQUANT_ENABLE_TOKEN_BACKTESTER=OFF)")
 endif()
 
+# TokenWindowSummariser: rolling decay window over SemanticWeight entries that
+# emits net_bias, confidence, and volatility_est when the window is full.
+option(LLMQUANT_ENABLE_TOKEN_WINDOW_SUMMARISER
+    "Build TokenWindowSummariser: rolling decay window over token SemanticWeight entries; \
+emits WindowSummary {net_bias, confidence, volatility_est, token_count} when window is ready" ON)
+if(LLMQUANT_ENABLE_TOKEN_WINDOW_SUMMARISER)
+    target_sources(llmquant PRIVATE src/TokenWindowSummariser.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_WINDOW_SUMMARISER_ENABLED)
+    message(STATUS "Feature: TokenWindowSummariser ENABLED (rolling decay window, WindowSummary)")
+else()
+    message(STATUS "Feature: TokenWindowSummariser DISABLED (LLMQUANT_ENABLE_TOKEN_WINDOW_SUMMARISER=OFF)")
+endif()
+
+# BootstrapSignalCI: non-parametric bootstrap confidence interval for signal
+# reliability; sort-based percentile CI over a rolling reservoir of observations.
+option(LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI
+    "Build BootstrapSignalCI: bootstrap 95% CI for signal mean reliability; \
+add_observation/compute() -> ConfidenceInterval {lower, upper, median}" ON)
+if(LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI)
+    target_sources(llmquant PRIVATE src/BootstrapSignalCI.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_BOOTSTRAP_SIGNAL_CI_ENABLED)
+    message(STATUS "Feature: BootstrapSignalCI ENABLED (bootstrap CI, lower/median/upper percentiles)")
+else()
+    message(STATUS "Feature: BootstrapSignalCI DISABLED (LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

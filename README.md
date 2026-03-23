@@ -57,6 +57,10 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
     RegimeFilter       -->  gates trade signals by regime alignment + confidence
     ExecutionQualityTracker --> lock-free 10K ring: p99 latency, fill rate, realised alpha
     TokenBacktester    -->  OHLCV bar matching, per-signal PnL, Sharpe, max drawdown
+
+  Cycle 40 additions:
+    TokenWindowSummariser --> rolling decay window: WindowSummary {net_bias, confidence, volatility_est}
+    BootstrapSignalCI     --> bootstrap CI: ConfidenceInterval {lower, median, upper}
 ```
 
 ---
@@ -557,6 +561,86 @@ if (should_suppress_signal(calendar, filter, Market::NYSE_NASDAQ, now_ms)) {
 ```
 
 Covered 2026 events: 8 FOMC meetings, 12 NFP releases, 12 CPI reports (36 events total).
+
+---
+
+## TokenWindowSummariser
+
+`TokenWindowSummariser` (`include/TokenWindowSummariser.hpp`) accumulates
+`SemanticWeight` entries in a fixed-capacity sliding window with per-push
+exponential decay.  When the window is full (`is_ready() == true`),
+`summarise()` returns a `WindowSummary` containing:
+
+| Field | Description |
+|-------|-------------|
+| `net_bias` | Recency-weighted mean directional bias (signed; positive = bullish) |
+| `confidence` | Simple mean confidence score over the window |
+| `volatility_est` | Bessel-corrected sample std-dev of bias values — near-term signal uncertainty |
+| `token_count` | Number of entries currently in the window |
+
+**Usage:**
+
+```cpp
+#include "TokenWindowSummariser.hpp"
+using namespace llmquant;
+
+TokenWindowSummariser win(/*window_size=*/20, /*decay=*/0.95f);
+
+// Called once per token from the LLMAdapter:
+win.push(semantic_weight);
+
+if (win.is_ready()) {
+    auto s = win.summarise();
+    // s.net_bias > 0  → window skewed bullish
+    // s.volatility_est high → noisy / uncertain window
+    // s.confidence → average token mapping confidence
+}
+```
+
+The decay factor (default 0.95) attenuates older entries on every push, so
+the most recent token carries the most weight.  Set `decay = 1.0` for a
+uniform (equally-weighted) window.
+
+---
+
+## BootstrapSignalCI
+
+`BootstrapSignalCI` (`include/BootstrapSignalCI.hpp`) maintains a rolling
+reservoir of signal observations and estimates a non-parametric bootstrap
+confidence interval for the signal mean.  Unlike the jackknife-based
+`SignalConfidenceInterval`, it makes no Gaussian assumption and handles
+fat-tailed or skewed distributions correctly at the cost of higher
+computational work per `compute()` call.
+
+**Usage:**
+
+```cpp
+#include "BootstrapSignalCI.hpp"
+using namespace llmquant;
+
+BootstrapSignalCI bci(/*n_bootstrap=*/300, /*confidence_level=*/0.95f);
+
+// After each signal is emitted:
+bci.add_observation(signal.delta_bias_shift);
+
+if (bci.is_ready()) {
+    auto ci = bci.compute();
+    // ci.lower, ci.median, ci.upper
+    if (ci.lower > 0.0f) {
+        // The 95% CI for the mean is entirely positive — high-confidence bullish
+    }
+}
+
+// JSON snapshot for dashboards:
+std::cout << bci.to_stats_json() << "\n";
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `n_bootstrap` | 200 | Re-samples per `compute()` call |
+| `confidence_level` | 0.95 | Nominal CI coverage (→ [2.5%, 97.5%] percentiles) |
+| `window_size` | 128 | Maximum observations retained (sliding window) |
+| `min_observations` | 8 | Minimum before `is_ready()` returns true |
 
 ---
 

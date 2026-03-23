@@ -86,6 +86,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   timestamps; zero external dependencies.  Feature flag:
   `LLMQUANT_ENABLE_CROSS_SESSION_MEMORY`.  9 unit tests added.
 
+### Added (Cycle 40 — 2026-03-22)
+- **New module `TokenWindowSummariser`** (`include/TokenWindowSummariser.hpp`,
+  `src/TokenWindowSummariser.cpp`): rolling decay window over `SemanticWeight`
+  entries that produces a `WindowSummary { net_bias, confidence, volatility_est,
+  token_count }` signal when the window reaches capacity.  On each `push()` all
+  existing entries are multiplied by the configurable `decay` factor (default
+  0.95) before the new entry is appended, giving recency-weighted directional
+  bias without a hard reset.  `is_ready()` returns `true` once `window_size`
+  entries are present.  `volatility_est` is the Bessel-corrected sample
+  standard deviation of the decayed bias values — a low-latency proxy for
+  near-term signal uncertainty.  Feature flag:
+  `LLMQUANT_ENABLE_TOKEN_WINDOW_SUMMARISER` (default ON).
+  18 unit tests in `tests/unit/test_token_window_summariser.cpp`.
+- **New module `BootstrapSignalCI`** (`include/BootstrapSignalCI.hpp`,
+  `src/BootstrapSignalCI.cpp`): non-parametric bootstrap confidence interval
+  estimator for signal reliability.  Maintains a sliding-window reservoir of
+  the most recent `window_size` signal observations; `compute()` draws
+  `n_bootstrap` re-samples with replacement, sorts the per-re-sample means,
+  and returns `ConfidenceInterval { lower, upper, median }` at the configured
+  `confidence_level` (default 0.95).  Makes no Gaussian assumption — suitable
+  for fat-tailed or skewed signal distributions.  Degenerate fallback returns
+  the simple mean when fewer than `min_observations` are present.  Feature
+  flag: `LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI` (default ON).
+  14 unit tests in `tests/unit/test_bootstrap_signal_ci.cpp`.
+
 ### Added (Cycle 39 — 2026-03-21)
 - **New module `RegimeSwitchingSignalRouter`**: 3-state FSM (trending/ranging/crash)
   routes signals to per-regime scaling configurations.  Feature flag:
