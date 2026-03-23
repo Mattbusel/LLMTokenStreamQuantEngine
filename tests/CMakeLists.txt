@@ -255,6 +255,8 @@
     unit/test_InferenceSession.cpp
     unit/ContextEncoderTest.cpp
     unit/TokenStreamBufferTest.cpp
+    unit/AttentionScorerTest.cpp
+    unit/PromptEncoderTest.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

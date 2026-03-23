@@ -2647,6 +2647,26 @@ else()
     message(STATUS "Feature: ContextEncoder DISABLED (LLMQUANT_ENABLE_CONTEXT_ENCODER=OFF)")
 endif()
 
+# AttentionScorer: scaled dot-product attention score computation and masking.
+option(LLMQUANT_ENABLE_ATTENTION_SCORER "Build AttentionScorer: scaled dot-product attention, causal mask, entropy metrics" ON)
+if(LLMQUANT_ENABLE_ATTENTION_SCORER)
+    target_sources(llmquant PRIVATE src/AttentionScorer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ATTENTION_SCORER_ENABLED)
+    message(STATUS "Feature: AttentionScorer ENABLED (scaled dot-product, causal mask, entropy)")
+else()
+    message(STATUS "Feature: AttentionScorer DISABLED (LLMQUANT_ENABLE_ATTENTION_SCORER=OFF)")
+endif()
+
+# PromptEncoder: prompt tokenization, encoding, padding, and batch encoding.
+option(LLMQUANT_ENABLE_PROMPT_ENCODER "Build PromptEncoder: BPE-style tokenizer, encode/decode, pad, batch" ON)
+if(LLMQUANT_ENABLE_PROMPT_ENCODER)
+    target_sources(llmquant PRIVATE src/PromptEncoder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_PROMPT_ENCODER_ENABLED)
+    message(STATUS "Feature: PromptEncoder ENABLED (tokenize, encode, decode, pad, batch_encode)")
+else()
+    message(STATUS "Feature: PromptEncoder DISABLED (LLMQUANT_ENABLE_PROMPT_ENCODER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
