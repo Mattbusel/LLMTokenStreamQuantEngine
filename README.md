@@ -328,6 +328,110 @@ cmake --build build --target LLMTokenStreamQuantEngine_bench
 
 ---
 
+## What's New in v1.4.0
+
+### Streaming Regime Detector (`include/RegimeDetector.hpp`)
+
+A fully online 3-state Hidden Markov Model regime detector that classifies the
+token-sentiment stream into five discrete `TokenRegime` labels in real time.
+
+| Class | Responsibility |
+|-------|----------------|
+| `TokenRegime` | `BULL_TRENDING`, `BEAR_TRENDING`, `HIGH_UNCERTAINTY`, `CONSOLIDATION`, `BREAKOUT` |
+| `RegimeDetectorHMM` | 3-state HMM forward filter (bearish/neutral/bullish); online emission + transition parameter learning via exponential forgetting |
+| `RegimeFilter` | Gates trade signals: only fires when the current regime aligns with signal direction; configurable confidence threshold |
+
+**Usage:**
+
+```cpp
+#include "RegimeDetector.hpp"
+using namespace llmquant;
+
+RegimeDetectorHMM detector;
+detector.set_regime_change_callback([](TokenRegime n, TokenRegime o, int64_t ts) {
+    spdlog::info("Regime {} → {}", RegimeDetectorHMM::regime_name(o),
+                                   RegimeDetectorHMM::regime_name(n));
+});
+
+// Feed each incoming token bias:
+detector.update(bias, timestamp_ns);
+
+// Read current regime and confidence:
+TokenRegime r = detector.current_regime();   // e.g. BULL_TRENDING
+double conf   = detector.regime_confidence(); // 0.0–1.0
+
+// Gate a buy signal (+1) through the regime filter:
+RegimeFilter filter(detector);
+filter.feed(bias, timestamp_ns);
+bool should_trade = filter.evaluate(/*direction=*/+1, bias);
+```
+
+### Execution Quality Tracker (`include/ExecutionQuality.hpp`)
+
+A lock-free ring buffer (10 000 slots, cache-line aligned) that tracks
+signal-to-fill round trips with nanosecond resolution.
+
+| Method | Description |
+|--------|-------------|
+| `record(ExecutionRecord)` | Lock-free insert into ring buffer; auto-computes slippage from prices |
+| `mean_slippage_bps()` | Mean fill slippage across ring snapshot |
+| `p99_latency_ns()` | 99th-percentile signal→fill latency via `nth_element` |
+| `fill_rate()` | Fraction of recorded signals that were filled |
+| `signal_alpha(N)` | Realised alpha of last N filled trades |
+
+**Usage:**
+
+```cpp
+#include "ExecutionQuality.hpp"
+using namespace llmquant;
+
+ExecutionQualityTracker tracker;
+
+tracker.record({
+    .signal_id        = sig.timestamp_ns,
+    .signal_time_ns   = sig.timestamp_ns,
+    .execution_time_ns = oms_ack_ns,
+    .expected_price   = mid_at_signal,
+    .actual_price     = fill_price,
+    .direction        = 1,
+    .filled           = true
+});
+
+double slip = tracker.mean_slippage_bps();
+int64_t p99 = tracker.p99_latency_ns();
+double  fr  = tracker.fill_rate();
+double  alpha = tracker.signal_alpha(/*last_n=*/100);
+```
+
+### Token Sentiment Backtester (`include/TokenBacktester.hpp`)
+
+Backtests historical token-sentiment signals against OHLCV price bars with
+nearest-bar timestamp matching (±100 ms tolerance by default).
+
+| Method | Description |
+|--------|-------------|
+| `load_price_history(path)` | Load CSV of OHLCV bars (`timestamp_ms,open,high,low,close,volume`) |
+| `replay_signals(path)` | Load CSV signal log (`signal_time_ns,direction,bias,confidence`) |
+| `compute_pnl()` | Match signals to bars, compute per-signal returns, aggregate stats |
+| `BacktestResult` | `total_return`, `sharpe`, `max_drawdown`, `win_rate`, `avg_hold_time_ms` |
+
+**Usage:**
+
+```cpp
+#include "TokenBacktester.hpp"
+using namespace llmquant;
+
+TokenBacktester bt;
+bt.load_price_history("data/SPY_1min.csv");
+bt.replay_signals("logs/signals_2024.csv");
+BacktestResult res = bt.compute_pnl();
+
+std::cout << res.to_summary_string();
+// Sharpe: 1.42  MaxDD: 0.003412  WinRate: 57.3%  AvgHold: 183ms
+```
+
+---
+
 ## What's New in v1.3.0
 
 ### Dynamic Token Dictionary (`include/dynamic_dict.hpp`)
