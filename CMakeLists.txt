@@ -2639,6 +2639,12 @@ target_sources(llmquant PRIVATE src/VocabularyManager.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_VOCABULARY_MANAGER_ENABLED)
 message(STATUS "Feature: VocabularyManager ENABLED (token<->id mapping, UNK, prune, TSV)")
 
+# ConstrainedDecoder: constrained/guided decoding with allowlist, denylist, max-length,
+# force-prefix, and simple regex constraints (Round 28).
+target_sources(llmquant PRIVATE src/ConstrainedDecoder.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_CONSTRAINED_DECODER_ENABLED)
+message(STATUS "Feature: ConstrainedDecoder ENABLED (guided decoding, regex, allowlist, denylist, prefix)")
+
 # ContextEncoder: context encoding and position embeddings (Round 17).
 option(LLMQUANT_ENABLE_CONTEXT_ENCODER "Build ContextEncoder: sinusoidal PE, RoPE, ALiBi context encoder" ON)
 if(LLMQUANT_ENABLE_CONTEXT_ENCODER)
