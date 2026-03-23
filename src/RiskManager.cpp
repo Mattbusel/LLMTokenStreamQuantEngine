@@ -346,6 +346,17 @@ void RiskManager::update_config(const Config& config) {
         gate_position_last_blocked_ = false;
         gate_pnl_last_blocked_      = false;
     }
+    // When the drawdown window duration changes, the accumulated bias from the
+    // old window is no longer meaningful against the new window boundary.
+    // Reset so the new window starts clean, matching the behaviour of
+    // check_drawdown() when the window elapses naturally.
+    if (config.drawdown_window != config_.drawdown_window) {
+        drawdown_window_start_ = std::chrono::high_resolution_clock::now();
+        cumulative_bias_       = 0.0;
+        spdlog::info("RiskManager: drawdown window changed ({} -> {}s) — resetting drawdown state",
+            std::chrono::duration_cast<std::chrono::seconds>(config_.drawdown_window).count(),
+            std::chrono::duration_cast<std::chrono::seconds>(config.drawdown_window).count());
+    }
     config_ = config;
 }
 
