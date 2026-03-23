@@ -13,6 +13,57 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 
 ---
 
+## Round 6: Signal Combiner
+
+### Header: `include/signal_combiner.hpp`  |  Source: `src/signal_combiner.cpp`
+
+Combines multiple named trading signals (sentiment, alpha decay, execution timing) into a single actionable composite signal using three selectable combination methods.
+
+#### Data Structures
+
+| Type | Description |
+|------|-------------|
+| `SignalInput` | `name: string`, `value: double [-1,1]`, `confidence: double [0,1]`, `timestamp_ms: int64_t` |
+| `CombinedSignal` | `action: double [-1,1]`, `confidence: double`, `contributing_signals: vector<string>`, `regime: SignalRegime` |
+| `SignalRegime` | `TRENDING` (\|action\|>0.4), `MEAN_REVERTING` (\|action\|<0.15), `UNCERTAIN` |
+
+#### Combination Methods
+
+| Method | Formula |
+|--------|---------|
+| `WeightedAverage` | `action = Σ(c_i * v_i) / Σc_i` where `c_i = confidence_i` |
+| `Majority` | `action = (bull_conf - bear_conf) / (bull_conf + bear_conf)` |
+| `Ensemble` | Kalman-style: `K = c/(c+u)`,  `x = x + K*(v-x)` per signal |
+
+#### SignalHistory Ring Buffer
+
+Fixed-capacity ring buffer of past `CombinedSignal`s with:
+- `trend_direction()` — returns +1/−1/0 from mean of recent action values
+- `volatility()` — standard deviation of recent action values
+
+**Feature flag:** `LLMQUANT_ENABLE_SIGNAL_COMBINER` (default ON)
+**Tests:** `tests/unit/test_signal_combiner.cpp` — 25+ GTest cases
+
+```cpp
+#include "signal_combiner.hpp"
+using namespace llmquant;
+
+SignalCombiner sc;
+sc.add_signal({"sentiment",    0.7, 0.85, ts_ms});
+sc.add_signal({"alpha_decay",  0.4, 0.60, ts_ms});
+sc.add_signal({"exec_timing", -0.1, 0.40, ts_ms});
+
+auto result = sc.combine(CombineMethod::WEIGHTED_AVERAGE);
+// result->action ~ 0.52, regime = TRENDING
+
+SignalHistory history(64);
+history.push(*result);
+int dir = history.trend_direction();  // +1, -1, or 0
+double vol = history.volatility();
+```
+
+---
+
 ## Round 5: Cross-Asset Sentiment Correlation
 
 ### Header: `include/cross_asset_sentiment.hpp`  |  Source: `src/cross_asset_sentiment.cpp`

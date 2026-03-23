@@ -2388,6 +2388,20 @@ else()
     message(STATUS "Feature: BootstrapSignalCI DISABLED (LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI=OFF)")
 endif()
 
+# SignalCombiner: multi-source signal combiner with WeightedAverage/Majority/Ensemble
+# methods, regime classification, and SignalHistory ring buffer.
+option(LLMQUANT_ENABLE_SIGNAL_COMBINER
+    "Build SignalCombiner: combines sentiment/alpha/timing signals via confidence-weighted \
+average, majority vote, or Kalman-style ensemble; SignalHistory ring buffer with \
+trend_direction() and volatility()" ON)
+if(LLMQUANT_ENABLE_SIGNAL_COMBINER)
+    target_sources(llmquant PRIVATE src/signal_combiner.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SIGNAL_COMBINER_ENABLED)
+    message(STATUS "Feature: SignalCombiner ENABLED (WeightedAverage/Majority/Ensemble + SignalHistory)")
+else()
+    message(STATUS "Feature: SignalCombiner DISABLED (LLMQUANT_ENABLE_SIGNAL_COMBINER=OFF)")
+endif()
+
 # AlphaDecay: multi-model alpha signal decay (Exponential, Linear, PowerLaw, StepFunction)
 option(LLMQUANT_ENABLE_ALPHA_DECAY
     "Build AlphaDecay: multi-model signal alpha decay (Exponential/Linear/PowerLaw/StepFunction) \

@@ -227,6 +227,7 @@
     unit/test_bootstrap_signal_ci.cpp
     unit/test_execution_timing.cpp
     unit/test_alpha_decay.cpp
+    unit/test_signal_combiner.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
