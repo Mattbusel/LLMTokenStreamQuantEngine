@@ -5,6 +5,8 @@
 #include "MetricsLogger.h"
 #include "Config.h"
 #include "OutputSinkImpl.h"
+#include "SignalReplayRunner.h"
+#include "WebSocketServer.h"
 #ifdef LLMQUANT_DEDUP_ENABLED
 #  include "Deduplicator.h"
 #endif
@@ -733,6 +735,14 @@ int main(int argc, char* argv[]) {
     bool        validate_config = false;
     bool        quiet           = false;
     std::string export_dict_path;   // non-empty = write TSV to file and exit
+    // ── New modes ───────────────────────────────────────────────────────────
+    std::string replay_input_path;   // non-empty = run --test-replay mode
+    std::string replay_output_path;  // output file for replay trace (empty = stdout)
+    bool        replay_verbose   = false;
+    bool        websocket_mode   = false;
+    std::string ws_host          = "0.0.0.0";
+    uint16_t    ws_port          = 9200;
+    std::size_t ws_max_sessions  = 64;
     std::string oms_address;
     std::string fix_address;
     std::string config_file    = "config.yaml"; // may be overridden by --config
@@ -770,6 +780,13 @@ int main(int argc, char* argv[]) {
                 "  --log-level LEVEL Set spdlog log level: trace|debug|info|warn|error|critical (default: info)\n"
                 "  --dry-run         Process tokens through LLMAdapter only; skip signal emission\n"
                 "  --backtest        Enable backtest mode (emit signal on every token, no cooldown)\n"
+                "  --test-replay FILE  Replay a JSONL token file through the pipeline\n"
+                "  --output FILE     Output file for --test-replay trace (default: stdout)\n"
+                "  --replay-verbose  Log skipped/malformed lines in --test-replay mode\n"
+                "  --websocket       Start WebSocket live feed server\n"
+                "  --ws-host HOST    WebSocket bind host (default: 0.0.0.0)\n"
+                "  --ws-port PORT    WebSocket bind port (default: 9200)\n"
+                "  --ws-max-sessions N  Max concurrent WebSocket clients (default: 64)\n"
                 "  --no-color        Disable ANSI colour output\n"
                 "  --debug-raw       Print raw LLM stream bytes\n"
                 "  --list-tokens     Print the full semantic dictionary and exit\n"
@@ -911,6 +928,27 @@ int main(int argc, char* argv[]) {
             dry_run = true;
         } else if (arg == "--backtest") {
             backtest_mode = true;
+        // ── New modes ─────────────────────────────────────────────────────────
+        } else if (arg == "--test-replay" && i + 1 < argc) {
+            replay_input_path = argv[++i];
+        } else if (arg == "--output" && i + 1 < argc) {
+            replay_output_path = argv[++i];
+        } else if (arg == "--replay-verbose" || (arg == "--verbose" && !replay_input_path.empty())) {
+            replay_verbose = true;
+        } else if (arg == "--websocket" || arg == "--ws") {
+            websocket_mode = true;
+        } else if (arg == "--ws-host" && i + 1 < argc) {
+            ws_host = argv[++i];
+        } else if (arg == "--ws-port" && i + 1 < argc) {
+            try {
+                int p = std::stoi(argv[++i]);
+                if (p <= 0 || p > 65535) throw std::out_of_range("port");
+                ws_port = static_cast<uint16_t>(p);
+            }
+            catch (...) { std::cerr << "error: --ws-port requires an integer in 1-65535\n"; return 1; }
+        } else if (arg == "--ws-max-sessions" && i + 1 < argc) {
+            try { ws_max_sessions = static_cast<std::size_t>(std::stoi(argv[++i])); }
+            catch (...) { std::cerr << "error: --ws-max-sessions requires a positive integer\n"; return 1; }
         } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
             config_file = argv[++i];
         } else if (arg == "--stats-port" && i + 1 < argc) {
@@ -1239,6 +1277,54 @@ int main(int argc, char* argv[]) {
                       << "\n";
         }
         std::cout << "-- " << keys.size() << " entries --\n";
+        return 0;
+    }
+
+    // --test-replay FILE: replay a JSONL token file through the pipeline.
+    if (!replay_input_path.empty()) {
+        llmquant::SignalReplayConfig replay_cfg;
+        replay_cfg.input_path   = replay_input_path;
+        replay_cfg.output_path  = replay_output_path;
+        replay_cfg.verbose      = replay_verbose;
+
+        llmquant::SignalReplayRunner runner(replay_cfg);
+        auto result = runner.run();
+
+        if (!result.success) {
+            std::cerr << "[error] Replay failed: " << result.error_message << "\n";
+            return 1;
+        }
+        std::cerr << "[replay] Done: "
+                  << result.tokens_processed << " tokens, "
+                  << result.signals_emitted  << " signals emitted "
+                  << "(efficiency=" << (result.efficiency * 100.0) << "%)\n";
+        return 0;
+    }
+
+    // --websocket: start the WebSocket live feed server.
+    if (websocket_mode) {
+        llmquant::WebSocketServerConfig ws_cfg;
+        ws_cfg.host         = ws_host;
+        ws_cfg.port         = ws_port;
+        ws_cfg.max_sessions = ws_max_sessions;
+
+        llmquant::WebSocketServer ws_server(ws_cfg);
+        ws_server.set_log_callback([](const std::string& msg) {
+            std::cerr << "[ws] " << msg << "\n";
+        });
+        ws_server.start();
+
+        std::cerr << "[ws] WebSocket server running on "
+                  << ws_cfg.host << ":" << ws_cfg.port
+                  << " (max_sessions=" << ws_cfg.max_sessions << ")\n"
+                  << "[ws] Press Ctrl-C to stop.\n";
+
+        // Block until interrupted.
+        while (g_running.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        ws_server.stop();
+        std::cerr << "[ws] Server stopped.\n";
         return 0;
     }
 

@@ -1001,6 +1001,272 @@ Edit `tokens.yaml` (or a custom JSON file loaded via `DictionaryLoader`) rather 
 
 ---
 
+## Python Bindings (pybind11)
+
+The `python/` directory provides a pybind11 extension module that exposes the
+full C++ pipeline to Python under the `llmquant` module name.
+
+### Install
+
+```bash
+pip install pybind11
+cd python/
+python setup.py build_ext --inplace
+# The llmquant.*.so / llmquant.*.pyd file is created in the current directory.
+```
+
+Or via CMake (recommended for production):
+
+```bash
+cmake -B build -DLLMQUANT_ENABLE_PYTHON_BINDINGS=ON
+cmake --build build --config Release
+# Output: build/python/llmquant.*.so
+```
+
+### Python API
+
+```python
+import llmquant
+
+# Create an engine (loads the built-in ~130-token dictionary)
+engine = llmquant.TokenSignalEngine()
+
+# Process a single token -> Signal
+sig = engine.process_token("bullish")
+print(sig.direction)    # +1 (bullish), 0 (neutral), -1 (bearish)
+print(sig.strength)     # signed bias magnitude, clamped to [-1, +1]
+print(sig.confidence)   # [0.0, 1.0]
+print(sig.latency_us)   # token-to-signal latency in microseconds
+
+# Convenience helpers
+if sig.is_bullish():
+    print(f"BUY signal: strength={sig.strength:.3f}")
+elif sig.is_bearish():
+    print(f"SELL signal: strength={sig.strength:.3f}")
+
+# Process a token sequence (returns the last emitted signal)
+tokens = ["economy", "expanding", "bullish", "growth", "positive"]
+sig = engine.process_tokens(tokens)
+
+# Add a custom token mapping
+engine.add_token_mapping(
+    token="moonshot",
+    sentiment=0.9,
+    confidence=0.85,
+    volatility=0.75,
+    bias=0.95
+)
+
+# Get engine statistics as JSON
+print(engine.get_stats_json())
+
+# Reset accumulators between independent streams
+engine.reset()
+```
+
+### Signal fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `direction` | `int` | +1 bullish, 0 neutral, -1 bearish |
+| `strength` | `float` | Signed bias magnitude in [-1, +1] |
+| `confidence` | `float` | Signal confidence in [0.0, 1.0] |
+| `volatility` | `float` | Implied volatility adjustment |
+| `latency_us` | `float` | Token-to-signal latency (microseconds) |
+| `raw_json` | `str` | Full JSON of the underlying TradeSignal |
+
+---
+
+## WebSocket Live Feed
+
+The engine provides a WebSocket server mode that accepts LLM token streams and
+emits signals in real time. Compatible with SSE streams from OpenAI/Anthropic APIs.
+
+### Start the server
+
+```bash
+# Start WebSocket server on port 9200:
+./llmquant --websocket --ws-port 9200
+
+# Optional flags:
+#   --ws-host <HOST>          Bind host (default: 0.0.0.0)
+#   --ws-max-sessions <N>     Maximum concurrent clients (default: 64)
+```
+
+### Client protocol
+
+Send JSON frames over WebSocket:
+
+```json
+{"token": "bullish"}
+{"token": "recession", "timestamp_us": 1704067200000000}
+```
+
+Also accepts raw SSE lines from OpenAI/Anthropic streaming APIs:
+
+```
+data: {"choices":[{"delta":{"content":"bull"}}]}
+data: [DONE]
+```
+
+### Server output
+
+Each emitted signal is returned as a JSON frame:
+
+```json
+{
+  "timestamp_ns": 1704067200000000000,
+  "direction": 1,
+  "strength": 0.742,
+  "confidence": 0.831,
+  "volatility_adjustment": 0.12,
+  "latency_us": 4.7,
+  "signal_quality": 0.614
+}
+```
+
+### Python WebSocket client example
+
+```python
+import asyncio
+import json
+import websockets
+
+async def stream_tokens():
+    async with websockets.connect("ws://localhost:9200") as ws:
+        tokens = ["bullish", "growth", "rally", "expansion", "positive"]
+        for token in tokens:
+            await ws.send(json.dumps({"token": token}))
+            try:
+                response = await asyncio.wait_for(ws.recv(), timeout=0.1)
+                sig = json.loads(response)
+                print(f"Signal: direction={sig['direction']} strength={sig['strength']:.3f}")
+            except asyncio.TimeoutError:
+                pass  # engine in cooldown
+
+asyncio.run(stream_tokens())
+```
+
+### C++ integration
+
+```cpp
+#include "WebSocketServer.h"
+
+llmquant::WebSocketServerConfig cfg;
+cfg.port = 9200;
+cfg.max_sessions = 64;
+
+llmquant::WebSocketServer server(cfg);
+server.set_log_callback([](const std::string& msg) {
+    std::cout << "[WS] " << msg << "\n";
+});
+server.start();
+
+// Integrate with your transport layer (libwebsockets / Boost.Beast / uWebSockets):
+// uint64_t sid = server.on_open(send_fn);
+// server.on_message(sid, frame);
+// server.on_close(sid);
+```
+
+---
+
+## Signal Replay and Testing (`--test-replay`)
+
+The `--test-replay` mode reads a JSONL file of `{"token": "...", "timestamp_us": 12345}`
+records, replays them through the full pipeline, and outputs a signal trace for analysis.
+
+### Input JSONL format
+
+```jsonl
+{"token": "bullish",   "timestamp_us": 1704067200000000}
+{"token": "expansion", "timestamp_us": 1704067200001200}
+{"token": "growth",    "timestamp_us": 1704067200002500}
+{"token": "rally",     "timestamp_us": 1704067200005000}
+{"token": "crash",     "timestamp_us": 1704067200010000}
+```
+
+The `timestamp_us` field is optional. If omitted, synthetic 1ms spacing is used.
+
+### Run a replay
+
+```bash
+# Replay tokens.jsonl and print signal trace to stdout:
+./llmquant --test-replay tokens.jsonl
+
+# Save signal trace to a file:
+./llmquant --test-replay tokens.jsonl --output signal_trace.jsonl
+
+# Verbose mode (logs malformed/skipped lines to stderr):
+./llmquant --test-replay tokens.jsonl --verbose
+```
+
+### Output format
+
+Each emitted signal is one JSON line:
+
+```jsonl
+{"replay_token":"bullish","replay_ts_us":1704067200000000,"signal":{"timestamp_ns":1704067200000000000,"direction":1,"strength":0.742,"confidence":0.831,"volatility_adjustment":0.12,"latency_us":4.7,"signal_quality":0.614}}
+```
+
+A summary statistics object is written at the end:
+
+```jsonl
+{"summary":{"tokens_processed":1000,"signals_emitted":42,"malformed_lines":0,"efficiency":0.042,"input_file":"tokens.jsonl"}}
+```
+
+### C++ integration
+
+```cpp
+#include "SignalReplayRunner.h"
+
+llmquant::SignalReplayConfig cfg;
+cfg.input_path  = "tokens.jsonl";
+cfg.output_path = "trace.jsonl";
+cfg.verbose     = true;
+
+llmquant::SignalReplayRunner runner(cfg);
+auto result = runner.run();
+
+if (result.success) {
+    printf("Processed %llu tokens, emitted %llu signals (efficiency=%.1f%%)\n",
+        result.tokens_processed, result.signals_emitted,
+        result.efficiency * 100.0);
+}
+```
+
+### Generating a test JSONL from a live OpenAI stream
+
+```python
+import json
+import time
+import openai
+
+client = openai.OpenAI()
+records = []
+
+with client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Analyse current market conditions."}],
+    stream=True
+) as stream:
+    for chunk in stream:
+        token = chunk.choices[0].delta.content or ""
+        if token:
+            records.append({
+                "token": token.strip(),
+                "timestamp_us": int(time.time() * 1_000_000)
+            })
+
+with open("market_tokens.jsonl", "w") as f:
+    for rec in records:
+        f.write(json.dumps(rec) + "\n")
+
+# Now replay:
+# ./llmquant --test-replay market_tokens.jsonl --output signal_trace.jsonl
+```
+
+---
+
 ## License
 
 MIT — see `LICENSE`.
