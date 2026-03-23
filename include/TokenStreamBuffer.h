@@ -205,4 +205,87 @@ private:
     std::atomic<bool>               shutdown_{false};
 };
 
+// ============================================================================
+// SimpleTokenStreamBuffer — integer circular buffer
+// ============================================================================
+
+/// A simple fixed-capacity circular buffer for integer token ids.
+///
+/// Single-threaded version; see ThreadSafeTokenBuffer for the mutex-guarded
+/// variant with blocking push/pop.
+class SimpleTokenStreamBuffer {
+public:
+    explicit SimpleTokenStreamBuffer(std::size_t capacity);
+
+    /// Push a token.  Returns false if buffer is full.
+    bool push(int token);
+
+    /// Pop oldest token into out_token.  Returns false if empty.
+    bool pop(int& out_token);
+
+    /// Peek at the oldest token without removing.  Returns false if empty.
+    bool peek(int& out_token) const;
+
+    std::size_t size()     const;
+    std::size_t capacity() const;
+    bool        empty()    const;
+    bool        full()     const;
+
+    /// Discard all tokens and reset head/tail.
+    void clear();
+
+    /// Pop all tokens in FIFO order.
+    std::vector<int> drain();
+
+    /// Push multiple tokens.  Returns false if any push fails (buffer full).
+    bool push_batch(const std::vector<int>& tokens);
+
+private:
+    std::size_t        cap_;
+    std::size_t        head_{0};
+    std::size_t        tail_{0};
+    std::size_t        count_{0};
+    std::vector<int>   buf_;
+};
+
+// ============================================================================
+// ThreadSafeTokenBuffer — mutex-guarded version with blocking ops
+// ============================================================================
+
+/// Thread-safe integer token circular buffer with blocking push/pop.
+class ThreadSafeTokenBuffer {
+public:
+    explicit ThreadSafeTokenBuffer(std::size_t capacity);
+
+    bool push(int token);
+    bool pop(int& out_token);
+    bool peek(int& out_token) const;
+
+    std::size_t size()     const;
+    std::size_t capacity() const;
+    bool        empty()    const;
+    bool        full()     const;
+
+    void clear();
+    std::vector<int> drain();
+    bool push_batch(const std::vector<int>& tokens);
+
+    /// Block until space is available, then push.
+    void wait_and_push(int token);
+
+    /// Block until a token is available or timeout elapses.
+    /// Returns false on timeout.
+    bool wait_and_pop(int& out, std::chrono::milliseconds timeout);
+
+private:
+    std::size_t              cap_;
+    std::size_t              head_{0};
+    std::size_t              tail_{0};
+    std::size_t              count_{0};
+    std::vector<int>         buf_;
+    mutable std::mutex       mutex_;
+    std::condition_variable  not_full_cv_;
+    std::condition_variable  not_empty_cv_;
+};
+
 } // namespace llmquant

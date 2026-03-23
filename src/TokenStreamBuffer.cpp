@@ -305,4 +305,158 @@ std::string TokenStreamBuffer::to_stats_json() const {
     return ss.str();
 }
 
+// ============================================================================
+// SimpleTokenStreamBuffer
+// ============================================================================
+
+SimpleTokenStreamBuffer::SimpleTokenStreamBuffer(std::size_t capacity)
+    : cap_(capacity > 0 ? capacity : 1)
+    , buf_(cap_, 0)
+{}
+
+bool SimpleTokenStreamBuffer::push(int token) {
+    if (full()) return false;
+    buf_[tail_] = token;
+    tail_ = (tail_ + 1) % cap_;
+    ++count_;
+    return true;
+}
+
+bool SimpleTokenStreamBuffer::pop(int& out_token) {
+    if (empty()) return false;
+    out_token = buf_[head_];
+    head_ = (head_ + 1) % cap_;
+    --count_;
+    return true;
+}
+
+bool SimpleTokenStreamBuffer::peek(int& out_token) const {
+    if (empty()) return false;
+    out_token = buf_[head_];
+    return true;
+}
+
+std::size_t SimpleTokenStreamBuffer::size()     const { return count_; }
+std::size_t SimpleTokenStreamBuffer::capacity() const { return cap_;   }
+bool        SimpleTokenStreamBuffer::empty()    const { return count_ == 0; }
+bool        SimpleTokenStreamBuffer::full()     const { return count_ == cap_; }
+
+void SimpleTokenStreamBuffer::clear() {
+    head_ = tail_ = count_ = 0;
+}
+
+std::vector<int> SimpleTokenStreamBuffer::drain() {
+    std::vector<int> result;
+    result.reserve(count_);
+    int tok;
+    while (pop(tok)) {
+        result.push_back(tok);
+    }
+    return result;
+}
+
+bool SimpleTokenStreamBuffer::push_batch(const std::vector<int>& tokens) {
+    for (int tok : tokens) {
+        if (!push(tok)) return false;
+    }
+    return true;
+}
+
+// ============================================================================
+// ThreadSafeTokenBuffer
+// ============================================================================
+
+ThreadSafeTokenBuffer::ThreadSafeTokenBuffer(std::size_t capacity)
+    : cap_(capacity > 0 ? capacity : 1)
+    , buf_(cap_, 0)
+{}
+
+bool ThreadSafeTokenBuffer::push(int token) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (count_ == cap_) return false;
+    buf_[tail_] = token;
+    tail_ = (tail_ + 1) % cap_;
+    ++count_;
+    not_empty_cv_.notify_one();
+    return true;
+}
+
+bool ThreadSafeTokenBuffer::pop(int& out_token) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (count_ == 0) return false;
+    out_token = buf_[head_];
+    head_ = (head_ + 1) % cap_;
+    --count_;
+    not_full_cv_.notify_one();
+    return true;
+}
+
+bool ThreadSafeTokenBuffer::peek(int& out_token) const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (count_ == 0) return false;
+    out_token = buf_[head_];
+    return true;
+}
+
+std::size_t ThreadSafeTokenBuffer::size()     const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return count_;
+}
+std::size_t ThreadSafeTokenBuffer::capacity() const { return cap_; }
+bool        ThreadSafeTokenBuffer::empty()    const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return count_ == 0;
+}
+bool        ThreadSafeTokenBuffer::full()     const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return count_ == cap_;
+}
+
+void ThreadSafeTokenBuffer::clear() {
+    std::lock_guard<std::mutex> lk(mutex_);
+    head_ = tail_ = count_ = 0;
+    not_full_cv_.notify_all();
+}
+
+std::vector<int> ThreadSafeTokenBuffer::drain() {
+    std::lock_guard<std::mutex> lk(mutex_);
+    std::vector<int> result;
+    result.reserve(count_);
+    while (count_ > 0) {
+        result.push_back(buf_[head_]);
+        head_ = (head_ + 1) % cap_;
+        --count_;
+    }
+    not_full_cv_.notify_all();
+    return result;
+}
+
+bool ThreadSafeTokenBuffer::push_batch(const std::vector<int>& tokens) {
+    for (int tok : tokens) {
+        if (!push(tok)) return false;
+    }
+    return true;
+}
+
+void ThreadSafeTokenBuffer::wait_and_push(int token) {
+    std::unique_lock<std::mutex> lk(mutex_);
+    not_full_cv_.wait(lk, [this] { return count_ < cap_; });
+    buf_[tail_] = token;
+    tail_ = (tail_ + 1) % cap_;
+    ++count_;
+    not_empty_cv_.notify_one();
+}
+
+bool ThreadSafeTokenBuffer::wait_and_pop(int& out, std::chrono::milliseconds timeout) {
+    std::unique_lock<std::mutex> lk(mutex_);
+    if (!not_empty_cv_.wait_for(lk, timeout, [this] { return count_ > 0; })) {
+        return false;
+    }
+    out = buf_[head_];
+    head_ = (head_ + 1) % cap_;
+    --count_;
+    not_full_cv_.notify_one();
+    return true;
+}
+
 } // namespace llmquant

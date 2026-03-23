@@ -2637,6 +2637,16 @@ target_sources(llmquant PRIVATE src/VocabularyManager.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_VOCABULARY_MANAGER_ENABLED)
 message(STATUS "Feature: VocabularyManager ENABLED (token<->id mapping, UNK, prune, TSV)")
 
+# ContextEncoder: context encoding and position embeddings (Round 17).
+option(LLMQUANT_ENABLE_CONTEXT_ENCODER "Build ContextEncoder: sinusoidal PE, RoPE, ALiBi context encoder" ON)
+if(LLMQUANT_ENABLE_CONTEXT_ENCODER)
+    target_sources(llmquant PRIVATE src/ContextEncoder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CONTEXT_ENCODER_ENABLED)
+    message(STATUS "Feature: ContextEncoder ENABLED (sinusoidal PE, encode_token, RoPE, ALiBi)")
+else()
+    message(STATUS "Feature: ContextEncoder DISABLED (LLMQUANT_ENABLE_CONTEXT_ENCODER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
