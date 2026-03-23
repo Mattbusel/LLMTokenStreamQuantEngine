@@ -2441,6 +2441,26 @@ else()
     message(STATUS "Feature: StreamingStatsCollector DISABLED (LLMQUANT_ENABLE_STREAMING_STATS=OFF)")
 endif()
 
+# SamplingStrategies: token sampling algorithms (greedy, top-k, top-p, rep penalty).
+option(LLMQUANT_ENABLE_SAMPLING_STRATEGIES "Build SamplingStrategies: softmax, greedy, top-k, top-p, repetition penalty, LCG RNG" ON)
+if(LLMQUANT_ENABLE_SAMPLING_STRATEGIES)
+    target_sources(llmquant PRIVATE src/SamplingStrategies.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_SAMPLING_STRATEGIES_ENABLED)
+    message(STATUS "Feature: SamplingStrategies ENABLED (greedy/top-k/top-p/rep-penalty sampler)")
+else()
+    message(STATUS "Feature: SamplingStrategies DISABLED (LLMQUANT_ENABLE_SAMPLING_STRATEGIES=OFF)")
+endif()
+
+# KVCacheManager: pre-allocated key-value cache block manager.
+option(LLMQUANT_ENABLE_KV_CACHE_MANAGER "Build KVCacheManager: pre-allocated KV-cache block pool with sequence-level alloc/free" ON)
+if(LLMQUANT_ENABLE_KV_CACHE_MANAGER)
+    target_sources(llmquant PRIVATE src/KVCacheManager.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_KV_CACHE_MANAGER_ENABLED)
+    message(STATUS "Feature: KVCacheManager ENABLED (pre-allocated KV-cache block pool)")
+else()
+    message(STATUS "Feature: KVCacheManager DISABLED (LLMQUANT_ENABLE_KV_CACHE_MANAGER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
