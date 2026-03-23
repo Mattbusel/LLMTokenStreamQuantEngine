@@ -2415,6 +2415,30 @@ else()
     message(STATUS "Feature: AlphaDecay DISABLED (LLMQUANT_ENABLE_ALPHA_DECAY=OFF)")
 endif()
 
+# TokenStreamBuffer: backpressure-aware ring buffer for LLM token streams.
+option(LLMQUANT_ENABLE_TOKEN_STREAM_BUFFER
+    "Build TokenStreamBuffer: fixed-capacity ring buffer with BLOCK/DROP_OLDEST/DROP_NEWEST/REJECT \
+backpressure modes, high-watermark callback, and drain API for burst-safe token ingestion" ON)
+if(LLMQUANT_ENABLE_TOKEN_STREAM_BUFFER)
+    target_sources(llmquant PRIVATE src/TokenStreamBuffer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_STREAM_BUFFER_ENABLED)
+    message(STATUS "Feature: TokenStreamBuffer ENABLED (ring buffer, backpressure, high-watermark callback)")
+else()
+    message(STATUS "Feature: TokenStreamBuffer DISABLED (LLMQUANT_ENABLE_TOKEN_STREAM_BUFFER=OFF)")
+endif()
+
+# StreamingStatsCollector: real-time throughput and latency percentile statistics.
+option(LLMQUANT_ENABLE_STREAMING_STATS
+    "Build StreamingStatsCollector: HDR-style latency histogram (P50/P75/P90/P95/P99), sliding-window \
+throughput (TPS/BPS), inter-token gap EMA, P99 alert callback, and JSON stats export" ON)
+if(LLMQUANT_ENABLE_STREAMING_STATS)
+    target_sources(llmquant PRIVATE src/StreamingStatsCollector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAMING_STATS_ENABLED)
+    message(STATUS "Feature: StreamingStatsCollector ENABLED (HDR histogram, TPS/BPS, gap EMA, P99 alert)")
+else()
+    message(STATUS "Feature: StreamingStatsCollector DISABLED (LLMQUANT_ENABLE_STREAMING_STATS=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------
