@@ -2461,6 +2461,19 @@ else()
     message(STATUS "Feature: BiasExponentialSmoothing DISABLED (LLMQUANT_ENABLE_EXP_SMOOTHING=OFF)")
 endif()
 
+# ExecutionTimingOptimizer: Almgren-Chriss market-impact model, TWAP/VWAP
+# slicers, and urgency-blended OptimalExecution scheduler.
+option(LLMQUANT_ENABLE_EXECUTION_TIMING
+    "Build MarketImpactModel, ExecutionScheduler, and OptimalExecution (Almgren-Chriss TWAP/VWAP blender)"
+    ON)
+if(LLMQUANT_ENABLE_EXECUTION_TIMING)
+    target_sources(llmquant PRIVATE src/execution_timing.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_EXECUTION_TIMING_ENABLED)
+    message(STATUS "Feature: ExecutionTimingOptimizer ENABLED (Almgren-Chriss, TWAP/VWAP, OptimalExecution)")
+else()
+    message(STATUS "Feature: ExecutionTimingOptimizer DISABLED (LLMQUANT_ENABLE_EXECUTION_TIMING=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,

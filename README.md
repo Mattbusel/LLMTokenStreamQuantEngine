@@ -58,6 +58,11 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
     ExecutionQualityTracker --> lock-free 10K ring: p99 latency, fill rate, realised alpha
     TokenBacktester    -->  OHLCV bar matching, per-signal PnL, Sharpe, max drawdown
 
+  Round 3 additions:
+    MarketImpactModel  -->  Almgren-Chriss impact: linear + sqrt components in bps
+    ExecutionScheduler -->  TWAP / VWAP child-order slicers with historical volume profile
+    OptimalExecution   -->  urgency-blended schedule (urgency=1 TWAP, urgency=0 VWAP)
+
   Cycle 40 additions:
     TokenWindowSummariser --> rolling decay window: WindowSummary {net_bias, confidence, volatility_est}
     BootstrapSignalCI     --> bootstrap CI: ConfidenceInterval {lower, median, upper}
@@ -479,6 +484,83 @@ Naive Bayes weight learning from labelled trade outcomes.
 Laplace-smoothed log-likelihood ratios mapped to [0,1] weights.
 Hot-reload into `DynamicTokenDictionary` without process restart.
 JSON import/export for cross-session persistence.
+
+---
+
+## Round 3 Features
+
+### Execution Timing Optimizer (`include/execution_timing.hpp` + `src/execution_timing.cpp`)
+
+Three composable components for minimising market impact when executing LLM-signal-driven trade orders.
+
+#### MarketImpactModel
+
+Implements the Almgren-Chriss model:
+
+```
+impact = eta * sigma * sqrt(Q / V)   [permanent, sqrt component]
+       + alpha * sigma * (Q / V)     [temporary, linear component]
+```
+
+where Q = order size, V = average daily volume, sigma = volatility.  Both components are returned in basis points.
+
+```cpp
+#include "execution_timing.hpp"
+using namespace llmquant;
+
+MarketImpactModel model(/*eta=*/0.1, /*alpha=*/0.5);
+auto est = model.estimate(
+    /*order_qty=*/10'000.0,
+    /*avg_volume=*/1'000'000.0,
+    /*volatility=*/0.015);
+
+if (est) {
+    std::cout << "sqrt impact:   " << est->sqrt_impact_bps   << " bps\n";
+    std::cout << "linear impact: " << est->linear_impact_bps << " bps\n";
+    std::cout << "total impact:  " << est->total_impact_bps  << " bps\n";
+}
+```
+
+#### ExecutionScheduler — TWAP and VWAP
+
+```cpp
+ExecutionScheduler sched(/*n_slices=*/12, /*start_ms=*/0, /*duration_ms=*/3'600'000);
+
+// TWAP: 12 equal slices over one hour
+auto twap = sched.twap(/*total_qty=*/60'000.0, /*spot_price=*/150.0);
+
+// VWAP: slices proportional to intraday volume profile
+std::vector<double> volume_profile = {1,2,3,4,5,5,4,3,2,1,1,1};
+auto vwap = sched.vwap(60'000.0, 150.0, volume_profile);
+```
+
+If `volume_profile` is empty or all zeros, VWAP falls back to equal-weight TWAP slices.  The scheduler normalises the profile automatically.
+
+#### OptimalExecution — urgency-blended schedule
+
+```cpp
+OptimalExecution oe(ExecutionScheduler(12, 0, 3'600'000));
+
+// urgency=1.0 → pure TWAP
+auto twap_sched = oe.minimize_impact(60'000.0, 1.0, volume_profile);
+
+// urgency=0.0 → pure VWAP
+auto vwap_sched = oe.minimize_impact(60'000.0, 0.0, volume_profile);
+
+// urgency=0.5 → blended (linear interpolation of slice quantities)
+auto blend_sched = oe.minimize_impact(60'000.0, 0.5, volume_profile);
+
+if (blend_sched) {
+    for (auto& sl : blend_sched->slices) {
+        std::cout << "  [" << sl.start_ms << " - " << sl.end_ms << "]"
+                  << "  qty=" << sl.target_qty << "\n";
+    }
+}
+```
+
+The blended schedule re-normalises child quantities to exactly `order_qty`, ensuring no leakage.
+
+Enable with `LLMQUANT_ENABLE_EXECUTION_TIMING=ON` (default ON).
 
 ---
 
