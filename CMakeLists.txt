@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(LLMTokenStreamQuantEngine VERSION 1.3.0 LANGUAGES CXX)
+project(LLMTokenStreamQuantEngine VERSION 1.4.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
 # C++ standard
@@ -2317,6 +2317,48 @@ if(LLMQUANT_ENABLE_MODEL_ENSEMBLE)
     message(STATUS "Feature: ModelEnsemble ENABLED (multi-LLM lock-free ensemble with agreement scoring)")
 else()
     message(STATUS "Feature: ModelEnsemble DISABLED (LLMQUANT_ENABLE_MODEL_ENSEMBLE=OFF)")
+endif()
+
+# RegimeDetectorHMM + RegimeFilter: online 3-state HMM regime detector with BULL/BEAR/
+# HIGH_UNCERTAINTY/CONSOLIDATION/BREAKOUT labels and regime-aligned signal gating.
+# Implemented in RegimeDetector.hpp/.cpp (distinct from the EMA-based RegimeDetector.h).
+option(LLMQUANT_ENABLE_REGIME_DETECTOR_HMM
+    "Build RegimeDetectorHMM: online 3-state HMM (bearish/neutral/bullish) with TokenRegime \
+enum (BULL_TRENDING/BEAR_TRENDING/HIGH_UNCERTAINTY/CONSOLIDATION/BREAKOUT), online emission \
+and transition learning, and RegimeFilter signal gate" ON)
+if(LLMQUANT_ENABLE_REGIME_DETECTOR_HMM)
+    target_sources(llmquant PRIVATE src/RegimeDetector.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_DETECTOR_HMM_ENABLED)
+    message(STATUS "Feature: RegimeDetectorHMM ENABLED (3-state HMM, TokenRegime, RegimeFilter)")
+else()
+    message(STATUS "Feature: RegimeDetectorHMM DISABLED (LLMQUANT_ENABLE_REGIME_DETECTOR_HMM=OFF)")
+endif()
+
+# ExecutionQualityTracker: lock-free ring-buffer (10K slots) execution quality tracker
+# with nanosecond-resolution latency percentiles, fill-rate accounting, and realised alpha.
+# Implemented in ExecutionQuality.hpp/.cpp (distinct from ExecutionQualityMonitor.h).
+option(LLMQUANT_ENABLE_EXECUTION_QUALITY_TRACKER
+    "Build ExecutionQualityTracker: lock-free 10K-slot ring buffer; mean_slippage_bps, \
+p99_latency_ns, fill_rate, signal_alpha(N)" ON)
+if(LLMQUANT_ENABLE_EXECUTION_QUALITY_TRACKER)
+    target_sources(llmquant PRIVATE src/ExecutionQuality.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_EXECUTION_QUALITY_TRACKER_ENABLED)
+    message(STATUS "Feature: ExecutionQualityTracker ENABLED (lock-free ring, p99 latency, fill rate, alpha)")
+else()
+    message(STATUS "Feature: ExecutionQualityTracker DISABLED (LLMQUANT_ENABLE_EXECUTION_QUALITY_TRACKER=OFF)")
+endif()
+
+# TokenBacktester: backtests token-sentiment signals against historical OHLCV price bars;
+# nearest-bar ±100ms timestamp matching, per-signal PnL, Sharpe, max drawdown, win rate.
+option(LLMQUANT_ENABLE_TOKEN_BACKTESTER
+    "Build TokenBacktester: replay historical token-sentiment signals on OHLCV price bars \
+with ±100ms bar matching, Sharpe, max drawdown, win rate, avg hold time" ON)
+if(LLMQUANT_ENABLE_TOKEN_BACKTESTER)
+    target_sources(llmquant PRIVATE src/TokenBacktester.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_BACKTESTER_ENABLED)
+    message(STATUS "Feature: TokenBacktester ENABLED (OHLCV bar matching, PnL, Sharpe, drawdown)")
+else()
+    message(STATUS "Feature: TokenBacktester DISABLED (LLMQUANT_ENABLE_TOKEN_BACKTESTER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
