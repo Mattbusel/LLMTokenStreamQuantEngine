@@ -13,6 +13,54 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 
 ---
 
+## Alpha Decay Model
+
+### Header: `include/alpha_decay.hpp`  |  Source: `src/alpha_decay.cpp`
+
+Models how a trading signal's alpha (predictive strength) decays over time, supporting four decay profiles and a multi-symbol portfolio aggregator.
+
+**Decay Models (`DecayModel` variant):**
+
+| Model | Formula | Half-life |
+|---|---|---|
+| `Exponential { half_life_ms }` | s(t) = exp(−λΔt), λ = ln(2)/half\_life\_ms | Analytical: `half_life_ms` |
+| `Linear { duration_ms }` | s(t) = max(0, 1 − Δt/duration\_ms) | Analytical: duration\_ms / 2 |
+| `PowerLaw { exponent, scale_ms }` | s(t) = (scale / (scale + Δt))^exp | Analytical: scale × (2^(1/exp) − 1) |
+| `StepFunction { levels }` | Piecewise constant by threshold | Newton-Raphson / bisection |
+
+**API:**
+
+| Class | Method | Description |
+|---|---|---|
+| `AlphaDecay` | `current_strength(signal, now_ms)` | Decayed alpha at `now_ms` |
+| `AlphaDecay` | `half_life_ms(signal)` | Time for strength to halve |
+| `AlphaPortfolio` | `add_signal(symbol, signal)` | Register a signal |
+| `AlphaPortfolio` | `net_alpha(symbol, now_ms)` | Sum of active signal strengths |
+| `AlphaPortfolio` | `prune(now_ms, threshold=0.01)` | Remove signals below threshold |
+
+```cpp
+#include "alpha_decay.hpp"
+using namespace llmquant;
+
+AlphaSignal sig{
+    .strength        = 1.0,
+    .generated_at_ms = 1000,
+    .decay_model     = DecayModel{ Exponential{500.0} },
+};
+
+double s  = AlphaDecay::current_strength(sig, 1500);  // 0.5
+double hl = AlphaDecay::half_life_ms(sig);             // 500.0
+
+AlphaPortfolio portfolio;
+portfolio.add_signal("AAPL", sig);
+double net = portfolio.net_alpha("AAPL", 2000);  // ~0.25
+portfolio.prune(2000, 0.01);
+```
+
+**Tests:** `tests/unit/test_alpha_decay.cpp` (25+ GTest cases covering all four decay models and AlphaPortfolio)
+
+---
+
 ## Architecture
 
 ```

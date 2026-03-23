@@ -2387,6 +2387,18 @@ else()
     message(STATUS "Feature: BootstrapSignalCI DISABLED (LLMQUANT_ENABLE_BOOTSTRAP_SIGNAL_CI=OFF)")
 endif()
 
+# AlphaDecay: multi-model alpha signal decay (Exponential, Linear, PowerLaw, StepFunction)
+option(LLMQUANT_ENABLE_ALPHA_DECAY
+    "Build AlphaDecay: multi-model signal alpha decay (Exponential/Linear/PowerLaw/StepFunction) \
+with AlphaPortfolio net_alpha aggregation and pruning" ON)
+if(LLMQUANT_ENABLE_ALPHA_DECAY)
+    target_sources(llmquant PRIVATE src/alpha_decay.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ALPHA_DECAY_ENABLED)
+    message(STATUS "Feature: AlphaDecay ENABLED (Exponential/Linear/PowerLaw/StepFunction + AlphaPortfolio)")
+else()
+    message(STATUS "Feature: AlphaDecay DISABLED (LLMQUANT_ENABLE_ALPHA_DECAY=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

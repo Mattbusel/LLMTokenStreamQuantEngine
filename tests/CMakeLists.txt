@@ -225,6 +225,7 @@
     unit/test_token_window_summariser.cpp
     unit/test_bootstrap_signal_ci.cpp
     unit/test_execution_timing.cpp
+    unit/test_alpha_decay.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
