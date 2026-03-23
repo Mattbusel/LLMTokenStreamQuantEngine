@@ -2689,6 +2689,16 @@ else()
     message(STATUS "Feature: StreamingDecoder DISABLED (LLMQUANT_ENABLE_STREAMING_DECODER=OFF)")
 endif()
 
+# TokenFilter: hard/soft token bans, logit biases, and repetition control (Round 27).
+target_sources(llmquant PRIVATE src/TokenFilter.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_FILTER_ENABLED)
+message(STATUS "Feature: TokenFilter ENABLED (hard/soft bans, logit biases, repetition control)")
+
+# HypothesisTracker: beam search hypothesis pool with pruning and diversity (Round 27).
+target_sources(llmquant PRIVATE src/HypothesisTracker.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_HYPOTHESIS_TRACKER_ENABLED)
+message(STATUS "Feature: HypothesisTracker ENABLED (beam pool, n-best, diversity score)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
