@@ -914,6 +914,14 @@ else()
     message(STATUS "Feature: CrossAssetCorrelationMonitor DISABLED (LLMQUANT_ENABLE_CROSS_ASSET_CORR=OFF)")
 endif()
 
+# CrossAssetEngine: conviction multiplier + hedge-ratio engine across N assets.
+target_sources(llmquant PRIVATE src/CrossAssetEngine.cpp)
+message(STATUS "Feature: CrossAssetEngine ENABLED (rolling Pearson matrix + conviction multiplier)")
+
+# DictionaryLearner: Naive-Bayes self-learning token weights from trade outcomes.
+target_sources(llmquant PRIVATE src/DictionaryLearner.cpp)
+message(STATUS "Feature: DictionaryLearner ENABLED (online token weight learning)")
+
 # TokenVelocityTracker: first and second time-derivatives of the bias stream.
 if(LLMQUANT_ENABLE_VELOCITY_TRACKER)
     target_sources(llmquant PRIVATE src/TokenVelocityTracker.cpp)
