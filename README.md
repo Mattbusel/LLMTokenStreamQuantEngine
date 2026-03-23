@@ -13,6 +13,49 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 
 ---
 
+## Round 5: Cross-Asset Sentiment Correlation
+
+### Header: `include/cross_asset_sentiment.hpp`  |  Source: `src/cross_asset_sentiment.cpp`
+
+Rolling Pearson correlation between asset sentiment streams, single-linkage clustering, and contagion regime detection.
+
+| Class | Role |
+|---|---|
+| `AssetSentiment` | `asset_id: string`, `sentiment_score: double [-1,1]`, `timestamp_ms: int64_t` |
+| `SentimentCorrelationMatrix` | Rolling Pearson r between any pair of registered assets; `update(sentiments)`, `correlation(a, b) -> optional<double>`, `leading_asset(target) -> optional<string>` via lagged cross-correlation (lag 1..max_lag) |
+| `SentimentCluster` | `build(matrix, threshold)` — single-linkage Union-Find agglomerative clustering; assets linked if `|rho| >= threshold` |
+| `SentimentRegimeDetector` | `update(matrix)` — fires `on_contagion_event(avg_corr)` when average pairwise correlation spikes above `spike_threshold`; respects cooldown_steps between firings |
+
+**Feature flag:** `LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT` (default ON)
+**Tests:** `tests/unit/test_cross_asset_sentiment.cpp` (25+ GTest tests)
+
+```cpp
+#include "cross_asset_sentiment.hpp"
+using namespace llmquant;
+
+SentimentCorrelationMatrix::Config cfg;
+cfg.window_size = 60; cfg.min_samples = 10; cfg.max_lag = 5;
+SentimentCorrelationMatrix matrix(cfg);
+matrix.register_asset("BTC");
+matrix.register_asset("ETH");
+
+matrix.update(AssetSentiment{"BTC",  0.7, now_ms});
+matrix.update(AssetSentiment{"ETH",  0.6, now_ms});
+
+auto rho    = matrix.correlation("BTC", "ETH");   // optional<double>
+auto leader = matrix.leading_asset("ETH");          // optional<string>
+
+auto clusters = SentimentCluster::build(matrix, 0.5);
+
+SentimentRegimeDetector::Config rcfg;
+rcfg.spike_threshold = 0.7;
+rcfg.on_contagion_event = [](double avg) { /* hedge */ };
+SentimentRegimeDetector detector(rcfg);
+detector.update(matrix);
+```
+
+---
+
 ## Alpha Decay Model
 
 ### Header: `include/alpha_decay.hpp`  |  Source: `src/alpha_decay.cpp`

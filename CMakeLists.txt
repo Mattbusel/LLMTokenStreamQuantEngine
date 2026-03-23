@@ -160,6 +160,7 @@ option(LLMQUANT_ENABLE_GAIN_LOSS_RATIO              "Build SignalGainLossRatio: 
 option(LLMQUANT_ENABLE_TSMI                         "Build TokenSentimentMomentumIndex: composite ROC+acceleration+SSI momentum index in [-1,1]; fires on_momentum_shift on zero-cross" ON)
 option(LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX     "Build BiasRegimeTransitionMatrix: empirical Markov transition matrix over discretised bias regimes; fires on_likely_transition" ON)
 option(LLMQUANT_ENABLE_REVERSAL_DETECTOR            "Build SignalReversalDetector: price-action-style thrust+counter-move reversal pattern detector; fires on_bullish/bearish_reversal" ON)
+option(LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT        "Build cross_asset_sentiment: rolling Pearson correlation matrix, single-linkage clustering, and contagion regime detector across asset sentiment streams" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -2484,6 +2485,15 @@ if(LLMQUANT_ENABLE_EXECUTION_TIMING)
     message(STATUS "Feature: ExecutionTimingOptimizer ENABLED (Almgren-Chriss, TWAP/VWAP, OptimalExecution)")
 else()
     message(STATUS "Feature: ExecutionTimingOptimizer DISABLED (LLMQUANT_ENABLE_EXECUTION_TIMING=OFF)")
+endif()
+
+# Cross-Asset Sentiment: rolling Pearson correlation, clustering, contagion detection.
+if(LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT)
+    target_sources(llmquant PRIVATE src/cross_asset_sentiment.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_CROSS_ASSET_SENTIMENT_ENABLED)
+    message(STATUS "Feature: CrossAssetSentiment ENABLED (rolling correlation, clustering, regime detector)")
+else()
+    message(STATUS "Feature: CrossAssetSentiment DISABLED (LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
