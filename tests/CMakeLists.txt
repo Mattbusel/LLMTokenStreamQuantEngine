@@ -218,6 +218,7 @@
     unit/test_token_burst_intensity.cpp
     unit/test_signal_triple_ema_oscillator.cpp
     unit/test_cross_asset_sentiment.cpp
+    unit/test_regime_sizer.cpp
     unit/test_narrative_coherence_tracker.cpp
     unit/test_bias_local_extrema.cpp
     unit/test_signal_adaptive_threshold_filter.cpp

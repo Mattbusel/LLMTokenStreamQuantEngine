@@ -161,6 +161,7 @@ option(LLMQUANT_ENABLE_TSMI                         "Build TokenSentimentMomentu
 option(LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX     "Build BiasRegimeTransitionMatrix: empirical Markov transition matrix over discretised bias regimes; fires on_likely_transition" ON)
 option(LLMQUANT_ENABLE_REVERSAL_DETECTOR            "Build SignalReversalDetector: price-action-style thrust+counter-move reversal pattern detector; fires on_bullish/bearish_reversal" ON)
 option(LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT        "Build cross_asset_sentiment: rolling Pearson correlation matrix, single-linkage clustering, and contagion regime detector across asset sentiment streams" ON)
+option(LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER        "Build RegimeClassifier + PositionSizer: classifies market regime from LLM sentiment features and maps to position-size fraction" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -2508,6 +2509,15 @@ if(LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT)
     message(STATUS "Feature: CrossAssetSentiment ENABLED (rolling correlation, clustering, regime detector)")
 else()
     message(STATUS "Feature: CrossAssetSentiment DISABLED (LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT=OFF)")
+endif()
+
+# RegimeAdaptiveSizer: regime classification + position sizing from LLM features.
+if(LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER)
+    target_sources(llmquant PRIVATE src/regime_sizer.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_REGIME_ADAPTIVE_SIZER_ENABLED)
+    message(STATUS "Feature: RegimeAdaptiveSizer ENABLED (regime classifier + position sizer)")
+else()
+    message(STATUS "Feature: RegimeAdaptiveSizer DISABLED (LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------

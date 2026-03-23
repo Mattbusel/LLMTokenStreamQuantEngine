@@ -13,6 +13,32 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 
 ---
 
+## Round 7: Regime-Adaptive Position Sizer
+
+### Header: `include/regime_sizer.hpp`  |  Source: `src/regime_sizer.cpp`
+
+Classifies the current market regime from LLM-derived sentiment features and maps each regime to a position-size fraction of account equity.
+
+#### Data Structures
+
+| Type | Description |
+|------|-------------|
+| `MarketRegime` | `TRENDING_BULL`, `TRENDING_BEAR`, `MEAN_REVERTING`, `HIGH_VOL`, `LOW_VOL`, `UNKNOWN` |
+| `RegimeFeatures` | `avg_sentiment`, `sentiment_vol`, `cross_asset_correlation`, `alpha_decay_rate` |
+| `SizingConfig` | `base_size: double`, `regime_multipliers: map<MarketRegime, double>` |
+| `PositionSize` | `shares_or_contracts`, `notional_usd`, `risk_usd`, `regime`, `confidence` |
+
+#### Classes
+
+| Class | Role |
+|-------|------|
+| `RegimeClassifier` | Priority-ordered decision tree: HIGH_VOL (sentiment_vol>0.4) → TRENDING (corr>0.7) → MEAN_REVERTING (corr<0.3) → LOW_VOL / UNKNOWN |
+| `PositionSizer` | `size(regime, confidence, equity, price) -> PositionSize`; notional = equity × base_size × regime_mult × confidence |
+
+**Tests:** `tests/unit/test_regime_sizer.cpp` — 25 GTest cases.
+
+---
+
 ## Round 6: Signal Combiner
 
 ### Header: `include/signal_combiner.hpp`  |  Source: `src/signal_combiner.cpp`
