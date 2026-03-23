@@ -328,6 +328,25 @@ cmake --build build --target LLMTokenStreamQuantEngine_bench
 
 ---
 
+## What's New in v1.5.0
+
+### Bug Fix: `RiskManager::update_config` — Drawdown Window Reset
+
+**Problem:** When `drawdown_window` was changed via `update_config()`, the
+`cumulative_bias_` and `drawdown_window_start_` from the old window persisted.
+This meant a strategy that reduced the window from 5 min → 1 min would
+immediately block signals for up to 4 minutes of accumulated history that was
+no longer meaningful.
+
+**Fix:** `update_config()` now detects when `drawdown_window` changes and
+automatically resets `cumulative_bias_ = 0.0` and `drawdown_window_start_ = now`,
+logging the transition at `INFO` level. This matches the natural reset behaviour
+that occurs when the window elapses in `check_drawdown()`. Callers that relied
+on the old behaviour can call `reset_drawdown()` explicitly before `update_config()`
+to preserve it.
+
+---
+
 ## What's New in v1.4.0
 
 ### Streaming Regime Detector (`include/RegimeDetector.hpp`)
