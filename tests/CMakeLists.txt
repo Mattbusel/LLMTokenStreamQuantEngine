@@ -241,6 +241,8 @@
     unit/test_positional_encoding.cpp
     unit/test_TokenDiffEngine.cpp
     unit/test_StreamCompressor.cpp
+    unit/test_TokenProfiler.cpp
+    unit/test_VocabularyManager.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

@@ -2618,6 +2618,16 @@ target_sources(llmquant PRIVATE src/StreamCompressor.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAM_COMPRESSOR_ENABLED)
 message(STATUS "Feature: StreamCompressor ENABLED (RLE + dictionary compression)")
 
+# TokenProfiler: token stream frequency, entropy, and position profiler (Round 16).
+target_sources(llmquant PRIVATE src/TokenProfiler.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_PROFILER_ENABLED)
+message(STATUS "Feature: TokenProfiler ENABLED (frequency, entropy, top-k profiling)")
+
+# VocabularyManager: vocabulary management with encode/decode/prune/TSV export (Round 16).
+target_sources(llmquant PRIVATE src/VocabularyManager.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_VOCABULARY_MANAGER_ENABLED)
+message(STATUS "Feature: VocabularyManager ENABLED (token<->id mapping, UNK, prune, TSV)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
