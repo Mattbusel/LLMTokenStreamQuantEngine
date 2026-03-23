@@ -283,6 +283,8 @@ add_library(llmquant STATIC
     src/RestOmsAdapter.cpp
     src/FixOmsAdapter.cpp
     src/PrometheusExporter.cpp
+    src/BeamSearchDecoder.cpp
+    src/SpeculativeDecoder.cpp
 )
 
 # SentimentTrajectoryAnalyzer: optional online trend-detection module.
