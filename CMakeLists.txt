@@ -2463,6 +2463,26 @@ else()
     message(STATUS "Feature: KVCacheManager DISABLED (LLMQUANT_ENABLE_KV_CACHE_MANAGER=OFF)")
 endif()
 
+# AttentionMaskBuilder: causal, full, sliding-window, and prefix-LM masks.
+option(LLMQUANT_ENABLE_ATTENTION_MASK "Build AttentionMaskBuilder: causal/full/sliding-window/prefix-LM attention masks" ON)
+if(LLMQUANT_ENABLE_ATTENTION_MASK)
+    target_sources(llmquant PRIVATE src/AttentionMaskBuilder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_ATTENTION_MASK_ENABLED)
+    message(STATUS "Feature: AttentionMaskBuilder ENABLED (causal/full/sliding-window/prefix-LM masks)")
+else()
+    message(STATUS "Feature: AttentionMaskBuilder DISABLED (LLMQUANT_ENABLE_ATTENTION_MASK=OFF)")
+endif()
+
+# PositionalEncoding: sinusoidal, learned, RoPE, and ALiBi positional encodings.
+option(LLMQUANT_ENABLE_POSITIONAL_ENCODING "Build PositionalEncoding: sinusoidal, learned, RoPE, ALiBi schemes" ON)
+if(LLMQUANT_ENABLE_POSITIONAL_ENCODING)
+    target_sources(llmquant PRIVATE src/PositionalEncoding.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_POSITIONAL_ENCODING_ENABLED)
+    message(STATUS "Feature: PositionalEncoding ENABLED (sinusoidal/learned/RoPE/ALiBi)")
+else()
+    message(STATUS "Feature: PositionalEncoding DISABLED (LLMQUANT_ENABLE_POSITIONAL_ENCODING=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # Main executable
 # ---------------------------------------------------------------------------

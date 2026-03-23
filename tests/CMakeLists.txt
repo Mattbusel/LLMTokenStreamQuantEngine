@@ -235,6 +235,8 @@
     unit/test_token_prefix_cache.cpp
     unit/test_sampling_strategies.cpp
     unit/test_kv_cache_manager.cpp
+    unit/test_attention_mask.cpp
+    unit/test_positional_encoding.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
