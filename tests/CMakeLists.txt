@@ -245,6 +245,8 @@
     unit/test_VocabularyManager.cpp
     unit/test_AttentionCache.cpp
     unit/test_TokenValidator.cpp
+    unit/test_LogitsProcessor.cpp
+    unit/test_GenerationConfig.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
