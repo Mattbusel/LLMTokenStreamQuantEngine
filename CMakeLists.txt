@@ -2715,6 +2715,11 @@ target_sources(llmquant PRIVATE src/HypothesisTracker.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_HYPOTHESIS_TRACKER_ENABLED)
 message(STATUS "Feature: HypothesisTracker ENABLED (beam pool, n-best, diversity score)")
 
+# ResponseAggregator: merge N parallel response streams (Round 30).
+target_sources(llmquant PRIVATE src/ResponseAggregator.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_RESPONSE_AGGREGATOR_ENABLED)
+message(STATUS "Feature: ResponseAggregator ENABLED (multi-stream aggregation)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
