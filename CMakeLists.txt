@@ -2669,6 +2669,26 @@ else()
     message(STATUS "Feature: PromptEncoder DISABLED (LLMQUANT_ENABLE_PROMPT_ENCODER=OFF)")
 endif()
 
+# TokenTrie: prefix trie for BPE vocabulary and constrained decoding.
+option(LLMQUANT_ENABLE_TOKEN_TRIE "Build TokenTrie: prefix trie for BPE vocabulary lookup and constrained next-token decoding" ON)
+if(LLMQUANT_ENABLE_TOKEN_TRIE)
+    target_sources(llmquant PRIVATE src/TokenTrie.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_TRIE_ENABLED)
+    message(STATUS "Feature: TokenTrie ENABLED (BPE vocab trie + constrained decoding)")
+else()
+    message(STATUS "Feature: TokenTrie DISABLED (LLMQUANT_ENABLE_TOKEN_TRIE=OFF)")
+endif()
+
+# StreamingDecoder: incremental UTF-8 token decoder with stop-sequence detection.
+option(LLMQUANT_ENABLE_STREAMING_DECODER "Build StreamingDecoder: incremental token-to-text decoder with UTF-8 handling and stop sequences" ON)
+if(LLMQUANT_ENABLE_STREAMING_DECODER)
+    target_sources(llmquant PRIVATE src/StreamingDecoder.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAMING_DECODER_ENABLED)
+    message(STATUS "Feature: StreamingDecoder ENABLED (incremental UTF-8 decode, stop sequences)")
+else()
+    message(STATUS "Feature: StreamingDecoder DISABLED (LLMQUANT_ENABLE_STREAMING_DECODER=OFF)")
+endif()
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
