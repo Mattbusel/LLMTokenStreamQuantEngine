@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-2102%20passing-brightgreen.svg)](tests/)
 [![Dictionary](https://img.shields.io/badge/token%20dictionary-~130%20entries-blue.svg)](src/LLMAdapter.cpp)
 [![Download](https://img.shields.io/badge/download-v1.1.0%20Windows%20x64-brightgreen.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0)
@@ -51,6 +51,12 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
     HealthServer   -->  /health (K8s liveness/readiness)
     SignalAuditLog -->  NDJSON append-only audit trail
     BacktestRunner -->  offline token-sequence replay + PnL stats
+
+  v1.4.0 additions:
+    RegimeDetectorHMM  -->  3-state HMM (TokenRegime: BULL/BEAR/UNCERTAINTY/CONSOLIDATION/BREAKOUT)
+    RegimeFilter       -->  gates trade signals by regime alignment + confidence
+    ExecutionQualityTracker --> lock-free 10K ring: p99 latency, fill rate, realised alpha
+    TokenBacktester    -->  OHLCV bar matching, per-signal PnL, Sharpe, max drawdown
 ```
 
 ---
