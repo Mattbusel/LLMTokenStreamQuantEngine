@@ -271,6 +271,8 @@ endif()
 # Engine library — compiled once, linked by executable and tests.
 # ---------------------------------------------------------------------------
 add_library(llmquant STATIC
+    src/TokenRouter.cpp
+    src/StreamMerger.cpp
     src/TokenStreamSimulator.cpp
     src/TradeSignalEngine.cpp
     src/LatencyController.cpp

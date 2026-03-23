@@ -1,4 +1,6 @@
 ﻿add_executable(tests
+    unit/test_TokenRouter.cpp
+    unit/test_StreamMerger.cpp
     unit/test_config.cpp
     unit/test_llm_adapter.cpp
     unit/test_latency_controller.cpp
