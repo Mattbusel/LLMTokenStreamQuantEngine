@@ -2608,6 +2608,16 @@ else()
     message(STATUS "Feature: TokenPrefixCache DISABLED (LLMQUANT_ENABLE_TOKEN_PREFIX_CACHE=OFF)")
 endif()
 
+# TokenDiffEngine: LCS-based diff between token sequences (Round 15).
+target_sources(llmquant PRIVATE src/TokenDiffEngine.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_DIFF_ENGINE_ENABLED)
+message(STATUS "Feature: TokenDiffEngine ENABLED (LCS diff, edit distance, similarity)")
+
+# StreamCompressor: RLE + dictionary compression for token streams (Round 15).
+target_sources(llmquant PRIVATE src/StreamCompressor.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_STREAM_COMPRESSOR_ENABLED)
+message(STATUS "Feature: StreamCompressor ENABLED (RLE + dictionary compression)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
