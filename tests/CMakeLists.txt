@@ -231,6 +231,8 @@
     unit/test_signal_combiner.cpp
     unit/test_token_stream_buffer.cpp
     unit/test_streaming_stats_collector.cpp
+    unit/test_quantization_scheme.cpp
+    unit/test_token_prefix_cache.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp

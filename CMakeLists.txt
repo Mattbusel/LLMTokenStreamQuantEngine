@@ -162,6 +162,8 @@ option(LLMQUANT_ENABLE_REGIME_TRANSITION_MATRIX     "Build BiasRegimeTransitionM
 option(LLMQUANT_ENABLE_REVERSAL_DETECTOR            "Build SignalReversalDetector: price-action-style thrust+counter-move reversal pattern detector; fires on_bullish/bearish_reversal" ON)
 option(LLMQUANT_ENABLE_CROSS_ASSET_SENTIMENT        "Build cross_asset_sentiment: rolling Pearson correlation matrix, single-linkage clustering, and contagion regime detector across asset sentiment streams" ON)
 option(LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER        "Build RegimeClassifier + PositionSizer: classifies market regime from LLM sentiment features and maps to position-size fraction" ON)
+option(LLMQUANT_ENABLE_QUANTIZATION_SCHEME          "Build QuantizationScheme: INT8 symmetric and asymmetric quantization with per-channel support" ON)
+option(LLMQUANT_ENABLE_TOKEN_PREFIX_CACHE           "Build TokenPrefixCache: trie-based KV-cache prefix sharing for token sequences with LRU eviction" ON)
 
 # ---------------------------------------------------------------------------
 # Compiler flags
@@ -2542,6 +2544,24 @@ if(LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER)
     message(STATUS "Feature: RegimeAdaptiveSizer ENABLED (regime classifier + position sizer)")
 else()
     message(STATUS "Feature: RegimeAdaptiveSizer DISABLED (LLMQUANT_ENABLE_REGIME_ADAPTIVE_SIZER=OFF)")
+endif()
+
+# QuantizationScheme: INT8 symmetric/asymmetric quantization with per-channel support.
+if(LLMQUANT_ENABLE_QUANTIZATION_SCHEME)
+    target_sources(llmquant PRIVATE src/QuantizationScheme.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_QUANTIZATION_SCHEME_ENABLED)
+    message(STATUS "Feature: QuantizationScheme ENABLED (INT8 symmetric/asymmetric quantization)")
+else()
+    message(STATUS "Feature: QuantizationScheme DISABLED (LLMQUANT_ENABLE_QUANTIZATION_SCHEME=OFF)")
+endif()
+
+# TokenPrefixCache: trie-based KV-cache prefix sharing with LRU eviction.
+if(LLMQUANT_ENABLE_TOKEN_PREFIX_CACHE)
+    target_sources(llmquant PRIVATE src/TokenPrefixCache.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_PREFIX_CACHE_ENABLED)
+    message(STATUS "Feature: TokenPrefixCache ENABLED (trie KV-cache prefix sharing)")
+else()
+    message(STATUS "Feature: TokenPrefixCache DISABLED (LLMQUANT_ENABLE_TOKEN_PREFIX_CACHE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
