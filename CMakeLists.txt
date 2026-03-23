@@ -2725,6 +2725,16 @@ target_sources(llmquant PRIVATE src/PromptCache.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_PROMPT_CACHE_ENABLED)
 message(STATUS "Feature: PromptCache ENABLED (LRU KV-cache prefix sharing)")
 
+# AttentionSink: sink+sliding-window KV-cache for efficient streaming inference (Round 32).
+target_sources(llmquant PRIVATE src/AttentionSink.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_ATTENTION_SINK_ENABLED)
+message(STATUS "Feature: AttentionSink ENABLED (sink tokens + sliding window KV-cache)")
+
+# TokenClassifier: surface-form token type classifier (Round 32).
+target_sources(llmquant PRIVATE src/TokenClassifier.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_CLASSIFIER_ENABLED)
+message(STATUS "Feature: TokenClassifier ENABLED (Word/Number/CodeSymbol/URL/Special classification)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
