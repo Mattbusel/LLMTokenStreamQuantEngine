@@ -73,11 +73,17 @@ LLMStreamClient::LLMStreamClient(Config config) : config_(std::move(config)) {
 LLMStreamClient::~LLMStreamClient() {
     stop();
 #ifdef LLMQUANT_TLS_ENABLED
-    // ssl_ is cleaned up inside close_socket() -> tls_close().
-    // If ssl_ctx_ survived (e.g. never connected), free it here.
-    if (ssl_ctx_) {
-        SSL_CTX_free(static_cast<SSL_CTX*>(ssl_ctx_));
-        ssl_ctx_ = nullptr;
+    // ssl_ is cleaned up inside close_socket() -> tls_close() which is
+    // called by stop() above.  We must free ssl_ctx_ exactly once here.
+    // Use an atomic exchange to guard against double-free if the destructor
+    // is somehow reached from two paths under rapid reconnect teardown.
+    void* ctx_to_free = ssl_ctx_;
+    ssl_ctx_ = nullptr;   // zero before free so any stray tls_handshake() racing
+                          // after stop() gets a null context rather than a dangling
+                          // pointer (tls_handshake only runs while running_==true,
+                          // which stop() has already cleared, so this is defensive).
+    if (ctx_to_free) {
+        SSL_CTX_free(static_cast<SSL_CTX*>(ctx_to_free));
     }
 #endif
 #ifdef _WIN32

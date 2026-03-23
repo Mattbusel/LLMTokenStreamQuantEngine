@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-2102%20passing-brightgreen.svg)](tests/)
 [![Dictionary](https://img.shields.io/badge/token%20dictionary-~130%20entries-blue.svg)](src/LLMAdapter.cpp)
 [![Download](https://img.shields.io/badge/download-v1.1.0%20Windows%20x64-brightgreen.svg)](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0)
@@ -10,6 +10,13 @@
 > **Windows users:** grab the pre-built `.exe` from the [v1.1.0 release](https://github.com/Mattbusel/LLMTokenStreamQuantEngine/releases/tag/v1.1.0) — extract, edit `config.yaml`, and run. No build tools required.
 
 A production-grade C++20 engine that ingests a live LLM token stream, maps each token to a quantitative semantic weight, accumulates directional bias and volatility signals with exponential decay, and fires risk-gated trade signals. The end-to-end token-to-signal P99 latency targets sub-10 microseconds in the hot path. There are zero managed I/O dependencies in the hot path.
+
+---
+
+## Bug Fixes (v1.3.0)
+
+- **SSL context leak in `LLMStreamClient`** — Under rapid reconnect teardown, the `ssl_ctx_` pointer was potentially double-freed if the destructor was reached via two code paths. The fix nulls the pointer before freeing, ensuring `SSL_CTX_free` is called exactly once regardless of reconnect race conditions.
+- **`RiskManager` pre-gate position check** — The position-limit and PnL gate were previously evaluated at the bottom of the magnitude/confidence/rate/drawdown cascade, meaning a signal that already violated the position limit could still increment counters for earlier gates and cause `update_drawdown` to run on an over-limit signal in dry-run mode. The fix moves the position check to a pre-gate evaluated before the cascade so that position-breaching signals are blocked first, counter attribution is correct, and the drawdown accumulator is never updated for an over-limit signal.
 
 ---
 
@@ -22,6 +29,60 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 5. **Risk gating** — A five-gate cascade (magnitude, confidence, rate-limit, drawdown, position/PnL) evaluates each signal before it leaves the engine. Per-gate block rates, utilization ratios, and a `format_stats()` summary are available at runtime.
 6. **OMS integration** — Pluggable `OmsAdapter` implementations feed live position state into the risk gate: `RestOmsAdapter` (HTTP polling, tracks error/success rate), `FixOmsAdapter` (FIX 4.2 reader, tracks reconnect count and sequence number), or `MockOmsAdapter` (deterministic test stub).
 7. **Observability** — `MetricsLogger` writes structured CSV or NDJSON logs with pipeline health, dedup events, trade signals, and config reloads. `PrometheusExporter` exposes a `/metrics` scrape endpoint on port 9100. `LatencyController` tracks P50/P95/P99 percentiles, sample variance, standard deviation, and a composite back-pressure signal.
+
+---
+
+## Multi-Model Ensemble
+
+`ModelEnsemble` (`src/ModelEnsemble.hpp`, `src/ModelEnsemble.cpp`) ingests bias signals from up to **8 named LLM provider channels** in parallel and produces a risk-adjusted consensus signal.
+
+### How it works
+
+1. Each provider channel (e.g. `"gpt-4o"`, `"claude-3"`, `"gemini-pro"`) posts its directional bias via `update_channel(name, bias)`.
+2. On each call to `aggregate()`, the ensemble computes:
+   - **Mean bias** — simple average of all active channel biases.
+   - **Cross-model agreement score** — `1 - MAD / normalisation_range` where MAD is the mean absolute deviation of individual biases from the mean. A score of 1.0 means all models agree exactly; 0.0 means maximum spread across the configured range.
+   - **Final signal** — `mean_bias × agreement`, applying the agreement score as a confidence multiplier.
+3. The result is returned as an `AggregateResult` and optionally delivered via an `on_aggregate` callback.
+
+### Design
+
+- **Lock-free hot path** — channel bias values are stored as `std::atomic<uint64_t>` using a bit-cast from `double`. `update_channel()` never acquires a lock.
+- **Slot cache** — callers that post updates at high frequency can call `find_channel()` once to get a slot index and then use `update_channel_by_slot(slot, bias)` to skip the name lookup on every update.
+- **Cold-path spinlock** — `add_channel` and `remove_channel` use a lightweight `std::atomic_flag` spinlock; these are setup-phase calls and never contend with the hot path.
+- **No exceptions on hot path** — `update_channel`, `update_channel_by_slot`, and `aggregate` are all `noexcept`.
+
+### Usage
+
+```cpp
+#include "ModelEnsemble.h"
+
+ModelEnsemble::Config cfg;
+cfg.normalisation_range = 2.0;   // biases are in [-1, 1]
+cfg.min_channels = 2;            // require at least 2 models before emitting
+cfg.on_aggregate = [](const ModelEnsemble::AggregateResult& r) {
+    // r.final_signal = mean_bias * agreement
+};
+
+ModelEnsemble ens(cfg);
+ens.add_channel("gpt-4o");
+ens.add_channel("claude-3");
+ens.add_channel("gemini-pro");
+
+// Hot path — called from individual model stream callbacks:
+ens.update_channel("gpt-4o",    0.7);
+ens.update_channel("claude-3",  0.5);
+ens.update_channel("gemini-pro", 0.6);
+
+auto result = ens.aggregate();
+if (result) {
+    // result->mean_bias    = 0.6
+    // result->agreement    = 1 - MAD/2.0  (high when models agree)
+    // result->final_signal = mean_bias * agreement
+}
+```
+
+Controlled by the CMake option `LLMQUANT_ENABLE_MODEL_ENSEMBLE` (default `ON`). The compile-time feature macro is `LLMQUANT_MODEL_ENSEMBLE_ENABLED`.
 
 ---
 
@@ -57,6 +118,7 @@ A production-grade C++20 engine that ingests a live LLM token stream, maps each 
 | `LatencyController` | `src/LatencyController.cpp` | Lock-free P50/P95/P99 percentile tracking. Sample variance and standard deviation. Welford online variance for semantic pressure. `is_under_target()`, `format_stats()`, histogram buckets. |
 | `MetricsLogger` | `src/MetricsLogger.cpp` | spdlog-backed CSV and NDJSON structured logging. Methods: `log_trade_signal`, `log_config_reload`, `log_pipeline_health`, `log_dedup_event`. Tracks `uptime_ms` and `log_rate`. |
 | `Config` | `src/Config.cpp` | YAML file loading/saving with range validation. Background file-watcher thread for hot-reload (zero restart). |
+| `ModelEnsemble` | `src/ModelEnsemble.cpp` | Multi-LLM provider ensemble. Up to 8 named channels, lock-free bias aggregation, cross-model agreement score (MAD-normalised), confidence-multiplied final signal. |
 | `TokenStreamSimulator` | `src/TokenStreamSimulator.cpp` | Lock-free SPSC ring buffer. Tracks `tokens_emitted`, `drop_rate`, `emit_rate`, `format_stats()`. |
 | `PrometheusExporter` | `src/PrometheusExporter.cpp` | Lightweight HTTP server on port 9100. Metrics snapshot decoupled from the hot path (updated once per second in the monitoring loop). |
 | OMS adapters | `src/{Rest,Fix,Mock}OmsAdapter.cpp` | `RestOmsAdapter` polls `GET /positions` and tracks `error_rate`/`success_rate`. `FixOmsAdapter` parses ExecutionReport (35=8) and PositionReport (35=AP), tracking `reconnect_count` and current sequence number. `MockOmsAdapter` cycles through deterministic positions. |

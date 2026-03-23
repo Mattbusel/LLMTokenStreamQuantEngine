@@ -49,86 +49,99 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
         std::lock_guard<std::mutex> lock(mutex_);
         dry_run_active = config_.dry_run_mode;
 
-        if (!config_.disable_magnitude_gate && !check_magnitude(signal)) [[unlikely]] {
-            sat_increment(stats_.signals_blocked_magnitude);
-            reject_reason = "magnitude_exceeded";
-            if (!gate_magnitude_last_blocked_ && gate_trip_magnitude_cb_) {
-                trip_cb_copy = gate_trip_magnitude_cb_;
-                trip_gate_name = "magnitude";
-            }
-            gate_magnitude_last_blocked_ = true;
-        } else {
-            gate_magnitude_last_blocked_ = false;
-            if (!config_.disable_confidence_gate && !check_confidence(signal)) {
-                sat_increment(stats_.signals_blocked_confidence);
-                reject_reason = "confidence_below_minimum";
-                if (!gate_confidence_last_blocked_ && gate_trip_confidence_cb_) {
-                    trip_cb_copy = gate_trip_confidence_cb_;
-                    trip_gate_name = "confidence";
+        // ----------------------------------------------------------------
+        // Pre-gate position check: evaluate position limits BEFORE any
+        // signal decision is made.  This is a correctness fix — position
+        // violations must be caught at the earliest possible point so that
+        // magnitude/confidence counters are never incremented for an order
+        // that is already over the position hard limit.
+        // ----------------------------------------------------------------
+        bool pre_gate_blocked = false;
+        if (!config_.disable_position_gate) {
+            double projected = position_.net_position + signal.delta_bias_shift;
+            double limit     = position_.position_limit;
+            if (std::fabs(projected) > limit) {
+                hard_breach = true;
+                sat_increment(stats_.signals_blocked_position);
+                reject_reason = "position_limit";
+                if (!gate_position_last_blocked_ && gate_trip_position_cb_) {
+                    trip_cb_copy = gate_trip_position_cb_;
+                    trip_gate_name = "position";
                 }
-                gate_confidence_last_blocked_ = true;
-            } else {
-                gate_confidence_last_blocked_ = false;
-                if (!config_.disable_rate_gate && !check_rate_limit()) {
-                    sat_increment(stats_.signals_blocked_rate);
-                    reject_reason = "rate_limit_exceeded";
-                    if (!gate_rate_last_blocked_ && gate_trip_rate_cb_) {
-                        trip_cb_copy = gate_trip_rate_cb_;
-                        trip_gate_name = "rate";
+                gate_position_last_blocked_ = true;
+                pre_gate_blocked = true;
+            }
+            // Soft warn fires regardless of hard breach.
+            if (!hard_breach && std::fabs(projected) > limit * config_.position_warn_fraction) {
+                soft_warn = true;
+            }
+            // PnL check is independent of the position hard limit.
+            if (position_.pnl < position_.pnl_limit) {
+                pnl_breach = true;
+                if (!hard_breach) {
+                    sat_increment(stats_.signals_blocked_pnl);
+                    reject_reason = "pnl_limit";
+                    if (!gate_pnl_last_blocked_ && gate_trip_pnl_cb_) {
+                        trip_cb_copy = gate_trip_pnl_cb_;
+                        trip_gate_name = "pnl";
                     }
-                    gate_rate_last_blocked_ = true;
+                }
+                // Always mark pnl gate state regardless of hard_breach so that
+                // a subsequent pure-pnl block does not re-fire the trip callback
+                // after a combined position+pnl breach.
+                gate_pnl_last_blocked_ = true;
+                pre_gate_blocked = true;
+            }
+            if (!hard_breach && !pnl_breach) {
+                gate_position_last_blocked_ = false;
+                gate_pnl_last_blocked_      = false;
+            }
+        }
+
+        // Only run the magnitude/confidence/rate/drawdown cascade when the
+        // pre-gate position check did not already block the signal.
+        if (!pre_gate_blocked) {
+            if (!config_.disable_magnitude_gate && !check_magnitude(signal)) [[unlikely]] {
+                sat_increment(stats_.signals_blocked_magnitude);
+                reject_reason = "magnitude_exceeded";
+                if (!gate_magnitude_last_blocked_ && gate_trip_magnitude_cb_) {
+                    trip_cb_copy = gate_trip_magnitude_cb_;
+                    trip_gate_name = "magnitude";
+                }
+                gate_magnitude_last_blocked_ = true;
+            } else {
+                gate_magnitude_last_blocked_ = false;
+                if (!config_.disable_confidence_gate && !check_confidence(signal)) {
+                    sat_increment(stats_.signals_blocked_confidence);
+                    reject_reason = "confidence_below_minimum";
+                    if (!gate_confidence_last_blocked_ && gate_trip_confidence_cb_) {
+                        trip_cb_copy = gate_trip_confidence_cb_;
+                        trip_gate_name = "confidence";
+                    }
+                    gate_confidence_last_blocked_ = true;
                 } else {
-                    gate_rate_last_blocked_ = false;
-                    if (!config_.disable_drawdown_gate && !check_drawdown(signal)) {
-                        sat_increment(stats_.signals_blocked_drawdown);
-                        reject_reason = "drawdown_limit_exceeded";
-                        if (!gate_drawdown_last_blocked_ && gate_trip_drawdown_cb_) {
-                            trip_cb_copy = gate_trip_drawdown_cb_;
-                            trip_gate_name = "drawdown";
+                    gate_confidence_last_blocked_ = false;
+                    if (!config_.disable_rate_gate && !check_rate_limit()) {
+                        sat_increment(stats_.signals_blocked_rate);
+                        reject_reason = "rate_limit_exceeded";
+                        if (!gate_rate_last_blocked_ && gate_trip_rate_cb_) {
+                            trip_cb_copy = gate_trip_rate_cb_;
+                            trip_gate_name = "rate";
                         }
-                        gate_drawdown_last_blocked_ = true;
+                        gate_rate_last_blocked_ = true;
                     } else {
-                        gate_drawdown_last_blocked_ = false;
-                        double projected = position_.net_position + signal.delta_bias_shift;
-                        double limit     = position_.position_limit;
-                        if (!config_.disable_position_gate) {
-                            // Check position hard breach.
-                            if (std::fabs(projected) > limit) {
-                                hard_breach = true;
-                                sat_increment(stats_.signals_blocked_position);
-                                reject_reason = "position_limit";
-                                if (!gate_position_last_blocked_ && gate_trip_position_cb_) {
-                                    trip_cb_copy = gate_trip_position_cb_;
-                                    trip_gate_name = "position";
-                                }
-                                gate_position_last_blocked_ = true;
+                        gate_rate_last_blocked_ = false;
+                        if (!config_.disable_drawdown_gate && !check_drawdown(signal)) {
+                            sat_increment(stats_.signals_blocked_drawdown);
+                            reject_reason = "drawdown_limit_exceeded";
+                            if (!gate_drawdown_last_blocked_ && gate_trip_drawdown_cb_) {
+                                trip_cb_copy = gate_trip_drawdown_cb_;
+                                trip_gate_name = "drawdown";
                             }
-                            // Check soft warn independently of hard breach.
-                            if (!hard_breach && std::fabs(projected) > limit * config_.position_warn_fraction) {
-                                soft_warn = true;
-                            }
-                            // Check PnL breach always.
-                            if (position_.pnl < position_.pnl_limit) {
-                                pnl_breach = true;
-                                if (!hard_breach) {
-                                    // Only increment pnl counter here — position counter is for
-                                    // position-limit blocks only; pnl_limit is a separate gate.
-                                    sat_increment(stats_.signals_blocked_pnl);
-                                    reject_reason = "pnl_limit";
-                                    if (!gate_pnl_last_blocked_ && gate_trip_pnl_cb_) {
-                                        trip_cb_copy = gate_trip_pnl_cb_;
-                                        trip_gate_name = "pnl";
-                                    }
-                                }
-                                // Always update pnl gate state regardless of hard_breach so that
-                                // a subsequent pure-pnl block does not incorrectly re-fire the
-                                // trip callback after a combined position+pnl breach.
-                                gate_pnl_last_blocked_ = true;
-                            }
-                        }
-                        if (reject_reason.empty()) {
-                            gate_position_last_blocked_ = false;
-                            gate_pnl_last_blocked_      = false;
+                            gate_drawdown_last_blocked_ = true;
+                        } else {
+                            gate_drawdown_last_blocked_ = false;
+                            // All gates passed — signal is accepted.
                             update_drawdown(signal);
                             signals_in_window_++;
                             sat_increment(stats_.signals_passed);
@@ -174,7 +187,7 @@ bool RiskManager::evaluate(const TradeSignal& signal) {
             catch (const std::exception& e) { spdlog::warn("RiskManager: callback threw: {}", e.what()); }
             catch (...) { spdlog::warn("RiskManager: callback threw unknown exception"); }
         }
-        if (logger_copy)   { logger_copy->log_risk_rejection(reject_reason, signal.delta_bias_shift, signal.confidence); }
+        if (logger_copy) { logger_copy->log_risk_rejection(reject_reason, signal.delta_bias_shift, signal.confidence); }
         // Shadow / dry-run mode: all gate checks ran (stats and callbacks fired)
         // but the signal is not actually blocked — return true so it passes through.
         if (dry_run_active) return true;

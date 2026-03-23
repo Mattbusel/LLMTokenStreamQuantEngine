@@ -1,5 +1,5 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(LLMTokenStreamQuantEngine VERSION 1.2.0 LANGUAGES CXX)
+project(LLMTokenStreamQuantEngine VERSION 1.3.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
 # C++ standard
@@ -2299,6 +2299,16 @@ if(LLMQUANT_ENABLE_PRESSURE_GAUGE)
     message(STATUS "Feature: NarrativePressureGauge ENABLED (fast/slow EMA spread, positive/negative pressure callbacks)")
 else()
     message(STATUS "Feature: NarrativePressureGauge DISABLED (LLMQUANT_ENABLE_PRESSURE_GAUGE=OFF)")
+endif()
+
+# ModelEnsemble: multi-model LLM ensemble aggregator with cross-model agreement scoring.
+option(LLMQUANT_ENABLE_MODEL_ENSEMBLE "Build ModelEnsemble: parallel multi-LLM bias aggregator with lock-free agreement scoring" ON)
+if(LLMQUANT_ENABLE_MODEL_ENSEMBLE)
+    target_sources(llmquant PRIVATE src/ModelEnsemble.cpp)
+    target_compile_definitions(llmquant PUBLIC LLMQUANT_MODEL_ENSEMBLE_ENABLED)
+    message(STATUS "Feature: ModelEnsemble ENABLED (multi-LLM lock-free ensemble with agreement scoring)")
+else()
+    message(STATUS "Feature: ModelEnsemble DISABLED (LLMQUANT_ENABLE_MODEL_ENSEMBLE=OFF)")
 endif()
 
 # ---------------------------------------------------------------------------
