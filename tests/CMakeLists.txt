@@ -247,6 +247,8 @@
     unit/test_TokenValidator.cpp
     unit/test_LogitsProcessor.cpp
     unit/test_GenerationConfig.cpp
+    unit/test_TokenFrequencyTable.cpp
+    unit/test_InferenceSession.cpp
     integration/test_pipeline.cpp
     integration/test_chaos.cpp
     integration/test_oms_pipeline.cpp
