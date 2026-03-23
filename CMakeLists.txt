@@ -291,6 +291,7 @@ add_library(llmquant STATIC
     src/BeamSearchDecoderV2.cpp
     src/TokenSampler.cpp
     src/SpeculativeDecoder.cpp
+    src/KVCache.cpp
     src/AttentionCache.cpp
     src/TokenValidator.cpp
     src/LogitsProcessor.cpp
