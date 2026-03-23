@@ -56,7 +56,7 @@ public:
         std::function<std::vector<float>(int)> embed_fn);
 
 private:
-    std::unordered_map<int, EmbeddingEntry> cache_;
+    mutable std::unordered_map<int, EmbeddingEntry> cache_;
     size_t capacity_;
     size_t embedding_dim_;
     mutable uint64_t clock_ms_ = 0;  ///< Monotonic logical clock.

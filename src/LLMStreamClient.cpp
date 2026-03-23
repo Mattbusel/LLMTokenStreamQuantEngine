@@ -349,7 +349,11 @@ void LLMStreamClient::reader_thread() {
         }
 
         std::string request = build_http_request(build_request_body());
+#ifdef LLMQUANT_TLS_ENABLED
         if (!send_all(sockfd_, ssl_, config_.use_tls, request, running_)) {
+#else
+        if (!send_all(sockfd_, nullptr, config_.use_tls, request, running_)) {
+#endif
             close_socket();
             continue;
         }

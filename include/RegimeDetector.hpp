@@ -428,9 +428,9 @@ private:
 
     Config cfg_;
 
-    std::atomic<uint64_t> evaluated_{0};
-    std::atomic<uint64_t> passed_{0};
-    std::atomic<uint64_t> blocked_{0};
+    mutable std::atomic<uint64_t> evaluated_{0};
+    mutable std::atomic<uint64_t> passed_{0};
+    mutable std::atomic<uint64_t> blocked_{0};
 
     mutable std::mutex cfg_mutex_;
 };

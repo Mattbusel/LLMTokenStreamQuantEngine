@@ -2619,6 +2619,16 @@ else()
     message(STATUS "Feature: TokenPrefixCache DISABLED (LLMQUANT_ENABLE_TOKEN_PREFIX_CACHE=OFF)")
 endif()
 
+# BatchProcessor: batch inference processing with sampling and padding (Round 29).
+target_sources(llmquant PRIVATE src/BatchProcessor.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_BATCH_PROCESSOR_ENABLED)
+message(STATUS "Feature: BatchProcessor ENABLED (batch inference, sampling, pad/mask)")
+
+# SamplerConfig: unified sampler configuration with presets (Round 29).
+target_sources(llmquant PRIVATE src/SamplerConfig.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_SAMPLER_CONFIG_ENABLED)
+message(STATUS "Feature: SamplerConfig ENABLED (greedy/creative/balanced/precise/code/story presets)")
+
 # TokenDiffEngine: LCS-based diff between token sequences (Round 15).
 target_sources(llmquant PRIVATE src/TokenDiffEngine.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_TOKEN_DIFF_ENGINE_ENABLED)
