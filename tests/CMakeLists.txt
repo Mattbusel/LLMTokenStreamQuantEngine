@@ -1,4 +1,6 @@
 ﻿add_executable(tests
+    unit/TokenSamplerTest.cpp
+    unit/BeamSearchDecoderTest.cpp
     unit/test_TokenRouter.cpp
     unit/test_StreamMerger.cpp
     unit/test_config.cpp

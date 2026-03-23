@@ -288,6 +288,8 @@ add_library(llmquant STATIC
     src/FixOmsAdapter.cpp
     src/PrometheusExporter.cpp
     src/BeamSearchDecoder.cpp
+    src/BeamSearchDecoderV2.cpp
+    src/TokenSampler.cpp
     src/SpeculativeDecoder.cpp
     src/AttentionCache.cpp
     src/TokenValidator.cpp
