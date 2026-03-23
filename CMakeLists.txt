@@ -2720,6 +2720,11 @@ target_sources(llmquant PRIVATE src/ResponseAggregator.cpp)
 target_compile_definitions(llmquant PUBLIC LLMQUANT_RESPONSE_AGGREGATOR_ENABLED)
 message(STATUS "Feature: ResponseAggregator ENABLED (multi-stream aggregation)")
 
+# PromptCache: LRU cache for prompt KV states with prefix sharing (Round 31).
+target_sources(llmquant PRIVATE src/PromptCache.cpp)
+target_compile_definitions(llmquant PUBLIC LLMQUANT_PROMPT_CACHE_ENABLED)
+message(STATUS "Feature: PromptCache ENABLED (LRU KV-cache prefix sharing)")
+
 # ---------------------------------------------------------------------------
 # LibFuzzer targets (LLMQUANT_ENABLE_FUZZING=ON, clang only)
 # fuzz/ subdirectory contains root-level harnesses (fuzz_deduplicator,
